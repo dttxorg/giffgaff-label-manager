@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Giffgaff 续费提醒管理</title>
+  <style>
+    :root {
+      --purple: #5f4b8b;
+      --purple-light: #f5f3ff;
+      --purple-dark: #3f2e6d;
+      --red: #d32f2f;
+      --green: #2e7d32;
+      --bg: #f9f7ff;
+      --border: #e0d9f2;
+      --text: #2d2d2d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--purple);
+      color: white;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header span { font-size: 13px; opacity: 0.8; }
+    header .header-actions { display: flex; gap: 8px; }
+    header .btn-header {
+      padding: 6px 14px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    header .btn-header:hover { background: rgba(255,255,255,0.25); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(95,75,139,0.1);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .card-header {
+      background: var(--purple-light);
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--purple-dark);
+    }
+    .card-body { padding: 24px; }
+
+    form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--purple-dark); margin-bottom: 6px; }
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--purple); }
+    button {
+      padding: 10px 20px;
+      background: var(--purple);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    button:hover { background: var(--purple-dark); }
+    button:active { transform: scale(0.98); }
+    button.danger { background: var(--red); }
+    button.danger:hover { background: #b71c1c; }
+    button.small { padding: 6px 12px; font-size: 12px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      background: var(--purple-light);
+      color: var(--purple-dark);
+      font-size: 13px;
+      font-weight: 600;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #faf8ff; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-sent { background: #e8f5e9; color: var(--green); }
+    .badge-pending { background: #fff3e0; color: #e65100; }
+
+    .actions { display: flex; gap: 8px; }
+
+    .detail-panel {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .detail-panel.open { display: flex; }
+    .detail-inner {
+      background: white;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+    }
+    .detail-header {
+      background: var(--purple);
+      color: white;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+    }
+    .detail-header h2 { font-size: 18px; }
+    .close-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+    .close-btn:hover { background: rgba(255,255,255,0.3); }
+    .detail-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      padding: 20px 24px;
+      background: var(--purple-light);
+      border-bottom: 1px solid var(--border);
+    }
+    .info-item label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-item p { font-size: 15px; font-weight: 600; color: var(--purple-dark); margin-top: 2px; }
+
+    .reminder-table { padding: 0; }
+    .reminder-table td:nth-child(3) { font-size: 12px; color: #888; }
+    .reminder-table td:nth-child(1) { font-weight: 600; color: var(--purple-dark); }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--purple-dark);
+      color: white;
+      padding: 14px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      z-index: 200;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { background: var(--red); }
+
+    @media (max-width: 768px) {
+      form { grid-template-columns: 1fr; }
+      .detail-info { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+  <div>
+    <h1>🌟 Giffgaff 续费提醒管理</h1>
+    <span>每 170 天自动发邮件，共 43 次（≈20年）</span>
+  </div>
+  <div class="header-actions">
+    <span id="total-count" style="align-self:center;"></span>
+    <button class="btn-header" onclick="exportData()">📤 导出</button>
+    <button class="btn-header" onclick="document.getElementById('import-file').click()">📥 导入</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- 添加客户 -->
+  <div class="card">
+    <div class="card-header">➕ 添加新客户</div>
+    <div class="card-body">
+      <form id="add-form">
+        <div>
+          <label>手机号</label>
+          <input type="text" id="phone" placeholder="如：447400123456" required>
+        </div>
+        <div>
+          <label>通知邮箱</label>
+          <input type="email" id="email" placeholder="customer@example.com" required>
+        </div>
+        <div>
+          <label>开通日期</label>
+          <input type="date" id="act-date" required>
+        </div>
+        <button type="submit">添加并预约邮件</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 客户列表 -->
+  <div class="card">
+    <div class="card-header">📋 客户列表</div>
+    <div class="card-body" style="padding:0; overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>手机号</th>
+            <th>邮箱</th>
+            <th>开通日期</th>
+            <th>到期提醒</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="customer-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 详情弹窗 -->
+<div class="detail-panel" id="detail-panel">
+  <div class="detail-inner">
+    <div class="detail-header">
+      <h2 id="detail-title">客户详情</h2>
+      <button class="close-btn" onclick="closeDetail()">×</button>
+    </div>
+    <div class="detail-info">
+      <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
+      <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
+      <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
+    </div>
+    <div style="padding:16px 24px; font-size:13px; color:#666;">
+      共 <strong id="d-total"></strong> 次提醒，
+      <strong id="d-sent"></strong> 次已发送，
+      <strong id="d-pending"></strong> 次待发
+    </div>
+    <table class="reminder-table">
+      <thead>
+        <tr>
+          <th>次数</th>
+          <th>到期日期</th>
+          <th>状态</th>
+        </tr>
+      </thead>
+      <tbody id="reminder-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+
+function toast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '') + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function loadCustomers() {
+  const res = await fetch(`${API}/customers`);
+  const data = await res.json();
+  const tbody = document.getElementById('customer-table');
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无客户，点击上方添加</td></tr>'; return; }
+  document.getElementById('total-count').textContent = `共 ${data.length} 位客户`;
+  tbody.innerHTML = data.map((c, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><strong>${c.phone_number}</strong></td>
+      <td>${c.email}</td>
+      <td>${c.activation_date}</td>
+      <td><button class="small" onclick="viewCustomer(${c.id})">查看详情 →</button></td>
+      <td class="actions">
+        <button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function viewCustomer(id) {
+  const res = await fetch(`${API}/customers/${id}`);
+  const c = await res.json();
+  document.getElementById('d-phone').textContent = c.phone_number;
+  document.getElementById('d-email').textContent = c.email;
+  document.getElementById('d-act-date').textContent = c.activation_date;
+  const sent = c.reminders.filter(r => r.sent).length;
+  const pending = c.reminders.filter(r => !r.sent).length;
+  document.getElementById('d-total').textContent = c.reminders.length;
+  document.getElementById('d-sent').textContent = sent;
+  document.getElementById('d-pending').textContent = pending;
+  document.getElementById('reminder-table').innerHTML = c.reminders.map(r => `
+    <tr>
+      <td>第 ${r.cycle_number} 次</td>
+      <td>${r.due_date}</td>
+      <td>
+        <span class="badge ${r.sent ? 'badge-sent' : 'badge-pending'}">
+          ${r.sent ? '✓ 已发' : '○ 待发'}
+        </span>
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+async function exportData() {
+  window.location.href = `${API}/export`;
+}
+
+async function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch(`${API}/import`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '导入失败');
+    toast(`导入成功：${data.customers_restored} 位客户，${data.reminders_restored} 条提醒`);
+    loadCustomers();
+  } catch(err) {
+    toast(err.message, true);
+  }
+  input.value = '';
+}
+
+async function deleteCustomer(id, phone) {
+  if (!confirm(`确认删除客户 ${phone}？所有已预约邮件将一并清除。`)) return;
+  const res = await fetch(`${API}/customers/${id}`, { method: 'DELETE' });
+  if (res.ok) { toast('删除成功'); loadCustomers(); }
+  else { const e = await res.json(); toast(e.detail || '删除失败', true); }
+}
+
+document.getElementById('add-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const phone = document.getElementById('phone').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const actDate = document.getElementById('act-date').value;
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = '处理中…';
+  try {
+    const res = await fetch(`${API}/customers`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '添加失败');
+    toast(`添加成功！已预约 ${data.reminders_created} 封邮件`);
+    e.target.reset();
+    loadCustomers();
+  } catch(err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '添加并预约邮件';
+  }
+};
+
+document.getElementById('detail-panel').onclick = (e) => {
+  if (e.target === document.getElementById('detail-panel')) closeDetail();
+};
+
+loadCustomers();
+</script>
+</body>
+</html>

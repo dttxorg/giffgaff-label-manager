@@ -1,0 +1,35 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.pyc
+
+# Database
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+cron.log
+
+# Backups (keep folder, not files)
+backups/*.json
+!backups/.gitkeep
+
+# Build
+dist/
+build/
