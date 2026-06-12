@@ -11,6 +11,7 @@
       --purple-dark: #3f2e6d;
       --red: #d32f2f;
       --green: #2e7d32;
+      --orange: #e65100;
       --bg: #f9f7ff;
       --border: #e0d9f2;
       --text: #2d2d2d;
@@ -29,11 +30,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
     header h1 { font-size: 20px; font-weight: 700; }
     header span { font-size: 13px; opacity: 0.8; }
-    header .header-actions { display: flex; gap: 8px; }
-    header .btn-header {
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-header {
       padding: 6px 14px;
       background: rgba(255,255,255,0.15);
       border: 1px solid rgba(255,255,255,0.3);
@@ -43,8 +47,28 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    header .btn-header:hover { background: rgba(255,255,255,0.25); }
-    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .btn-header:hover { background: rgba(255,255,255,0.25); }
+    .btn-header.active { background: rgba(255,255,255,0.3); }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+    .tab {
+      padding: 10px 20px;
+      background: white;
+      border: 1.5px solid var(--border);
+      border-radius: 8px 8px 0 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--purple-dark);
+      cursor: pointer;
+      border-bottom: none;
+      transition: all 0.2s;
+    }
+    .tab:hover { background: var(--purple-light); }
+    .tab.active { background: var(--purple); color: white; border-color: var(--purple); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
 
     .card {
       background: white;
@@ -65,7 +89,7 @@
     }
     .card-body { padding: 24px; }
 
-    form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; }
     label { display: block; font-size: 13px; font-weight: 600; color: var(--purple-dark); margin-bottom: 6px; }
     input {
       width: 100%;
@@ -77,6 +101,8 @@
       transition: border-color 0.2s;
     }
     input:focus { border-color: var(--purple); }
+    .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; }
+    .toggle-label input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--purple); }
     button {
       padding: 10px 20px;
       background: var(--purple);
@@ -87,13 +113,15 @@
       font-weight: 600;
       cursor: pointer;
       transition: background 0.2s;
-      white-space: nowrap;
     }
     button:hover { background: var(--purple-dark); }
     button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
     button.danger { background: var(--red); }
     button.danger:hover { background: #b71c1c; }
     button.small { padding: 6px 12px; font-size: 12px; }
+    button.ghost { background: transparent; color: var(--purple); border: 1.5px solid var(--purple); }
+    button.ghost:hover { background: var(--purple-light); }
 
     table { width: 100%; border-collapse: collapse; }
     th {
@@ -120,10 +148,31 @@
       font-weight: 600;
     }
     .badge-sent { background: #e8f5e9; color: var(--green); }
-    .badge-pending { background: #fff3e0; color: #e65100; }
-
+    .badge-pending { background: #fff3e0; color: var(--orange); }
+    .badge-auto { background: #e3f2fd; color: #1565c0; }
+    .badge-manual { background: #f3e5f5; color: #7b1fa2; }
+    .link-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--purple-light);
+      color: var(--purple-dark);
+      border-radius: 4px;
+      font-size: 11px;
+      word-break: break-all;
+    }
+    .mono { font-family: 'Courier New', monospace; font-size: 13px; }
     .actions { display: flex; gap: 8px; }
 
+    /* Settings */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .settings-group { display: flex; flex-direction: column; gap: 16px; }
+    .setting-item { display: flex; flex-direction: column; gap: 6px; }
+    .setting-item label { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+    .setting-item input { font-size: 14px; }
+    .setting-hint { font-size: 11px; color: #999; }
+    .save-btn-wrap { margin-top: 16px; }
+
+    /* Detail panel */
     .detail-panel {
       display: none;
       position: fixed;
@@ -140,7 +189,7 @@
       border-radius: 16px;
       width: 100%;
       max-width: 700px;
-      max-height: 80vh;
+      max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 8px 40px rgba(0,0,0,0.2);
     }
@@ -165,12 +214,24 @@
       background: var(--purple-light);
       border-bottom: 1px solid var(--border);
     }
-    .info-item label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-item label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
     .info-item p { font-size: 15px; font-weight: 600; color: var(--purple-dark); margin-top: 2px; }
-
+    .info-item a { color: var(--purple); text-decoration: none; font-size: 13px; word-break: break-all; }
+    .info-item a:hover { text-decoration: underline; }
+    .moemail-box {
+      margin: 16px 24px;
+      padding: 16px;
+      background: #e3f2fd;
+      border: 1.5px solid #90caf9;
+      border-radius: 10px;
+    }
+    .moemail-box h4 { color: #1565c0; font-size: 14px; margin-bottom: 10px; }
+    .moemail-box p { font-size: 13px; color: #333; margin-bottom: 6px; }
+    .moemail-box a { color: #1565c0; font-size: 13px; word-break: break-all; }
+    .detail-stats { padding: 12px 24px; font-size: 13px; color: #666; border-bottom: 1px solid var(--border); }
     .reminder-table { padding: 0; }
-    .reminder-table td:nth-child(3) { font-size: 12px; color: #888; }
-    .reminder-table td:nth-child(1) { font-weight: 600; color: var(--purple-dark); }
+    .reminder-table td { font-size: 13px; }
+    .reminder-table td:nth-child(3) { color: #888; }
 
     .toast {
       position: fixed;
@@ -189,69 +250,136 @@
     }
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.error { background: var(--red); }
+    .toast.success { background: var(--green); }
 
-    @media (max-width: 768px) {
-      form { grid-template-columns: 1fr; }
+    .empty-state { text-align: center; padding: 48px; color: #999; font-size: 14px; }
+
+    @media (max-width: 900px) {
+      .form-grid { grid-template-columns: 1fr 1fr; }
       .detail-info { grid-template-columns: 1fr; }
+      .settings-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <header>
+<header>
   <div>
     <h1>🌟 Giffgaff 续费提醒管理</h1>
     <span>每 170 天自动发邮件，共 43 次（≈20年）</span>
   </div>
   <div class="header-actions">
-    <span id="total-count" style="align-self:center;"></span>
+    <span id="total-count"></span>
     <button class="btn-header" onclick="exportData()">📤 导出</button>
     <button class="btn-header" onclick="document.getElementById('import-file').click()">📥 导入</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+    <button class="btn-header" onclick="openSettings()">⚙️ 设置</button>
   </div>
 </header>
 
 <div class="container">
 
-  <!-- 添加客户 -->
-  <div class="card">
-    <div class="card-header">➕ 添加新客户</div>
-    <div class="card-body">
-      <form id="add-form">
-        <div>
-          <label>手机号</label>
-          <input type="text" id="phone" placeholder="如：447400123456" required>
-        </div>
-        <div>
-          <label>通知邮箱</label>
-          <input type="email" id="email" placeholder="customer@example.com" required>
-        </div>
-        <div>
-          <label>开通日期</label>
-          <input type="date" id="act-date" required>
-        </div>
-        <button type="submit">添加并预约邮件</button>
-      </form>
-    </div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('customers', this)">📋 客户列表</div>
+    <div class="tab" onclick="switchTab('settings', this)">⚙️ 系统设置</div>
   </div>
 
   <!-- 客户列表 -->
-  <div class="card">
-    <div class="card-header">📋 客户列表</div>
-    <div class="card-body" style="padding:0; overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>手机号</th>
-            <th>邮箱</th>
-            <th>开通日期</th>
-            <th>到期提醒</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="customer-table"></tbody>
-      </table>
+  <div id="tab-customers" class="tab-content active">
+    <div class="card">
+      <div class="card-header">➕ 添加新客户</div>
+      <div class="card-body">
+        <form class="form-grid" id="add-form">
+          <div>
+            <label>手机号</label>
+            <input type="text" id="phone" placeholder="如：447400123456" required>
+          </div>
+          <div>
+            <label>通知邮箱</label>
+            <input type="email" id="email" placeholder="手动填邮箱，或勾选右侧自动生成" required>
+          </div>
+          <div>
+            <label>开通日期</label>
+            <input type="date" id="act-date" required>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="auto-moemail">
+            <span>🤖 MoEmail 自动生成邮箱</span>
+          </label>
+          <button type="submit">添加并预约邮件</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">📋 客户列表 <span id="list-count" style="font-weight:400;font-size:12px;margin-left:8px;color:#888"></span></div>
+      <div class="card-body" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>手机号</th>
+              <th>通知邮箱</th>
+              <th>MoEmail</th>
+              <th>开通日期</th>
+              <th>详情</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="customer-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 系统设置 -->
+  <div id="tab-settings" class="tab-content">
+    <div class="card">
+      <div class="card-header">⚙️ API 配置</div>
+      <div class="card-body">
+        <div class="settings-grid">
+          <div class="settings-group">
+            <div class="setting-item">
+              <label>MoEmail 部署地址</label>
+              <input type="url" id="s-moemail-url" placeholder="https://moemail.yourdomain.com">
+              <span class="setting-hint">MoEmail 部署的 URL（不带尾部斜杠）</span>
+            </div>
+            <div class="setting-item">
+              <label>MoEmail API Key</label>
+              <input type="password" id="s-moemail-key" placeholder="re_xxxxxx">
+              <span class="setting-hint">公爵角色才能创建 API Key</span>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="setting-item">
+              <label>Resend API Key</label>
+              <input type="password" id="s-resend-key" placeholder="re_xxxxxx">
+              <span class="setting-hint">用于发送到期提醒邮件（可选，不填则不发邮件）</span>
+            </div>
+            <div class="setting-item">
+              <label>发件邮箱地址</label>
+              <input type="email" id="s-from-email" placeholder="reminder@yourdomain.com">
+              <span class="setting-hint">在 Resend 验证过的发件域名</span>
+            </div>
+          </div>
+        </div>
+        <div class="save-btn-wrap">
+          <button onclick="saveSettings()">💾 保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">ℹ️ 说明</div>
+      <div class="card-body" style="font-size:14px; color:#666; line-height:1.8;">
+        <p>• <strong>MoEmail</strong>：勾选"自动生成邮箱"后，系统会自动在 MoEmail 创建临时邮箱并生成分享链接，客户点分享链接即可查看收件箱。</p>
+        <p>• <strong>Resend</strong>：不填则系统不会发送邮件提醒，仅记录到期计划。</p>
+        <p>• <strong>API Key 安全</strong>：保存后仅显示为 <code>***</code>，不会明文回显。</p>
+      </div>
     </div>
   </div>
 </div>
@@ -265,15 +393,19 @@
     </div>
     <div class="detail-info">
       <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
-      <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
+      <div class="info-item"><label>通知邮箱</label><p id="d-email"></p></div>
       <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
     </div>
-    <div style="padding:16px 24px; font-size:13px; color:#666;">
-      共 <strong id="d-total"></strong> 次提醒，
-      <strong id="d-sent"></strong> 次已发送，
-      <strong id="d-pending"></strong> 次待发
+
+    <div class="moemail-box" id="d-moemail-box" style="display:none;">
+      <h4>📬 MoEmail 邮箱</h4>
+      <p>地址：<strong id="d-moemail-address" class="mono"></strong></p>
+      <p>类型：<span id="d-moemail-type" class="badge"></span></p>
+      <p>分享链接：<a id="d-share-link" href="#" target="_blank" rel="noopener"></a></p>
     </div>
-    <table class="reminder-table">
+
+    <div class="detail-stats" id="d-stats"></div>
+    <table class="reminder-table" style="margin-top:0;">
       <thead>
         <tr>
           <th>次数</th>
@@ -291,88 +423,96 @@
 <script>
 const API = '/api';
 
-function toast(msg, isError=false) {
+function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast' + (isError ? ' error' : '') + ' show';
+  t.className = 'toast' + (type ? ' ' + type : '') + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+}
+
+// ── 客户列表 ──
+
 async function loadCustomers() {
-  const res = await fetch(`${API}/customers`);
+  const res = await fetch(API + '/customers');
   const data = await res.json();
   const tbody = document.getElementById('customer-table');
-  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无客户，点击上方添加</td></tr>'; return; }
-  document.getElementById('total-count').textContent = `共 ${data.length} 位客户`;
-  tbody.innerHTML = data.map((c, i) => `
-    <tr>
+  document.getElementById('total-count').textContent = data.length ? `共 ${data.length} 位客户` : '';
+  document.getElementById('list-count').textContent = data.length ? `共 ${data.length} 条` : '';
+
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无客户，点击上方添加</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map((c, i) => {
+    const moemailBadge = c.moemail_address
+      ? `<span class="badge ${c.is_moemail_auto ? 'badge-auto' : 'badge-manual'}">${c.is_moemail_auto ? '自动' : '手动'}</span>`
+      : '—';
+    const moemailAddr = c.moemail_address ? `<span class="mono">${c.moemail_address}</span>` : '—';
+    return `<tr>
       <td>${i+1}</td>
       <td><strong>${c.phone_number}</strong></td>
       <td>${c.email}</td>
+      <td>${moemailBadge}<br>${moemailAddr}</td>
       <td>${c.activation_date}</td>
       <td><button class="small" onclick="viewCustomer(${c.id})">查看详情 →</button></td>
-      <td class="actions">
-        <button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button>
-      </td>
-    </tr>
-  `).join('');
+      <td class="actions"><button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button></td>
+    </tr>`;
+  }).join('');
 }
 
 async function viewCustomer(id) {
-  const res = await fetch(`${API}/customers/${id}`);
+  const res = await fetch(API + '/customers/' + id);
   const c = await res.json();
   document.getElementById('d-phone').textContent = c.phone_number;
   document.getElementById('d-email').textContent = c.email;
   document.getElementById('d-act-date').textContent = c.activation_date;
+
+  const moemailBox = document.getElementById('d-moemail-box');
+  if (c.moemail_address) {
+    moemailBox.style.display = 'block';
+    document.getElementById('d-moemail-address').textContent = c.moemail_address;
+    const typeEl = document.getElementById('d-moemail-type');
+    typeEl.textContent = c.is_moemail_auto ? '自动生成' : '手动填写';
+    typeEl.className = 'badge ' + (c.is_moemail_auto ? 'badge-auto' : 'badge-manual');
+    const linkEl = document.getElementById('d-share-link');
+    if (c.share_link) {
+      linkEl.href = c.share_link;
+      linkEl.textContent = c.share_link;
+    } else {
+      linkEl.textContent = '无';
+      linkEl.removeAttribute('href');
+    }
+  } else {
+    moemailBox.style.display = 'none';
+  }
+
   const sent = c.reminders.filter(r => r.sent).length;
   const pending = c.reminders.filter(r => !r.sent).length;
-  document.getElementById('d-total').textContent = c.reminders.length;
-  document.getElementById('d-sent').textContent = sent;
-  document.getElementById('d-pending').textContent = pending;
+  document.getElementById('d-stats').innerHTML =
+    `共 <strong>${c.reminders.length}</strong> 次提醒，已发 <strong>${sent}</strong> 次，待发 <strong>${pending}</strong> 次`;
   document.getElementById('reminder-table').innerHTML = c.reminders.map(r => `
     <tr>
       <td>第 ${r.cycle_number} 次</td>
       <td>${r.due_date}</td>
-      <td>
-        <span class="badge ${r.sent ? 'badge-sent' : 'badge-pending'}">
-          ${r.sent ? '✓ 已发' : '○ 待发'}
-        </span>
-      </td>
-    </tr>
-  `).join('');
+      <td><span class="badge ${r.sent ? 'badge-sent' : 'badge-pending'}">${r.sent ? '✓ 已发' : '○ 待发'}</span></td>
+    </tr>`).join('');
   document.getElementById('detail-panel').classList.add('open');
 }
 
-function closeDetail() {
-  document.getElementById('detail-panel').classList.remove('open');
-}
-
-async function exportData() {
-  window.location.href = `${API}/export`;
-}
-
-async function importData(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append('file', file);
-  try {
-    const res = await fetch(`${API}/import`, { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '导入失败');
-    toast(`导入成功：${data.customers_restored} 位客户，${data.reminders_restored} 条提醒`);
-    loadCustomers();
-  } catch(err) {
-    toast(err.message, true);
-  }
-  input.value = '';
-}
+function closeDetail() { document.getElementById('detail-panel').classList.remove('open'); }
 
 async function deleteCustomer(id, phone) {
   if (!confirm(`确认删除客户 ${phone}？所有已预约邮件将一并清除。`)) return;
-  const res = await fetch(`${API}/customers/${id}`, { method: 'DELETE' });
-  if (res.ok) { toast('删除成功'); loadCustomers(); }
-  else { const e = await res.json(); toast(e.detail || '删除失败', true); }
+  const res = await fetch(API + '/customers/' + id, { method: 'DELETE' });
+  if (res.ok) { toast('删除成功', 'success'); loadCustomers(); }
+  else { const e = await res.json(); toast(e.detail || '删除失败', 'error'); }
 }
 
 document.getElementById('add-form').onsubmit = async (e) => {
@@ -380,31 +520,89 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const phone = document.getElementById('phone').value.trim();
   const email = document.getElementById('email').value.trim();
   const actDate = document.getElementById('act-date').value;
-  const btn = e.target.querySelector('button');
+  const autoMoemail = document.getElementById('auto-moemail').checked;
+  const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '处理中…';
   try {
-    const res = await fetch(`${API}/customers`, {
+    const res = await fetch(API + '/customers', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate }),
+      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate, auto_moemail: autoMoemail }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '添加失败');
-    toast(`添加成功！已预约 ${data.reminders_created} 封邮件`);
+    let msg = `添加成功！已预约 ${data.reminders_created} 封邮件`;
+    if (data.moemail_address) msg += `\nMoEmail：${data.moemail_address}\n分享链接：${data.share_link}`;
+    toast(msg, 'success');
     e.target.reset();
     loadCustomers();
   } catch(err) {
-    toast(err.message, true);
+    toast(err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '添加并预约邮件';
   }
 };
 
-document.getElementById('detail-panel').onclick = (e) => {
+document.getElementById('detail-panel').onclick = e => {
   if (e.target === document.getElementById('detail-panel')) closeDetail();
 };
+
+// ── 导出 / 导入 ──
+
+async function exportData() { window.location.href = API + '/export'; }
+
+async function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch(API + '/import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '导入失败');
+    toast(`导入成功：${data.customers_restored} 位客户`, 'success');
+    loadCustomers();
+  } catch(err) { toast(err.message, 'error'); }
+  input.value = '';
+}
+
+// ── 设置 ──
+
+async function loadSettings() {
+  try {
+    const res = await fetch(API + '/settings');
+    const s = await res.json();
+    document.getElementById('s-moemail-url').value = s.moemail_url || '';
+    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
+    document.getElementById('s-resend-key').value = s.resend_api_key === '***' ? '' : (s.resend_api_key || '');
+    document.getElementById('s-from-email').value = s.from_email || '';
+  } catch(e) { toast('加载设置失败', 'error'); }
+}
+
+async function saveSettings() {
+  const payload = {
+    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
+    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
+    resend_api_key: document.getElementById('s-resend-key').value.trim() || null,
+    from_email: document.getElementById('s-from-email').value.trim() || null,
+  };
+  try {
+    const res = await fetch(API + '/settings', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('保存失败');
+    toast('设置已保存', 'success');
+  } catch(err) { toast(err.message, 'error'); }
+}
+
+function openSettings() {
+  switchTab('settings', document.querySelectorAll('.tab')[1]);
+  loadSettings();
+}
 
 loadCustomers();
 </script>

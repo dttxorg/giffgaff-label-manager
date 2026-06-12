@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-
 DAYS_PER_CYCLE = 170
 MAX_CYCLES = 43  # ~20 years
 
@@ -28,8 +26,12 @@ def build_email_subject(phone_number: str, due_date: date, cycle: int):
 
 
 def build_email_html(phone_number: str, email: str, activation_date: date,
-                     due_date: date, cycle: int):
+                     due_date: date, cycle: int, share_link: str = ""):
     days_until = (due_date - date.today()).days
+    share_section = f"""
+  <p style="margin-top:20px;">📬 MoEmail 收件箱：<a href="{share_link}" style="color:#5f4b8b;">{share_link}</a></p>
+""" if share_link else ""
+
     return f"""
 <!DOCTYPE html>
 <html>
@@ -60,6 +62,7 @@ def build_email_html(phone_number: str, email: str, activation_date: date,
       <td style="padding:10px;">{'还有 ' + str(days_until) + ' 天' if days_until > 0 else '已到期，请尽快续费！'}</td>
     </tr>
   </table>
+  {share_section}
   <p style="color:#666; font-size:13px;">此邮件由系统自动发送，共 {MAX_CYCLES} 次到期提醒。</p>
   <p style="color:#888; font-size:12px;">发送至：{email}</p>
 </body>
@@ -81,23 +84,34 @@ async def create_reminders_for_customer(customer_id: int, phone_number: str, ema
         await db.commit()
 
 
+async def get_setting(key: str, default: str = "") -> str:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await db.execute_fetchone(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        )
+        return row["value"] if row else default
+
+
 async def check_and_send_due_reminders():
     """
     每天运行：查所有 due_date <= 今天 AND sent=0 的记录，立即发送并标记。
-    这样完全不依赖邮件服务商的"预约保留"机制。
+    Resend API Key 从数据库 settings 读取，节省量从 .env 读（不回显）
     """
-    if not RESEND_API_KEY:
-        print("[WARN] RESEND_API_KEY not set, skipping send")
+    resend_key = os.getenv("RESEND_API_KEY") or await get_setting("resend_api_key")
+    from_email = await get_setting("from_email")
+    if not resend_key:
+        print("[WARN] Resend API Key 未配置，跳过发送")
         return
 
     import resend
-    resend.api_key = RESEND_API_KEY
+    resend.api_key = resend_key
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall(
             """SELECT r.id, r.customer_id, r.cycle_number, r.due_date,
-                      c.phone_number, c.email, c.activation_date
+                      c.phone_number, c.email, c.activation_date, c.share_link
                FROM reminders r
                JOIN customers c ON r.customer_id = c.id
                WHERE r.sent = 0 AND r.due_date <= date('now')
@@ -112,18 +126,17 @@ async def check_and_send_due_reminders():
             html = build_email_html(
                 row["phone_number"], row["email"],
                 date.fromisoformat(row["activation_date"]),
-                due_date, row["cycle_number"]
+                due_date, row["cycle_number"],
+                row.get("share_link") or ""
             )
-            # 立即发送
             r = resend.Emails.send({
-                "from": os.getenv("FROM_EMAIL", "giffgaff-reminder@yourdomain.com"),
+                "from": from_email or "giffgaff-reminder@yourdomain.com",
                 "to": [row["email"]],
                 "subject": subject,
                 "html": html,
             })
             email_id = r.get("id", "unknown")
 
-            # 标记已发送
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
                     "UPDATE reminders SET sent = 1, sent_at = ?, resend_email_id = ? WHERE id = ?",

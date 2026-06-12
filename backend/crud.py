@@ -84,7 +84,7 @@ async def get_reminder_by_email_id(resend_email_id: str):
         return dict(row) if row else None
 
 
-async def create_reminder(customer_id: int, cycle_number: int, due_date: date, resend_email_id: str):
+async def create_reminder(customer_id: int, cycle_number: int, due_date: date, resend_email_id: str = ""):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO reminders (customer_id, cycle_number, due_date, resend_email_id, sent)
@@ -116,3 +116,35 @@ async def get_pending_reminders():
                ORDER BY r.due_date ASC"""
         )
         return [dict(r) for r in rows]
+
+
+async def update_customer_moemail(customer_id: int, moemail_id: str,
+                                    moemail_address: str, share_link: str,
+                                    is_moemail_auto: bool):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """UPDATE customers SET
+               moemail_id = ?, moemail_address = ?, share_link = ?, is_moemail_auto = ?
+               WHERE id = ?""",
+            (moemail_id, moemail_address, share_link, 1 if is_moemail_auto else 0, customer_id),
+        )
+        await db.commit()
+
+
+# ── 系统设置 ──
+
+async def get_settings() -> dict:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall("SELECT key, value FROM settings")
+        return {r["key"]: r["value"] for r in rows}
+
+
+async def set_setting(key: str, value: str):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO settings (key, value) VALUES (?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+        await db.commit()

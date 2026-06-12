@@ -12,6 +12,10 @@ async def init_db():
                 phone_number TEXT NOT NULL UNIQUE,
                 email TEXT NOT NULL,
                 activation_date TEXT NOT NULL,
+                moemail_id TEXT,
+                moemail_address TEXT,
+                share_link TEXT,
+                is_moemail_auto INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
@@ -26,6 +30,12 @@ async def init_db():
                 sent_at TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )
         """)
         await db.commit()

@@ -7,6 +7,7 @@ class CustomerCreate(BaseModel):
     phone_number: str
     email: str
     activation_date: date
+    auto_moemail: bool = False  # True = 自动生成 MoEmail 邮箱
 
 
 class CustomerUpdate(BaseModel):
@@ -20,7 +21,18 @@ class CustomerOut(BaseModel):
     phone_number: str
     email: str
     activation_date: date
+    moemail_id: Optional[str]
+    moemail_address: Optional[str]
+    share_link: Optional[str]
+    is_moemail_auto: bool
     created_at: str
+
+
+class SystemSettings(BaseModel):
+    moemail_url: Optional[str] = None
+    moemail_api_key: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    from_email: Optional[str] = None
 
 
 class ReminderOut(BaseModel):
@@ -40,3 +52,7 @@ class CustomerDetail(BaseModel):
     activation_date: date
     created_at: str
     reminders: list[ReminderOut]
+    moemail_id: Optional[str]
+    moemail_address: Optional[str]
+    share_link: Optional[str]
+    is_moemail_auto: bool
