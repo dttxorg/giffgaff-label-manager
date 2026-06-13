@@ -1,23 +1,72 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-from datetime import datetime
+from fastapi.responses import RedirectResponse, StreamingResponse
 import os
 import json
+import datetime
+import aiosqlite
+from copy import deepcopy
 
-from database import init_db
-from models import CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail, ReminderOut, SystemSettings, QuickSendRequest, DomainInfo
+from database import init_db, DATABASE_PATH
+from models import (
+    CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
+    SystemSettings, MoEmailCreateRequest, DomainInfo, LabelConfig
+)
 from crud import (
     get_all_customers, get_customer, create_customer,
-    update_customer, delete_customer, get_reminders,
-    get_pending_reminders, update_customer_moemail,
-    get_settings, set_setting
+    update_customer, delete_customer,
+    update_customer_moemail,
+    get_settings, set_setting, fetch_one
 )
-from scheduler import create_reminders_for_customer
-from export_import import router as export_router
 
-app = FastAPI(title="giffgaff-reminder API")
+app = FastAPI(title="giffgaff-label-manager API")
+
+DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
+DEFAULT_LABEL_TEMPLATES = [
+    {
+        "id": "basic-50x30",
+        "name": "基础标签 50x30",
+        "width_mm": 50,
+        "height_mm": 30,
+        "elements": [
+            {"id": "phone", "type": "text", "source": "手机号", "text": "", "x": 3, "y": 3, "w": 30, "h": 6, "fontSize": 12, "bold": True},
+            {"id": "email", "type": "text", "source": "邮箱", "text": "", "x": 3, "y": 10, "w": 31, "h": 6, "fontSize": 6, "bold": False},
+            {"id": "mailqr", "type": "qr", "source": "邮箱二维码", "text": "", "x": 36, "y": 3, "w": 11, "h": 11, "fontSize": 8, "bold": False},
+            {"id": "appqr", "type": "qr", "source": "Giffgaff下载二维码", "text": "", "x": 37, "y": 17, "w": 9, "h": 9, "fontSize": 8, "bold": False},
+            {"id": "apptext", "type": "text", "source": "固定文字", "text": "giffgaff app", "x": 34, "y": 26, "w": 14, "h": 3, "fontSize": 4, "bold": False},
+        ],
+    },
+    {
+        "id": "full-50x40",
+        "name": "完整标签 50x40",
+        "width_mm": 50,
+        "height_mm": 40,
+        "elements": [
+            {"id": "title", "type": "text", "source": "固定文字", "text": "giffgaff SIM", "x": 3, "y": 3, "w": 27, "h": 5, "fontSize": 9, "bold": True},
+            {"id": "phone", "type": "text", "source": "手机号", "text": "", "x": 3, "y": 9, "w": 30, "h": 6, "fontSize": 11, "bold": True},
+            {"id": "email", "type": "text", "source": "邮箱", "text": "", "x": 3, "y": 17, "w": 31, "h": 7, "fontSize": 6, "bold": False},
+            {"id": "date", "type": "text", "source": "开通日期", "text": "", "x": 3, "y": 26, "w": 24, "h": 4, "fontSize": 6, "bold": False},
+            {"id": "mailqr", "type": "qr", "source": "邮箱二维码", "text": "", "x": 35, "y": 3, "w": 12, "h": 12, "fontSize": 8, "bold": False},
+            {"id": "appqr", "type": "qr", "source": "Giffgaff下载二维码", "text": "", "x": 35, "y": 22, "w": 12, "h": 12, "fontSize": 8, "bold": False},
+            {"id": "apptext", "type": "text", "source": "固定文字", "text": "下载 App", "x": 35, "y": 35, "w": 12, "h": 3, "fontSize": 5, "bold": False},
+        ],
+    },
+    {
+        "id": "qr-50x40",
+        "name": "双码标签 50x40",
+        "width_mm": 50,
+        "height_mm": 40,
+        "elements": [
+            {"id": "mailtitle", "type": "text", "source": "固定文字", "text": "邮箱 / 收件箱", "x": 4, "y": 3, "w": 18, "h": 4, "fontSize": 6, "bold": True},
+            {"id": "mailqr", "type": "qr", "source": "邮箱二维码", "text": "", "x": 5, "y": 8, "w": 16, "h": 16, "fontSize": 8, "bold": False},
+            {"id": "apptitle", "type": "text", "source": "固定文字", "text": "giffgaff App", "x": 28, "y": 3, "w": 18, "h": 4, "fontSize": 6, "bold": True},
+            {"id": "appqr", "type": "qr", "source": "Giffgaff下载二维码", "text": "", "x": 29, "y": 8, "w": 16, "h": 16, "fontSize": 8, "bold": False},
+            {"id": "phone", "type": "text", "source": "手机号", "text": "", "x": 4, "y": 28, "w": 42, "h": 5, "fontSize": 9, "bold": True},
+            {"id": "email", "type": "text", "source": "邮箱", "text": "", "x": 4, "y": 34, "w": 42, "h": 4, "fontSize": 5, "bold": False},
+        ],
+    },
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,8 +75,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(export_router)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -41,21 +88,22 @@ async def startup():
 
 @app.get("/api/settings", response_model=SystemSettings)
 async def get_sys_settings():
-    """获取所有设置（敏感字段不返回明文）"""
     rows = await get_settings()
     return SystemSettings(
         moemail_url=rows.get("moemail_url", ""),
         moemail_api_key="***" if rows.get("moemail_api_key") else "",
+        giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
     )
 
 
 @app.patch("/api/settings")
 async def update_settings(data: SystemSettings):
-    """更新系统设置"""
     if data.moemail_url is not None:
         await set_setting("moemail_url", data.moemail_url)
     if data.moemail_api_key not in (None, "***", ""):
         await set_setting("moemail_api_key", data.moemail_api_key)
+    if data.giffgaff_download_url is not None:
+        await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     return {"ok": True}
 
 
@@ -82,25 +130,12 @@ async def get_customer_detail(customer_id: int):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    reminders = await get_reminders(customer_id)
     return CustomerDetail(
         id=c["id"],
         phone_number=c["phone_number"],
         email=c["email"],
         activation_date=c["activation_date"],
         created_at=c["created_at"],
-        reminders=[
-            ReminderOut(
-                id=r["id"],
-                customer_id=r["customer_id"],
-                cycle_number=r["cycle_number"],
-                due_date=r["due_date"],
-                resend_email_id=r.get("resend_email_id"),
-                sent=bool(r["sent"]),
-                sent_at=r.get("sent_at"),
-            )
-            for r in reminders
-        ],
         moemail_id=c.get("moemail_id"),
         moemail_address=c.get("moemail_address"),
         share_link=c.get("share_link"),
@@ -110,86 +145,23 @@ async def get_customer_detail(customer_id: int):
 
 @app.post("/api/customers", status_code=201)
 async def add_customer(data: CustomerCreate):
-    from database import DATABASE_PATH
-    import aiosqlite
-
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        existing = await db.execute_fetchone(
-            "SELECT id FROM customers WHERE phone_number = ?",
-            (data.phone_number,),
+        existing = await fetch_one(
+            db,
+            "SELECT id FROM customers WHERE phone_number = ?", (data.phone_number,)
         )
         if existing:
             raise HTTPException(status_code=409, detail="该手机号已录入")
 
-    customer_id = await create_customer(data)
-    moemail_id = ""
-    moemail_address = ""
-    share_link = ""
-    is_auto = False
-
-    # 自动模式：调用 MoEmail API 生成邮箱 + 分享链接
-    if data.auto_moemail:
-        moemail_url = await _get_setting("moemail_url")
-        moemail_key = await _get_setting("moemail_api_key")
-
-        if moemail_url and moemail_key:
-            from moemail import MoEmailClient, generate_email_name
-            try:
-                client = MoEmailClient(moemail_url, moemail_key)
-
-                # 确定域名
-                domain = data.moemail_domain
-                if not domain:
-                    domains = client.get_domains()
-                    domain = domains[0] if domains else ""
-
-                email_name = generate_email_name()
-                email_resp = client.generate_email(
-                    name=email_name,
-                    expiry_time=0,  # 永久有效
-                    domain=domain,
-                )
-                moemail_id = email_resp.get("id", "")
-                moemail_address = email_resp.get("email", "")
-
-                # 自动创建永久分享链接
-                if moemail_id:
-                    share_resp = client.create_share_link(moemail_id, expires_in=0)
-                    share_link = f"{moemail_url}/shared/{share_resp.get('token', '')}"
-
-                if moemail_id:
-                    share_resp = client.create_share_link(moemail_id, expires_in=0)
-                    share_link = f"{moemail_url}/shared/{share_resp.get('token', '')}"
-
-                is_auto = True
-            except Exception as e:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"MoEmail API 调用失败：{e}。请检查 MoEmail 配置。"
-                )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="MoEmail 未配置，请在设置页面填写 MoEmail URL 和 API Key"
-            )
-
-    # 更新 MoEmail 信息
-    if moemail_id:
-        await update_customer_moemail(customer_id, moemail_id, moemail_address,
-                                      share_link, is_auto)
-
-    # 创建 43 个到期提醒记录
-    await create_reminders_for_customer(
-        customer_id, data.phone_number, data.email, data.activation_date
-    )
+    try:
+        customer_id = await create_customer(data)
+    except aiosqlite.IntegrityError:
+        raise HTTPException(status_code=409, detail="该手机号已录入")
 
     return {
         "customer_id": customer_id,
-        "reminders_created": 43,
-        "moemail_address": moemail_address,
-        "share_link": share_link,
-        "message": "已录入客户，系统将在各到期日自动发送邮件提醒",
+        "message": "客户已录入",
     }
 
 
@@ -216,17 +188,45 @@ async def remove_customer(customer_id: int):
     return {"ok": True}
 
 
-@app.get("/reminders/pending")
-async def pending_reminders():
-    rows = await get_pending_reminders()
-    return rows
+@app.post("/api/customers/{customer_id}/moemail")
+async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    moemail_url = await _get_setting("moemail_url")
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
+    from moemail import MoEmailClient
+    try:
+        client = MoEmailClient(moemail_url, moemail_key)
+        domain = data.domain
+        if not domain:
+            domains = client.get_domains()
+            domain = domains[0] if domains else ""
+        email_resp = client.generate_email(expiry_time=0, domain=domain)
+        moemail_id = email_resp.get("id", "")
+        moemail_address = email_resp.get("email", "")
+        if not moemail_id or not moemail_address:
+            raise ValueError("MoEmail 未返回邮箱 ID 或地址")
+        share_resp = client.create_share_link(moemail_id, expires_in=0)
+        token = share_resp.get("token", "")
+        share_link = f"{moemail_url}/shared/{token}" if token else ""
+        await update_customer_moemail(customer_id, moemail_id, moemail_address, share_link, True)
+        return {
+            "ok": True,
+            "email": moemail_address,
+            "moemail_id": moemail_id,
+            "share_link": share_link,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"MoEmail 调用失败：{e}") from e
 
 
 # ── MoEmail 域名列表 ──
 
 @app.get("/api/moemail/domains", response_model=DomainInfo)
 async def list_moemail_domains():
-    """从 MoEmail 获取可用域名列表"""
     moemail_url = await _get_setting("moemail_url")
     moemail_key = await _get_setting("moemail_api_key")
     if not moemail_url or not moemail_key:
@@ -234,40 +234,97 @@ async def list_moemail_domains():
     from moemail import MoEmailClient
     client = MoEmailClient(moemail_url, moemail_key)
     try:
-        domains = client.get_domains()
-        return DomainInfo(domains=domains)
+        return DomainInfo(domains=client.get_domains())
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"获取域名失败：{e}")
 
 
-# ── 快捷发送邮件 ──
+# ── 标签模板 ──
 
-@app.post("/api/quick-send")
-async def quick_send(data: QuickSendRequest):
-    """
-    用 MoEmail 的 Resend 集成发送邮件（快捷发送）。
-    fromAddress 使用客户登记的 MoEmail 邮箱。
-    """
-    moemail_url = await _get_setting("moemail_url")
-    moemail_key = await _get_setting("moemail_api_key")
-    if not moemail_url or not moemail_key:
-        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
-
-    from moemail import MoEmailClient
+def _load_label_templates(raw: str):
+    if not raw:
+        return deepcopy(DEFAULT_LABEL_TEMPLATES)
     try:
-        client = MoEmailClient(moemail_url, moemail_key)
-        # 用客户关联的 MoEmail 邮箱作为发件人
-        # 需要从请求里带上 from_address（MoEmail 邮箱地址）
-        # 这里简化处理：调用方需要在请求里指定 from_address
-        r = client.send_email(
-            email_id=data.from_address,
-            to_address=data.to_address,
-            subject=data.subject,
-            html=data.content,
-        )
-        return {"ok": True, "message_id": r.get("id", "")}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"发送失败：{e}")
+        templates = json.loads(raw)
+        return templates if isinstance(templates, list) else deepcopy(DEFAULT_LABEL_TEMPLATES)
+    except json.JSONDecodeError:
+        return deepcopy(DEFAULT_LABEL_TEMPLATES)
+
+
+@app.get("/api/label-config", response_model=LabelConfig)
+async def get_label_config():
+    rows = await get_settings()
+    return LabelConfig(
+        giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+        templates=_load_label_templates(rows.get("label_templates", "")),
+    )
+
+
+@app.put("/api/label-config")
+async def update_label_config(data: LabelConfig):
+    await set_setting("giffgaff_download_url", data.giffgaff_download_url)
+    await set_setting("label_templates", json.dumps(data.templates, ensure_ascii=False))
+    return {"ok": True}
+
+
+# ── 导出 / 导入 ──
+
+@app.get("/api/export")
+async def export_all():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        customers = await db.execute_fetchall("SELECT * FROM customers ORDER BY id ASC")
+    data = {
+        "exported_at": datetime.datetime.now().isoformat(),
+        "version": "1.0",
+        "customers": [dict(r) for r in customers],
+    }
+    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = f"giffgaff_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    return StreamingResponse(iter([json_bytes]), media_type="application/json",
+                           headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@app.post("/api/import", status_code=200)
+async def import_backup(file: UploadFile = File(...)):
+    if not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="只支持 .json 文件")
+    contents = await file.read()
+    try:
+        data = json.loads(contents)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="文件格式错误")
+    if data.get("version") != "1.0":
+        raise HTTPException(status_code=400, detail="不支持的备份文件版本")
+    customers = data.get("customers", [])
+    if not isinstance(customers, list):
+        raise HTTPException(status_code=400, detail="备份文件缺少 customers 列表")
+    required_fields = ("id", "phone_number", "email", "activation_date", "created_at")
+    for index, customer in enumerate(customers, start=1):
+        if not isinstance(customer, dict):
+            raise HTTPException(status_code=400, detail=f"第 {index} 条客户数据格式错误")
+        missing = [field for field in required_fields if field not in customer]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"第 {index} 条客户缺少字段：{', '.join(missing)}")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            await db.execute("BEGIN")
+            await db.execute("DELETE FROM customers")
+            for c in customers:
+                await db.execute(
+                    """INSERT INTO customers
+                       (id, phone_number, email, activation_date, moemail_id, moemail_address,
+                        share_link, is_moemail_auto, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (c["id"], c["phone_number"], c["email"], c["activation_date"],
+                     c.get("moemail_id"), c.get("moemail_address"),
+                     c.get("share_link"), c.get("is_moemail_auto", 0), c["created_at"]),
+                )
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail=f"导入失败：{exc}") from exc
+    return {"ok": True, "customers_restored": len(customers)}
 
 
 # ── 前端静态页面 ──
@@ -279,55 +336,3 @@ async def serve_index():
 
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="static")
-
-
-# ── 导入 ──
-
-@app.post("/api/import", status_code=200)
-async def import_backup(file: UploadFile = File(...)):
-    if not file.filename.endswith(".json"):
-        raise HTTPException(status_code=400, detail="只支持 .json 文件")
-
-    contents = await file.read()
-    try:
-        data = json.loads(contents)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="文件格式错误，不是有效的 JSON")
-
-    if data.get("version") != "1.0":
-        raise HTTPException(status_code=400, detail="不支持的备份文件版本")
-
-    import aiosqlite
-    from database import DATABASE_PATH
-
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute("DELETE FROM reminders")
-        await db.execute("DELETE FROM customers")
-        await db.commit()
-
-        for c in data.get("customers", []):
-            await db.execute(
-                """INSERT INTO customers
-                   (id, phone_number, email, activation_date, moemail_id, moemail_address,
-                    share_link, is_moemail_auto, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (c["id"], c["phone_number"], c["email"], c["activation_date"],
-                 c.get("moemail_id"), c.get("moemail_address"),
-                 c.get("share_link"), c.get("is_moemail_auto", 0), c["created_at"]),
-            )
-
-        for r in data.get("reminders", []):
-            await db.execute(
-                """INSERT INTO reminders
-                   (id, customer_id, cycle_number, due_date, resend_email_id, sent, sent_at, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (r["id"], r["customer_id"], r["cycle_number"], r["due_date"],
-                 r.get("resend_email_id"), r["sent"], r.get("sent_at"), r["created_at"]),
-            )
-        await db.commit()
-
-    return {
-        "ok": True,
-        "customers_restored": len(data.get("customers", [])),
-        "reminders_restored": len(data.get("reminders", [])),
-    }

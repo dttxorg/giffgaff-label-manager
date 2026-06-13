@@ -19,19 +19,10 @@ async def init_db():
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                cycle_number INTEGER NOT NULL,
-                due_date TEXT NOT NULL,
-                resend_email_id TEXT,
-                sent INTEGER NOT NULL DEFAULT 0,
-                sent_at TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-            )
-        """)
+        await _ensure_column(db, "customers", "moemail_id", "TEXT")
+        await _ensure_column(db, "customers", "moemail_address", "TEXT")
+        await _ensure_column(db, "customers", "share_link", "TEXT")
+        await _ensure_column(db, "customers", "is_moemail_auto", "INTEGER NOT NULL DEFAULT 0")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -39,3 +30,10 @@ async def init_db():
             )
         """)
         await db.commit()
+
+
+async def _ensure_column(db: aiosqlite.Connection, table: str, column: str, definition: str):
+    rows = await db.execute_fetchall(f"PRAGMA table_info({table})")
+    existing_columns = {row[1] for row in rows}
+    if column not in existing_columns:
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

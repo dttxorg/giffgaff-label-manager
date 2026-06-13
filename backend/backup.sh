@@ -1,5 +1,5 @@
 #!/bin/bash
-# 备份脚本：将数据库和备份配置上传到阿里云盘
+# 备份脚本：导出客户数据并上传到阿里云盘
 # 依赖：rclone（https://rclone.org/install/）
 #
 # 使用方法：
@@ -16,12 +16,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DB_FILE="$SCRIPT_DIR/giffgaff.db"
 BACKUP_DIR="$SCRIPT_DIR/backups"
 
 # ---------- 配置 ----------
 REMOTE="aliyundrive"              # rclone remote 名称
-REMOTE_PATH="giffgaff-reminder"   # 阿里云盘目标文件夹
+REMOTE_PATH="giffgaff-label-manager"   # 阿里云盘目标文件夹
 # -------------------------
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -34,30 +33,28 @@ echo "[$(date)] 开始备份..."
 # --- 步骤1：导出数据库为 JSON ---
 cd "$SCRIPT_DIR"
 source venv/bin/activate
-python3 -c "
+CUSTOMER_COUNT=$(python3 -c "
 import asyncio, sys, json, os
 sys.path.insert(0, '.')
-from database import DATABASE_PATH
+from database import DATABASE_PATH, init_db
 import aiosqlite, datetime
 
 async def export():
+    await init_db()
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         customers = await db.execute_fetchall('SELECT * FROM customers ORDER BY id ASC')
-        reminders = await db.execute_fetchall('SELECT * FROM reminders ORDER BY customer_id, cycle_number ASC')
     data = {
         'exported_at': datetime.datetime.now().isoformat(),
         'version': '1.0',
         'customers': [dict(r) for r in customers],
-        'reminders': [dict(r) for r in reminders],
     }
     with open('$BACKUP_FILE', 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(len(data['customers']), len(data['reminders']))
+    print(len(data['customers']))
 
 asyncio.run(export())
-"
-CUSTOMER_COUNT=$?
+")
 
 echo "[$(date)] 导出完成，共 $CUSTOMER_COUNT 条客户记录"
 

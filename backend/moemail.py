@@ -45,7 +45,8 @@ class MoEmailClient:
         return {"X-API-Key": self.api_key, "Content-Type": "application/json"}
 
     def generate_email(self, name: Optional[str] = None,
-                       expiry_time: int = 0) -> dict:
+                       expiry_time: int = 0,
+                       domain: Optional[str] = None) -> dict:
         """
         创建临时邮箱
         expiry_time: 0=永久, 3600000=1小时, 86400000=1天, 604800000=7天
@@ -55,6 +56,8 @@ class MoEmailClient:
             payload["name"] = name
         if expiry_time is not None:
             payload["expiryTime"] = expiry_time
+        if domain:
+            payload["domain"] = domain
 
         r = httpx.post(
             f"{self.base_url}/api/emails/generate",
@@ -95,28 +98,3 @@ class MoEmailClient:
         config = self.get_config()
         domains_str = config.get("emailDomains", "")
         return [d.strip() for d in domains_str.split(",") if d.strip()]
-
-    def send_email(self, email_id: str, to_address: str, subject: str,
-                   html: str = "", text: str = "") -> dict:
-        """
-        用指定临时邮箱发邮件（基于 Resend）
-        注意：需要用户在 MoEmail 已配置 Resend 服务
-        """
-        payload = {
-            "fromAddress": email_id,
-            "toAddress": to_address,
-            "subject": subject,
-        }
-        if html:
-            payload["html"] = html
-        if text:
-            payload["text"] = text
-
-        r = httpx.post(
-            f"{self.base_url}/api/emails/send",
-            json=payload,
-            headers=self._headers(),
-            timeout=15,
-        )
-        r.raise_for_status()
-        return r.json()

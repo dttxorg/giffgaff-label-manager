@@ -1,14 +1,12 @@
 from pydantic import BaseModel
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 
 class CustomerCreate(BaseModel):
     phone_number: str
     email: str
     activation_date: date
-    auto_moemail: bool = False  # True = 自动生成 MoEmail 邮箱
-    moemail_domain: Optional[str] = None  # 可选指定域名，不填则用第一个
 
 
 class CustomerUpdate(BaseModel):
@@ -29,40 +27,32 @@ class CustomerOut(BaseModel):
     created_at: str
 
 
-class SystemSettings(BaseModel):
-    moemail_url: Optional[str] = None
-    moemail_api_key: Optional[str] = None
-
-
-class QuickSendRequest(BaseModel):
-    from_address: str  # MoEmail 邮箱地址（作为发件人）
-    to_address: str
-    subject: str
-    content: str  # HTML 内容
-
-
-class DomainInfo(BaseModel):
-    domains: list[str]
-
-
-class ReminderOut(BaseModel):
-    id: int
-    customer_id: int
-    cycle_number: int
-    due_date: date
-    resend_email_id: Optional[str]
-    sent: bool
-    sent_at: Optional[str]
-
-
 class CustomerDetail(BaseModel):
     id: int
     phone_number: str
     email: str
     activation_date: date
     created_at: str
-    reminders: list[ReminderOut]
     moemail_id: Optional[str]
     moemail_address: Optional[str]
     share_link: Optional[str]
     is_moemail_auto: bool
+
+
+class SystemSettings(BaseModel):
+    moemail_url: Optional[str] = None
+    moemail_api_key: Optional[str] = None
+    giffgaff_download_url: Optional[str] = None
+
+
+class MoEmailCreateRequest(BaseModel):
+    domain: Optional[str] = None
+
+
+class DomainInfo(BaseModel):
+    domains: list[str]
+
+
+class LabelConfig(BaseModel):
+    giffgaff_download_url: str
+    templates: list[dict[str, Any]]

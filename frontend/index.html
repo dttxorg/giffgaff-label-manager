@@ -3,22 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Giffgaff 续费提醒管理</title>
+  <title>Giffgaff 客户管理</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     :root {
       --purple: #5f4b8b;
       --purple-light: #f5f3ff;
       --purple-dark: #3f2e6d;
+      --blue: #1565c0;
       --red: #d32f2f;
       --green: #2e7d32;
       --orange: #e65100;
-      --bg: #f9f7ff;
-      --border: #e0d9f2;
+      --bg: #f8f7fb;
+      --border: #ddd6ef;
       --text: #2d2d2d;
+      --muted: #777;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -26,7 +29,7 @@
     header {
       background: var(--purple);
       color: white;
-      padding: 20px 24px;
+      padding: 18px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -35,8 +38,8 @@
       z-index: 50;
     }
     header h1 { font-size: 20px; font-weight: 700; }
-    header span { font-size: 13px; opacity: 0.8; }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
+    header span { font-size: 13px; opacity: 0.82; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .btn-header {
       padding: 6px 14px;
       background: rgba(255,255,255,0.15);
@@ -45,15 +48,12 @@
       border-radius: 6px;
       font-size: 13px;
       cursor: pointer;
-      transition: background 0.2s;
     }
     .btn-header:hover { background: rgba(255,255,255,0.25); }
-    .btn-header.active { background: rgba(255,255,255,0.3); }
-    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
-
-    .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
     .tab {
-      padding: 10px 20px;
+      padding: 10px 18px;
       background: white;
       border: 1.5px solid var(--border);
       border-radius: 8px 8px 0 0;
@@ -62,52 +62,55 @@
       color: var(--purple-dark);
       cursor: pointer;
       border-bottom: none;
-      transition: all 0.2s;
     }
-    .tab:hover { background: var(--purple-light); }
     .tab.active { background: var(--purple); color: white; border-color: var(--purple); }
-
     .tab-content { display: none; }
     .tab-content.active { display: block; }
-
     .card {
       background: white;
-      border-radius: 12px;
+      border-radius: 8px;
       box-shadow: 0 2px 12px rgba(95,75,139,0.1);
       overflow: hidden;
       margin-bottom: 24px;
     }
     .card-header {
       background: var(--purple-light);
-      padding: 16px 24px;
+      padding: 15px 22px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-weight: 600;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 700;
       color: var(--purple-dark);
     }
-    .card-body { padding: 24px; }
-
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto auto; gap: 12px; align-items: end; }
-    label { display: block; font-size: 13px; font-weight: 600; color: var(--purple-dark); margin-bottom: 6px; }
-    input, select {
+    .card-body { padding: 22px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr 0.8fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--purple-dark);
+      margin-bottom: 6px;
+    }
+    input, select, textarea {
       width: 100%;
-      padding: 10px 14px;
+      padding: 10px 12px;
       border: 1.5px solid var(--border);
       border-radius: 8px;
       font-size: 14px;
       outline: none;
-      transition: border-color 0.2s;
       background: white;
     }
-    input:focus, select:focus { border-color: var(--purple); }
-    .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; }
-    .toggle-label input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--purple); }
-    .moemail-domain-row { display: none; }
-    .moemail-domain-row.visible { display: flex; }
+    input:focus, select:focus, textarea:focus { border-color: var(--purple); }
     button {
-      padding: 10px 20px;
+      padding: 10px 16px;
       background: var(--purple);
       color: white;
       border: none;
@@ -115,227 +118,291 @@
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s;
     }
     button:hover { background: var(--purple-dark); }
-    button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     button.danger { background: var(--red); }
     button.danger:hover { background: #b71c1c; }
-    button.small { padding: 6px 12px; font-size: 12px; }
+    button.small { padding: 6px 10px; font-size: 12px; }
     button.ghost { background: transparent; color: var(--purple); border: 1.5px solid var(--purple); }
     button.ghost:hover { background: var(--purple-light); }
-
+    button.blue { background: var(--blue); }
+    button.green { background: var(--green); }
+    .button-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
-      padding: 12px 16px;
+      padding: 12px 14px;
       background: var(--purple-light);
       color: var(--purple-dark);
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       border-bottom: 2px solid var(--border);
+      white-space: nowrap;
     }
     td {
-      padding: 12px 16px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border);
       font-size: 14px;
+      vertical-align: top;
     }
-    tr:last-child td { border-bottom: none; }
     tr:hover td { background: #faf8ff; }
+    .mono { font-family: "Courier New", monospace; font-size: 13px; word-break: break-all; }
     .badge {
       display: inline-block;
-      padding: 3px 10px;
+      padding: 3px 9px;
       border-radius: 20px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
+      white-space: nowrap;
     }
-    .badge-sent { background: #e8f5e9; color: var(--green); }
-    .badge-pending { background: #fff3e0; color: var(--orange); }
     .badge-auto { background: #e3f2fd; color: #1565c0; }
     .badge-manual { background: #f3e5f5; color: #7b1fa2; }
-    .link-chip {
-      display: inline-block;
-      padding: 2px 8px;
-      background: var(--purple-light);
-      color: var(--purple-dark);
-      border-radius: 4px;
-      font-size: 11px;
-      word-break: break-all;
-    }
-    .mono { font-family: 'Courier New', monospace; font-size: 13px; }
-    .actions { display: flex; gap: 8px; }
+    .empty-state { text-align: center; padding: 42px; color: #999; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-    /* Settings */
-    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .settings-group { display: flex; flex-direction: column; gap: 16px; }
+    .settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
     .setting-item { display: flex; flex-direction: column; gap: 6px; }
-    .setting-item label { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-    .setting-item input { font-size: 14px; }
     .setting-hint { font-size: 11px; color: #999; }
-    .save-btn-wrap { margin-top: 16px; }
 
-    /* Detail panel */
-    .detail-panel {
+    .modal {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.42);
       z-index: 100;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }
-    .detail-panel.open { display: flex; }
-    .detail-inner {
+    .modal.open { display: flex; }
+    .modal-inner {
       background: white;
-      border-radius: 16px;
+      border-radius: 8px;
       width: 100%;
-      max-width: 700px;
-      max-height: 85vh;
-      overflow-y: auto;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+      max-width: 780px;
+      max-height: 88vh;
+      overflow: auto;
+      box-shadow: 0 12px 44px rgba(0,0,0,0.22);
     }
-    .detail-header {
+    .modal-header {
       background: var(--purple);
       color: white;
-      padding: 20px 24px;
+      padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       position: sticky;
       top: 0;
+      z-index: 1;
     }
-    .detail-header h2 { font-size: 18px; }
-    .close-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; }
-    .close-btn:hover { background: rgba(255,255,255,0.3); }
+    .modal-header h2 { font-size: 18px; }
+    .close-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      padding: 0;
+      background: rgba(255,255,255,0.18);
+      color: white;
+      font-size: 18px;
+    }
     .detail-info {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 16px;
-      padding: 20px 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      padding: 18px 22px;
       background: var(--purple-light);
       border-bottom: 1px solid var(--border);
     }
-    .info-item label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
-    .info-item p { font-size: 15px; font-weight: 600; color: var(--purple-dark); margin-top: 2px; }
-    .info-item a { color: var(--purple); text-decoration: none; font-size: 13px; word-break: break-all; }
-    .info-item a:hover { text-decoration: underline; }
-    .moemail-box {
-      margin: 16px 24px;
-      padding: 16px;
-      background: #e3f2fd;
+    .info-item label { font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
+    .info-item p { font-size: 15px; font-weight: 700; color: var(--purple-dark); word-break: break-all; }
+    .detail-body { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+    .info-box {
+      padding: 14px;
       border: 1.5px solid #90caf9;
-      border-radius: 10px;
+      background: #e3f2fd;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.7;
     }
-    .moemail-box h4 { color: #1565c0; font-size: 14px; margin-bottom: 10px; }
-    .moemail-box p { font-size: 13px; color: #333; margin-bottom: 6px; }
-    .moemail-box a { color: #1565c0; font-size: 13px; word-break: break-all; }
-    .detail-stats { padding: 12px 24px; font-size: 13px; color: #666; border-bottom: 1px solid var(--border); }
-    .reminder-table { padding: 0; }
-    .reminder-table td { font-size: 13px; }
-    .reminder-table td:nth-child(3) { color: #888; }
+    .info-box a { color: var(--blue); word-break: break-all; }
 
+    .label-topbar {
+      display: grid;
+      grid-template-columns: 260px 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .label-editor {
+      display: grid;
+      grid-template-columns: 260px minmax(360px, 1fr) 260px;
+      gap: 16px;
+      align-items: start;
+    }
+    .tool-panel {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+    }
+    .tool-panel h3 { font-size: 14px; color: var(--purple-dark); margin-bottom: 10px; }
+    .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tool-grid button { font-size: 12px; padding: 8px 10px; }
+    .prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .prop-grid .wide { grid-column: 1 / -1; }
+    .prop-grid input[type="checkbox"] { width: auto; }
+    .stage-wrap {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      background: #f2f0f7;
+      min-height: 360px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      overflow: auto;
+    }
+    .label-canvas {
+      position: relative;
+      background: white;
+      border: 1px solid #b9b2cb;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+      flex: none;
+      overflow: hidden;
+    }
+    .label-element {
+      position: absolute;
+      border: 1px dashed transparent;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      color: #111;
+      line-height: 1.12;
+      user-select: none;
+    }
+    .label-element.editable { cursor: move; }
+    .label-element.selected {
+      border-color: var(--orange);
+      background: rgba(255, 243, 224, 0.38);
+    }
+    .label-element.qr { align-items: center; justify-content: center; }
+    .label-element img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .label-element .fit-text { width: 100%; word-break: break-all; }
+    .template-size-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--purple-light);
+      color: var(--purple-dark);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .print-preview-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+      background: #f2f0f7;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      overflow: auto;
+    }
+    .print-controls {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: end;
+      padding: 18px 22px;
+    }
     .toast {
       position: fixed;
       bottom: 24px;
       right: 24px;
       background: var(--purple-dark);
       color: white;
-      padding: 14px 20px;
-      border-radius: 10px;
+      padding: 13px 18px;
+      border-radius: 8px;
       font-size: 14px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.2);
       z-index: 200;
       transform: translateY(100px);
       opacity: 0;
-      transition: all 0.3s ease;
+      transition: all 0.25s ease;
     }
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.error { background: var(--red); }
     .toast.success { background: var(--green); }
 
-    .empty-state { text-align: center; padding: 48px; color: #999; font-size: 14px; }
-
-    @media (max-width: 900px) {
-      .form-grid { grid-template-columns: 1fr 1fr; }
+    @media (max-width: 1000px) {
+      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls {
+        grid-template-columns: 1fr;
+      }
       .detail-info { grid-template-columns: 1fr; }
-      .settings-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 600px) {
-      .form-grid { grid-template-columns: 1fr; }
+      .stage-wrap { justify-content: flex-start; }
     }
   </style>
 </head>
 <body>
-
 <header>
   <div>
-    <h1>🌟 Giffgaff 续费提醒管理</h1>
-    <span>每 170 天自动发邮件，共 43 次（≈20年）</span>
+    <h1>Giffgaff 客户管理</h1>
+    <span>客户邮箱、MoEmail 收件箱和标签打印</span>
   </div>
   <div class="header-actions">
     <span id="total-count"></span>
-    <button class="btn-header" onclick="exportData()">📤 导出</button>
-    <button class="btn-header" onclick="document.getElementById('import-file').click()">📥 导入</button>
+    <button class="btn-header" type="button" onclick="exportData()">导出</button>
+    <button class="btn-header" type="button" onclick="document.getElementById('import-file').click()">导入</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
-    <button class="btn-header" onclick="openSettings()">⚙️ 设置</button>
+    <button class="btn-header" type="button" onclick="openSettings()">设置</button>
   </div>
 </header>
 
 <div class="container">
-
-  <!-- Tabs -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('customers', this)">📋 客户列表</div>
-    <div class="tab" onclick="switchTab('settings', this)">⚙️ 系统设置</div>
+    <button class="tab active" type="button" onclick="switchTab('customers', this)">客户列表</button>
+    <button class="tab" type="button" onclick="switchTab('labels', this)">标签模板</button>
+    <button class="tab" type="button" onclick="switchTab('settings', this)">系统设置</button>
   </div>
 
-  <!-- 客户列表 -->
-  <div id="tab-customers" class="tab-content active">
+  <section id="tab-customers" class="tab-content active">
     <div class="card">
-      <div class="card-header">➕ 添加新客户</div>
+      <div class="card-header">
+        <span>添加新客户</span>
+        <span class="muted">邮箱可以手填；需要临时邮箱时，在客户行点击生成 MoEmail</span>
+      </div>
       <div class="card-body">
         <form class="form-grid" id="add-form">
           <div>
             <label>手机号</label>
-            <input type="text" id="phone" placeholder="如：447400123456" required>
+            <input type="text" id="phone" placeholder="447400123456" required>
           </div>
           <div>
-            <label>通知邮箱</label>
-            <input type="email" id="email" placeholder="手动填邮箱，或勾选右侧自动生成" required>
+            <label>邮箱</label>
+            <input type="email" id="email" placeholder="可手填自己的邮箱，也可留空后生成">
           </div>
           <div>
             <label>开通日期</label>
             <input type="date" id="act-date" required>
           </div>
-          <label class="toggle-label">
-            <input type="checkbox" id="auto-moemail" onchange="toggleMoemailDomain(this.checked)">
-            <span>🤖 自动生成邮箱</span>
-          </label>
-          <div class="moemail-domain-row" style="flex-direction:column;gap:6px;">
-            <label style="margin:0;">MoEmail 域名</label>
-            <select id="moemail-domain" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;">
-              <option value="">加载中…</option>
-            </select>
-          </div>
-          <button type="submit">添加并预约邮件</button>
+          <button type="submit">添加客户</button>
         </form>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header">📋 客户列表 <span id="list-count" style="font-weight:400;font-size:12px;margin-left:8px;color:#888"></span></div>
+      <div class="card-header">
+        <span>客户列表 <span id="list-count" class="muted"></span></span>
+      </div>
       <div class="card-body" style="padding:0; overflow-x:auto;">
         <table>
           <thead>
             <tr>
               <th>#</th>
               <th>手机号</th>
-              <th>通知邮箱</th>
-              <th>MoEmail</th>
+              <th>邮箱</th>
+              <th>邮箱来源</th>
               <th>开通日期</th>
-              <th>详情</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -343,78 +410,143 @@
         </table>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- 系统设置 -->
-  <div id="tab-settings" class="tab-content">
+  <section id="tab-labels" class="tab-content">
     <div class="card">
-      <div class="card-header">⚙️ API 配置</div>
+      <div class="card-header">
+        <span>可视化标签模板</span>
+        <span id="template-size" class="template-size-pill"></span>
+      </div>
       <div class="card-body">
-        <div class="settings-grid">
-          <div class="settings-group">
-            <div class="setting-item">
-              <label>MoEmail 部署地址</label>
-              <input type="url" id="s-moemail-url" placeholder="https://moemail.yourdomain.com">
-              <span class="setting-hint">MoEmail 部署的 URL（不带尾部斜杠）</span>
-            </div>
-            <div class="setting-item">
-              <label>MoEmail API Key</label>
-              <input type="password" id="s-moemail-key" placeholder="re_xxxxxx">
-              <span class="setting-hint">公爵或皇帝角色才能创建 API Key</span>
-            </div>
+        <div class="label-topbar">
+          <div>
+            <label>当前模板</label>
+            <select id="template-select" onchange="selectTemplate(this.value)"></select>
+          </div>
+          <div class="muted">拖拽元素调整位置；编辑器里的二维码使用固定演示值，打印到具体客户时会自动替换。</div>
+          <div class="button-row">
+            <button type="button" onclick="saveLabelConfig()">保存模板</button>
+            <button type="button" class="ghost" onclick="resetTemplates()">恢复默认</button>
           </div>
         </div>
-        <div style="font-size:13px;color:#888;margin-top:8px;">
-          💡 发件使用 MoEmail 已配置的 Resend（设置 → 邮件服务配置），无需单独配置 Resend。
-        </div>
-        <div class="save-btn-wrap">
-          <button onclick="saveSettings()">💾 保存设置</button>
+      </div>
+      <div class="card-body" style="border-top:1px solid var(--border);">
+        <div class="label-editor">
+          <aside class="tool-panel">
+            <h3>添加元素</h3>
+            <div class="tool-grid">
+              <button type="button" onclick="addLabelElement('text', '固定文字')">固定文字</button>
+              <button type="button" onclick="addLabelElement('text', '手机号')">手机号</button>
+              <button type="button" onclick="addLabelElement('text', '邮箱')">邮箱</button>
+              <button type="button" onclick="addLabelElement('text', '开通日期')">开通日期</button>
+              <button type="button" onclick="addLabelElement('qr', '邮箱二维码')">邮箱二维码</button>
+              <button type="button" onclick="addLabelElement('qr', 'Giffgaff下载二维码')">下载二维码</button>
+            </div>
+          </aside>
+          <main class="stage-wrap">
+            <div id="label-canvas" class="label-canvas"></div>
+          </main>
+          <aside class="tool-panel">
+            <h3>元素属性</h3>
+            <div id="empty-props" class="muted">请选择一个元素</div>
+            <div id="prop-panel" class="prop-grid" style="display:none;">
+              <div class="wide">
+                <label>变量</label>
+                <select id="prop-source" onchange="updateSelectedElement({source:this.value})"></select>
+              </div>
+              <div class="wide">
+                <label>固定文字</label>
+                <input id="prop-text" type="text" oninput="updateSelectedElement({text:this.value})">
+              </div>
+              <div><label>X mm</label><input id="prop-x" type="number" step="0.5" oninput="updateSelectedElement({x:num(this.value)})"></div>
+              <div><label>Y mm</label><input id="prop-y" type="number" step="0.5" oninput="updateSelectedElement({y:num(this.value)})"></div>
+              <div><label>宽 mm</label><input id="prop-w" type="number" step="0.5" oninput="updateSelectedElement({w:num(this.value)})"></div>
+              <div><label>高 mm</label><input id="prop-h" type="number" step="0.5" oninput="updateSelectedElement({h:num(this.value)})"></div>
+              <div><label>字号</label><input id="prop-font" type="number" step="0.5" oninput="updateSelectedElement({fontSize:num(this.value)})"></div>
+              <div style="display:flex;align-items:end;gap:8px;padding-bottom:10px;">
+                <input id="prop-bold" type="checkbox" onchange="updateSelectedElement({bold:this.checked})">
+                <label for="prop-bold" style="margin:0;">加粗</label>
+              </div>
+              <div class="wide button-row">
+                <button type="button" class="danger" onclick="deleteSelectedElement()">删除元素</button>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </div>
+  </section>
 
+  <section id="tab-settings" class="tab-content">
     <div class="card">
-      <div class="card-header">ℹ️ 说明</div>
-      <div class="card-body" style="font-size:14px; color:#666; line-height:1.8;">
-        <p>• <strong>MoEmail</strong>：勾选"自动生成邮箱"后，系统会自动在 MoEmail 创建临时邮箱并生成分享链接，客户点分享链接即可查看收件箱。</p>
-        <p>• <strong>Resend</strong>：不填则系统不会发送邮件提醒，仅记录到期计划。</p>
-        <p>• <strong>API Key 安全</strong>：保存后仅显示为 <code>***</code>，不会明文回显。</p>
+      <div class="card-header">系统设置</div>
+      <div class="card-body">
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label>MoEmail 部署地址</label>
+            <input type="url" id="s-moemail-url" placeholder="https://moemail.yourdomain.com">
+            <span class="setting-hint">不带尾部斜杠</span>
+          </div>
+          <div class="setting-item">
+            <label>MoEmail API Key</label>
+            <input type="password" id="s-moemail-key" placeholder="留空则保持原值">
+            <span class="setting-hint">保存后不会明文回显</span>
+          </div>
+          <div class="setting-item">
+            <label>Giffgaff 下载链接</label>
+            <input type="url" id="s-giffgaff-url" placeholder="https://www.giffgaff.com/mobile-app">
+            <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
+          </div>
+        </div>
+        <div class="save-btn-wrap" style="margin-top:16px;">
+          <button type="button" onclick="saveSettings()">保存设置</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="detail-panel">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <h2>客户详情</h2>
+      <button class="close-btn" type="button" onclick="closeDetail()">×</button>
+    </div>
+    <div class="detail-info">
+      <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
+      <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
+      <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
+    </div>
+    <div class="detail-body">
+      <div class="info-box" id="d-moemail-box"></div>
+      <div class="button-row">
+        <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
+        <button type="button" class="green" onclick="openPrintPanelForActive()">打印标签</button>
+        <button type="button" class="ghost" onclick="copyVoicemailTemplate()">复制关闭语音信箱模板</button>
+        <button type="button" class="ghost" onclick="openVoicemailForm()">打开关闭语音信箱表单</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- 详情弹窗 -->
-<div class="detail-panel" id="detail-panel">
-  <div class="detail-inner">
-    <div class="detail-header">
-      <h2 id="detail-title">客户详情</h2>
-      <button class="close-btn" onclick="closeDetail()">×</button>
+<div class="modal" id="print-panel">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <h2>打印标签</h2>
+      <button class="close-btn" type="button" onclick="closePrintPanel()">×</button>
     </div>
-    <div class="detail-info">
-      <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
-      <div class="info-item"><label>通知邮箱</label><p id="d-email"></p></div>
-      <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
+    <div class="print-controls">
+      <div>
+        <label>模板</label>
+        <select id="print-template-select" onchange="renderPrintPreview()"></select>
+      </div>
+      <button type="button" onclick="printCurrentLabel()">打印</button>
+      <button type="button" class="ghost" onclick="closePrintPanel()">取消</button>
     </div>
-
-    <div class="moemail-box" id="d-moemail-box" style="display:none;">
-      <h4>📬 MoEmail 邮箱</h4>
-      <p>地址：<strong id="d-moemail-address" class="mono"></strong></p>
-      <p>类型：<span id="d-moemail-type" class="badge"></span></p>
-      <p>分享链接：<a id="d-share-link" href="#" target="_blank" rel="noopener"></a></p>
+    <div class="print-preview-wrap">
+      <div id="print-preview" class="label-canvas"></div>
     </div>
-
-    <div class="detail-stats" id="d-stats"></div>
-    <table class="reminder-table" style="margin-top:0;">
-      <thead>
-        <tr>
-          <th>次数</th>
-          <th>到期日期</th>
-          <th>状态</th>
-        </tr>
-      </thead>
-      <tbody id="reminder-table"></tbody>
-    </table>
   </div>
 </div>
 
@@ -422,6 +554,26 @@
 
 <script>
 const API = '/api';
+const DEFAULT_GIFFGAFF_URL = 'https://www.giffgaff.com/mobile-app';
+const DEMO_CUSTOMER = {
+  id: 0,
+  phone_number: '447400123456',
+  email: 'sample@giffgaff.example',
+  activation_date: '2026-06-13',
+  share_link: 'https://moemail.example/shared/demo',
+  moemail_address: 'sample@giffgaff.example',
+  is_moemail_auto: true,
+};
+const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', 'Giffgaff下载链接'];
+const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
+
+let customers = [];
+let activeCustomer = null;
+let printCustomer = null;
+let labelConfig = { giffgaff_download_url: DEFAULT_GIFFGAFF_URL, templates: [] };
+let selectedTemplateId = '';
+let selectedElementId = '';
+let dragging = null;
 
 function toast(msg, type='') {
   const t = document.getElementById('toast');
@@ -430,154 +582,187 @@ function toast(msg, type='') {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+function num(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   el.classList.add('active');
+  if (name === 'labels') renderTemplateEditor();
 }
-
-// ── 客户列表 ──
 
 async function loadCustomers() {
   const res = await fetch(API + '/customers');
-  const data = await res.json();
-  const tbody = document.getElementById('customer-table');
-  document.getElementById('total-count').textContent = data.length ? `共 ${data.length} 位客户` : '';
-  document.getElementById('list-count').textContent = data.length ? `共 ${data.length} 条` : '';
-
-  if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无客户，点击上方添加</td></tr>';
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.detail || '加载客户列表失败', 'error');
     return;
   }
-  tbody.innerHTML = data.map((c, i) => {
-    const moemailBadge = c.moemail_address
-      ? `<span class="badge ${c.is_moemail_auto ? 'badge-auto' : 'badge-manual'}">${c.is_moemail_auto ? '自动' : '手动'}</span>`
-      : '—';
-    const moemailAddr = c.moemail_address ? `<span class="mono">${c.moemail_address}</span>` : '—';
-    return `<tr>
-      <td>${i+1}</td>
-      <td><strong>${c.phone_number}</strong></td>
-      <td>${c.email}</td>
-      <td>${moemailBadge}<br>${moemailAddr}</td>
-      <td>${c.activation_date}</td>
-      <td><button class="small" onclick="viewCustomer(${c.id})">查看详情 →</button></td>
-      <td class="actions">
-        <button class="small" id="qs-btn-${c.id}" onclick="quickSend(${c.id})">✉️ 快捷发送</button>
-        <button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button>
-      </td>
-    </tr>`;
-  }).join('');
+  customers = await res.json();
+  renderCustomers();
+}
+
+function renderCustomers() {
+  const tbody = document.getElementById('customer-table');
+  document.getElementById('total-count').textContent = customers.length ? `共 ${customers.length} 位客户` : '';
+  document.getElementById('list-count').textContent = customers.length ? `共 ${customers.length} 条` : '';
+  if (!customers.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.className = 'empty-state';
+    cell.textContent = '暂无客户';
+    row.appendChild(cell);
+    tbody.replaceChildren(row);
+    return;
+  }
+  tbody.replaceChildren(...customers.map(buildCustomerRow));
+}
+
+function appendTextCell(row, value) {
+  const cell = document.createElement('td');
+  cell.textContent = value || '—';
+  row.appendChild(cell);
+  return cell;
+}
+
+function makeButton(label, onClick, className='small') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function buildCustomerRow(c, index) {
+  const row = document.createElement('tr');
+  appendTextCell(row, String(index + 1));
+
+  const phoneCell = document.createElement('td');
+  const strong = document.createElement('strong');
+  strong.textContent = c.phone_number;
+  phoneCell.appendChild(strong);
+  row.appendChild(phoneCell);
+
+  const emailCell = document.createElement('td');
+  emailCell.className = 'mono';
+  emailCell.textContent = c.email || '—';
+  row.appendChild(emailCell);
+
+  const sourceCell = document.createElement('td');
+  const badge = document.createElement('span');
+  badge.className = `badge ${c.is_moemail_auto ? 'badge-auto' : 'badge-manual'}`;
+  badge.textContent = c.is_moemail_auto ? 'MoEmail' : '手填';
+  sourceCell.appendChild(badge);
+  row.appendChild(sourceCell);
+
+  appendTextCell(row, c.activation_date);
+
+  const actions = document.createElement('td');
+  actions.className = 'actions';
+  actions.append(
+    makeButton('详情', () => viewCustomer(c.id)),
+    makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
+    makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
+    makeButton('删除', () => deleteCustomer(c.id, c.phone_number), 'small danger'),
+  );
+  row.appendChild(actions);
+  return row;
+}
+
+async function getCustomer(id) {
+  const res = await fetch(API + '/customers/' + id);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || '加载客户失败');
+  }
+  return await res.json();
 }
 
 async function viewCustomer(id) {
-  const res = await fetch(API + '/customers/' + id);
-  const c = await res.json();
-  document.getElementById('d-phone').textContent = c.phone_number;
-  document.getElementById('d-email').textContent = c.email;
-  document.getElementById('d-act-date').textContent = c.activation_date;
-
-  const moemailBox = document.getElementById('d-moemail-box');
-  if (c.moemail_address) {
-    moemailBox.style.display = 'block';
-    document.getElementById('d-moemail-address').textContent = c.moemail_address;
-    const typeEl = document.getElementById('d-moemail-type');
-    typeEl.textContent = c.is_moemail_auto ? '自动生成' : '手动填写';
-    typeEl.className = 'badge ' + (c.is_moemail_auto ? 'badge-auto' : 'badge-manual');
-    const linkEl = document.getElementById('d-share-link');
-    if (c.share_link) {
-      linkEl.href = c.share_link;
-      linkEl.textContent = c.share_link;
-    } else {
-      linkEl.textContent = '无';
-      linkEl.removeAttribute('href');
-    }
-  } else {
-    moemailBox.style.display = 'none';
-  }
-
-  const sent = c.reminders.filter(r => r.sent).length;
-  const pending = c.reminders.filter(r => !r.sent).length;
-  document.getElementById('d-stats').innerHTML =
-    `共 <strong>${c.reminders.length}</strong> 次提醒，已发 <strong>${sent}</strong> 次，待发 <strong>${pending}</strong> 次`;
-  document.getElementById('reminder-table').innerHTML = c.reminders.map(r => `
-    <tr>
-      <td>第 ${r.cycle_number} 次</td>
-      <td>${r.due_date}</td>
-      <td><span class="badge ${r.sent ? 'badge-sent' : 'badge-pending'}">${r.sent ? '✓ 已发' : '○ 待发'}</span></td>
-    </tr>`).join('');
-  document.getElementById('detail-panel').classList.add('open');
-}
-
-function closeDetail() { document.getElementById('detail-panel').classList.remove('open'); }
-
-async function loadMoemailDomains() {
   try {
-    const res = await fetch(API + '/moemail/domains');
-    if (!res.ok) return;
-    const data = await res.json();
-    const sel = document.getElementById('moemail-domain');
-    sel.innerHTML = data.domains.map(d => `<option value="${d}">${d}</option>`).join('');
-  } catch(e) {
-    const sel = document.getElementById('moemail-domain');
-    sel.innerHTML = '<option value="">获取失败</option>';
+    activeCustomer = await getCustomer(id);
+    document.getElementById('d-phone').textContent = activeCustomer.phone_number;
+    document.getElementById('d-email').textContent = activeCustomer.email || '—';
+    document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
+    renderMoemailBox(activeCustomer);
+    document.getElementById('detail-panel').classList.add('open');
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
-let moemailDomainsLoaded = false;
-function toggleMoemailDomain(checked) {
-  const row = document.querySelector('.moemail-domain-row');
-  row.classList.toggle('visible', checked);
-  if (checked && !moemailDomainsLoaded) {
-    moemailDomainsLoaded = true;
-    loadMoemailDomains();
+function renderMoemailBox(c) {
+  const box = document.getElementById('d-moemail-box');
+  box.replaceChildren();
+  const lines = [];
+  lines.push(`邮箱来源：${c.is_moemail_auto ? 'MoEmail 自动生成' : '手填邮箱'}`);
+  if (c.moemail_address) lines.push(`MoEmail 地址：${c.moemail_address}`);
+  if (c.share_link) lines.push('分享链接：');
+  for (const line of lines) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    box.appendChild(p);
+  }
+  if (c.share_link) {
+    const a = document.createElement('a');
+    a.href = c.share_link;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = c.share_link;
+    box.appendChild(a);
   }
 }
 
-async function quickSend(customerId) {
-  // 先获取客户信息（需要 moemail_address）
-  let moemailAddress = '';
-  try {
-    const r = await fetch(API + '/customers/' + customerId);
-    if (r.ok) {
-      const c = await r.json();
-      moemailAddress = c.moemail_address || '';
-    }
-  } catch(e) {}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
 
-  if (!moemailAddress) {
-    toast('该客户没有 MoEmail 邮箱，无法使用快捷发送', 'error');
-    return;
-  }
+async function generateMoemailForActive() {
+  if (!activeCustomer) return;
+  await generateMoemail(activeCustomer.id);
+  activeCustomer = await getCustomer(activeCustomer.id);
+  document.getElementById('d-email').textContent = activeCustomer.email || '—';
+  renderMoemailBox(activeCustomer);
+}
 
-  const toEmail = prompt('输入收件人邮箱地址：');
-  if (!toEmail) return;
-  const subject = prompt('输入邮件主题：');
-  if (!subject) return;
-  const content = prompt('输入邮件内容（支持 HTML）：') || '';
-  const btn = document.getElementById('qs-btn-' + customerId);
-  if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
+async function generateMoemail(id) {
+  const c = customers.find(item => item.id === id) || await getCustomer(id);
+  if (c.email && !confirm(`生成 MoEmail 会把当前邮箱「${c.email}」替换为新邮箱，继续吗？`)) return;
   try {
-    const res = await fetch(API + '/quick-send', {
+    const res = await fetch(`${API}/customers/${id}/moemail`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ from_address: moemailAddress, to_address: toEmail, subject, content }),
+      body: JSON.stringify({}),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '发送失败');
-    toast('发送成功', 'success');
-  } catch(err) {
+    if (!res.ok) throw new Error(data.detail || '生成邮箱失败');
+    toast(`已生成邮箱：${data.email}`, 'success');
+    await loadCustomers();
+  } catch (err) {
     toast(err.message, 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✉️ 快捷发送'; }
   }
 }
 
 async function deleteCustomer(id, phone) {
-  if (!confirm(`确认删除客户 ${phone}？所有已预约邮件将一并清除。`)) return;
+  if (!confirm(`确认删除客户 ${phone}？`)) return;
   const res = await fetch(API + '/customers/' + id, { method: 'DELETE' });
-  if (res.ok) { toast('删除成功', 'success'); loadCustomers(); }
-  else { const e = await res.json(); toast(e.detail || '删除失败', 'error'); }
+  if (res.ok) {
+    toast('删除成功', 'success');
+    await loadCustomers();
+  } else {
+    const e = await res.json().catch(() => ({}));
+    toast(e.detail || '删除失败', 'error');
+  }
 }
 
 document.getElementById('add-form').onsubmit = async (e) => {
@@ -585,38 +770,436 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const phone = document.getElementById('phone').value.trim();
   const email = document.getElementById('email').value.trim();
   const actDate = document.getElementById('act-date').value;
-  const autoMoemail = document.getElementById('auto-moemail').checked;
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
-  btn.textContent = '处理中…';
+  btn.textContent = '处理中...';
   try {
     const res = await fetch(API + '/customers', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate, auto_moemail: autoMoemail }),
+      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '添加失败');
-    let msg = `添加成功！已预约 ${data.reminders_created} 封邮件`;
-    if (data.moemail_address) msg += `\nMoEmail：${data.moemail_address}\n分享链接：${data.share_link}`;
-    toast(msg, 'success');
+    toast(data.message || '添加成功', 'success');
     e.target.reset();
-    loadCustomers();
+    await loadCustomers();
   } catch(err) {
     toast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '添加并预约邮件';
+    btn.textContent = '添加客户';
   }
 };
 
-document.getElementById('detail-panel').onclick = e => {
-  if (e.target === document.getElementById('detail-panel')) closeDetail();
-};
+const VOICEMAIL_TEMPLATE = 'Hello, I am outside the UK. Please fully disable voicemail on my giffgaff account to avoid roaming charges, as I cannot turn it off myself from abroad. Thank you.';
+const VOICEMAIL_URL = 'https://support2.giffgaff.com/app/ask/International-and-Roaming/Accessing-voicemail-while-abroad/form/';
 
-// ── 导出 / 导入 ──
+function copyVoicemailTemplate() {
+  navigator.clipboard.writeText(VOICEMAIL_TEMPLATE).then(() => toast('模板已复制', 'success'));
+}
 
-async function exportData() { window.location.href = API + '/export'; }
+function openVoicemailForm() {
+  window.open(VOICEMAIL_URL, '_blank', 'noopener');
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch(API + '/settings');
+    const s = await res.json();
+    document.getElementById('s-moemail-url').value = s.moemail_url || '';
+    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
+    document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+  } catch(e) {
+    toast('加载设置失败', 'error');
+  }
+}
+
+async function saveSettings() {
+  const payload = {
+    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
+    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
+    giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
+  };
+  try {
+    const res = await fetch(API + '/settings', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('保存失败');
+    labelConfig.giffgaff_download_url = payload.giffgaff_download_url;
+    await saveLabelConfig(false);
+    toast('设置已保存', 'success');
+  } catch(err) {
+    toast(err.message, 'error');
+  }
+}
+
+function openSettings() {
+  switchTab('settings', document.querySelectorAll('.tab')[2]);
+  loadSettings();
+}
+
+async function loadLabelConfig() {
+  try {
+    const res = await fetch(API + '/label-config');
+    if (!res.ok) throw new Error('加载标签模板失败');
+    labelConfig = await res.json();
+  } catch (err) {
+    labelConfig = {
+      giffgaff_download_url: DEFAULT_GIFFGAFF_URL,
+      templates: [],
+    };
+  }
+  if (!labelConfig.templates.length) {
+    labelConfig.templates = fallbackTemplates();
+  }
+  selectedTemplateId = labelConfig.templates[0].id;
+  hydrateTemplateSelects();
+  renderTemplateEditor();
+}
+
+function fallbackTemplates() {
+  return [
+    {
+      id: 'basic-50x30',
+      name: '基础标签 50x30',
+      width_mm: 50,
+      height_mm: 30,
+      elements: [
+        {id:'phone', type:'text', source:'手机号', text:'', x:3, y:3, w:30, h:6, fontSize:12, bold:true},
+        {id:'email', type:'text', source:'邮箱', text:'', x:3, y:10, w:31, h:6, fontSize:6, bold:false},
+        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:36, y:3, w:11, h:11, fontSize:8, bold:false},
+        {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:37, y:17, w:9, h:9, fontSize:8, bold:false},
+      ],
+    },
+    {
+      id: 'full-50x40',
+      name: '完整标签 50x40',
+      width_mm: 50,
+      height_mm: 40,
+      elements: [
+        {id:'phone', type:'text', source:'手机号', text:'', x:3, y:4, w:30, h:6, fontSize:11, bold:true},
+        {id:'email', type:'text', source:'邮箱', text:'', x:3, y:12, w:31, h:7, fontSize:6, bold:false},
+        {id:'date', type:'text', source:'开通日期', text:'', x:3, y:22, w:24, h:4, fontSize:6, bold:false},
+        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:35, y:3, w:12, h:12, fontSize:8, bold:false},
+        {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:35, y:22, w:12, h:12, fontSize:8, bold:false},
+      ],
+    },
+    {
+      id: 'qr-50x40',
+      name: '双码标签 50x40',
+      width_mm: 50,
+      height_mm: 40,
+      elements: [
+        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:5, y:8, w:16, h:16, fontSize:8, bold:false},
+        {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:29, y:8, w:16, h:16, fontSize:8, bold:false},
+        {id:'phone', type:'text', source:'手机号', text:'', x:4, y:29, w:42, h:5, fontSize:9, bold:true},
+      ],
+    },
+  ];
+}
+
+function hydrateTemplateSelects() {
+  const selects = [document.getElementById('template-select'), document.getElementById('print-template-select')];
+  for (const select of selects) {
+    if (!select) continue;
+    select.replaceChildren(...labelConfig.templates.map(t => new Option(t.name, t.id)));
+    select.value = selectedTemplateId;
+  }
+}
+
+function getTemplate(id=selectedTemplateId) {
+  return labelConfig.templates.find(t => t.id === id) || labelConfig.templates[0];
+}
+
+function selectTemplate(id) {
+  selectedTemplateId = id;
+  selectedElementId = '';
+  hydrateTemplateSelects();
+  renderTemplateEditor();
+}
+
+async function saveLabelConfig(showToast=true) {
+  labelConfig.giffgaff_download_url = document.getElementById('s-giffgaff-url')?.value.trim() || labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+  const res = await fetch(API + '/label-config', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(labelConfig),
+  });
+  if (!res.ok) {
+    if (showToast) toast('模板保存失败', 'error');
+    return;
+  }
+  if (showToast) toast('模板已保存', 'success');
+}
+
+async function resetTemplates() {
+  if (!confirm('恢复默认模板会覆盖当前拖拽排版，继续吗？')) return;
+  labelConfig.templates = fallbackTemplates();
+  selectedTemplateId = labelConfig.templates[0].id;
+  selectedElementId = '';
+  hydrateTemplateSelects();
+  renderTemplateEditor();
+  toast('已恢复默认模板', 'success');
+}
+
+function renderTemplateEditor() {
+  const tpl = getTemplate();
+  if (!tpl) return;
+  document.getElementById('template-select').value = tpl.id;
+  document.getElementById('template-size').textContent = `${tpl.width_mm} x ${tpl.height_mm} mm`;
+  renderTemplateCanvas(document.getElementById('label-canvas'), tpl, DEMO_CUSTOMER, true);
+  renderPropertyPanel();
+}
+
+async function renderTemplateCanvas(container, tpl, customer, editable=false) {
+  container.style.width = `${tpl.width_mm}mm`;
+  container.style.height = `${tpl.height_mm}mm`;
+  container.replaceChildren();
+  for (const el of tpl.elements) {
+    const node = document.createElement('div');
+    node.className = `label-element ${el.type === 'qr' ? 'qr' : 'text'} ${editable ? 'editable' : ''} ${el.id === selectedElementId ? 'selected' : ''}`;
+    node.style.left = `${el.x}mm`;
+    node.style.top = `${el.y}mm`;
+    node.style.width = `${el.w}mm`;
+    node.style.height = `${el.h}mm`;
+    node.dataset.id = el.id;
+    if (el.type === 'qr') {
+      const img = document.createElement('img');
+      img.alt = el.source;
+      img.src = await qrDataUrl(resolveQrValue(el.source, customer));
+      node.appendChild(img);
+    } else {
+      const text = document.createElement('div');
+      text.className = 'fit-text';
+      text.textContent = resolveTextValue(el, customer);
+      text.style.fontSize = `${el.fontSize || 7}pt`;
+      text.style.fontWeight = el.bold ? '800' : '500';
+      node.appendChild(text);
+    }
+    if (editable) {
+      node.addEventListener('pointerdown', e => startDrag(e, el.id));
+      node.addEventListener('click', e => {
+        e.stopPropagation();
+        selectedElementId = el.id;
+        renderTemplateEditor();
+      });
+    }
+    container.appendChild(node);
+  }
+}
+
+function resolveTextValue(el, customer) {
+  switch (el.source) {
+    case '固定文字': return el.text || '文字';
+    case '手机号': return customer.phone_number || '';
+    case '邮箱': return customer.email || '';
+    case '开通日期': return customer.activation_date || '';
+    case 'Giffgaff下载链接': return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+    default: return el.text || '';
+  }
+}
+
+function resolveQrValue(source, customer) {
+  if (source === 'Giffgaff下载二维码') return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+  if (source === '邮箱二维码') return customer.share_link || customer.email || DEMO_CUSTOMER.share_link;
+  return DEMO_CUSTOMER.share_link;
+}
+
+async function qrDataUrl(value) {
+  if (!window.QRCode) {
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="white"/><text x="12" y="64" font-size="12">QR</text></svg>`);
+  }
+  return await QRCode.toDataURL(value || 'demo', { width: 256, margin: 0 });
+}
+
+function startDrag(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  selectedElementId = id;
+  const tpl = getTemplate();
+  const el = tpl.elements.find(item => item.id === id);
+  const rect = document.getElementById('label-canvas').getBoundingClientRect();
+  dragging = { id, startX: e.clientX, startY: e.clientY, x: el.x, y: el.y, pxPerMm: rect.width / tpl.width_mm };
+  document.addEventListener('pointermove', onDrag);
+  document.addEventListener('pointerup', stopDrag, { once: true });
+  renderPropertyPanel();
+}
+
+function onDrag(e) {
+  if (!dragging) return;
+  const tpl = getTemplate();
+  const el = tpl.elements.find(item => item.id === dragging.id);
+  const dx = (e.clientX - dragging.startX) / dragging.pxPerMm;
+  const dy = (e.clientY - dragging.startY) / dragging.pxPerMm;
+  el.x = clamp(roundHalf(dragging.x + dx), 0, tpl.width_mm - el.w);
+  el.y = clamp(roundHalf(dragging.y + dy), 0, tpl.height_mm - el.h);
+  renderTemplateCanvas(document.getElementById('label-canvas'), tpl, DEMO_CUSTOMER, true);
+  renderPropertyPanel();
+}
+
+function stopDrag() {
+  dragging = null;
+  document.removeEventListener('pointermove', onDrag);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function roundHalf(value) {
+  return Math.round(value * 2) / 2;
+}
+
+function addLabelElement(type, source) {
+  const tpl = getTemplate();
+  const id = `${type}-${Date.now()}`;
+  const isQr = type === 'qr';
+  const el = {
+    id,
+    type,
+    source,
+    text: source === '固定文字' ? '文字' : '',
+    x: 2,
+    y: 2,
+    w: isQr ? 12 : 24,
+    h: isQr ? 12 : 5,
+    fontSize: isQr ? 8 : 7,
+    bold: source === '手机号',
+  };
+  tpl.elements.push(el);
+  selectedElementId = id;
+  renderTemplateEditor();
+}
+
+function getSelectedElement() {
+  const tpl = getTemplate();
+  return tpl?.elements.find(el => el.id === selectedElementId);
+}
+
+function renderPropertyPanel() {
+  const el = getSelectedElement();
+  document.getElementById('empty-props').style.display = el ? 'none' : 'block';
+  document.getElementById('prop-panel').style.display = el ? 'grid' : 'none';
+  if (!el) return;
+  const sourceSelect = document.getElementById('prop-source');
+  const sources = el.type === 'qr' ? QR_SOURCES : TEXT_SOURCES;
+  sourceSelect.replaceChildren(...sources.map(source => new Option(source, source)));
+  sourceSelect.value = el.source;
+  document.getElementById('prop-text').value = el.text || '';
+  document.getElementById('prop-text').disabled = el.source !== '固定文字';
+  document.getElementById('prop-x').value = el.x;
+  document.getElementById('prop-y').value = el.y;
+  document.getElementById('prop-w').value = el.w;
+  document.getElementById('prop-h').value = el.h;
+  document.getElementById('prop-font').value = el.fontSize || 7;
+  document.getElementById('prop-font').disabled = el.type === 'qr';
+  document.getElementById('prop-bold').checked = !!el.bold;
+  document.getElementById('prop-bold').disabled = el.type === 'qr';
+}
+
+function updateSelectedElement(patch) {
+  const el = getSelectedElement();
+  if (!el) return;
+  Object.assign(el, patch);
+  const tpl = getTemplate();
+  el.w = clamp(el.w, 1, tpl.width_mm);
+  el.h = clamp(el.h, 1, tpl.height_mm);
+  el.x = clamp(el.x, 0, tpl.width_mm - el.w);
+  el.y = clamp(el.y, 0, tpl.height_mm - el.h);
+  renderTemplateEditor();
+}
+
+function deleteSelectedElement() {
+  const tpl = getTemplate();
+  tpl.elements = tpl.elements.filter(el => el.id !== selectedElementId);
+  selectedElementId = '';
+  renderTemplateEditor();
+}
+
+async function openPrintPanelForActive() {
+  if (!activeCustomer) return;
+  await openPrintPanel(activeCustomer.id);
+}
+
+async function openPrintPanel(id) {
+  try {
+    printCustomer = await getCustomer(id);
+    document.getElementById('print-panel').classList.add('open');
+    hydrateTemplateSelects();
+    document.getElementById('print-template-select').value = selectedTemplateId;
+    await renderPrintPreview();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function closePrintPanel() {
+  document.getElementById('print-panel').classList.remove('open');
+  printCustomer = null;
+}
+
+async function renderPrintPreview() {
+  if (!printCustomer) return;
+  const id = document.getElementById('print-template-select').value || selectedTemplateId;
+  selectedTemplateId = id;
+  await renderTemplateCanvas(document.getElementById('print-preview'), getTemplate(id), printCustomer, false);
+}
+
+async function printCurrentLabel() {
+  if (!printCustomer) return;
+  const id = document.getElementById('print-template-select').value || selectedTemplateId;
+  const tpl = getTemplate(id);
+  const markup = await buildPrintableLabel(tpl, printCustomer);
+  const win = window.open('', '_blank');
+  if (!win) {
+    toast('浏览器拦截了打印窗口', 'error');
+    return;
+  }
+  const printScript = '<scr' + 'ipt>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };' + '</scr' + 'ipt>';
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>打印标签</title>
+    <style>
+      @page { size: ${tpl.width_mm}mm ${tpl.height_mm}mm; margin: 0; }
+      * { box-sizing: border-box; }
+      html, body { width: ${tpl.width_mm}mm; height: ${tpl.height_mm}mm; margin: 0; padding: 0; }
+      .label-print { position: relative; width: ${tpl.width_mm}mm; height: ${tpl.height_mm}mm; overflow: hidden; background: white; color: #111; font-family: Arial, sans-serif; }
+      .label-item { position: absolute; overflow: hidden; display: flex; align-items: center; line-height: 1.12; }
+      .label-item.qr { justify-content: center; }
+      .label-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
+      .fit-text { width: 100%; word-break: break-all; }
+    </style></head><body>${markup}${printScript}</body></html>`);
+  win.document.close();
+}
+
+async function buildPrintableLabel(tpl, customer) {
+  const pieces = [];
+  for (const el of tpl.elements) {
+    const style = `left:${el.x}mm;top:${el.y}mm;width:${el.w}mm;height:${el.h}mm;`;
+    if (el.type === 'qr') {
+      const src = await qrDataUrl(resolveQrValue(el.source, customer));
+      pieces.push(`<div class="label-item qr" style="${style}"><img src="${src}" alt=""></div>`);
+    } else {
+      const textStyle = `font-size:${el.fontSize || 7}pt;font-weight:${el.bold ? 800 : 500};`;
+      pieces.push(`<div class="label-item text" style="${style}"><div class="fit-text" style="${textStyle}">${escapeHtml(resolveTextValue(el, customer))}</div></div>`);
+    }
+  }
+  return `<div class="label-print">${pieces.join('')}</div>`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+async function exportData() {
+  window.location.href = API + '/export';
+}
 
 async function importData(input) {
   const file = input.files[0];
@@ -628,44 +1211,31 @@ async function importData(input) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '导入失败');
     toast(`导入成功：${data.customers_restored} 位客户`, 'success');
-    loadCustomers();
-  } catch(err) { toast(err.message, 'error'); }
+    await loadCustomers();
+  } catch(err) {
+    toast(err.message, 'error');
+  }
   input.value = '';
 }
 
-// ── 设置 ──
+document.getElementById('detail-panel').onclick = e => {
+  if (e.target === document.getElementById('detail-panel')) closeDetail();
+};
+document.getElementById('print-panel').onclick = e => {
+  if (e.target === document.getElementById('print-panel')) closePrintPanel();
+};
+document.getElementById('label-canvas').onclick = e => {
+  if (e.target.id === 'label-canvas') {
+    selectedElementId = '';
+    renderTemplateEditor();
+  }
+};
 
-async function loadSettings() {
-  try {
-    const res = await fetch(API + '/settings');
-    const s = await res.json();
-    document.getElementById('s-moemail-url').value = s.moemail_url || '';
-    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
-  } catch(e) { toast('加载设置失败', 'error'); }
+async function init() {
+  await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig()]);
 }
 
-async function saveSettings() {
-  const payload = {
-    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
-    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
-  };
-  try {
-    const res = await fetch(API + '/settings', {
-      method: 'PATCH',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('保存失败');
-    toast('设置已保存', 'success');
-  } catch(err) { toast(err.message, 'error'); }
-}
-
-function openSettings() {
-  switchTab('settings', document.querySelectorAll('.tab')[1]);
-  loadSettings();
-}
-
-loadCustomers();
+init();
 </script>
 </body>
 </html>
