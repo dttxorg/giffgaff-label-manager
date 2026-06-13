@@ -1,6 +1,6 @@
 # Giffgaff Label Manager
 
-一个轻量的 Giffgaff 客户、MoEmail 临时邮箱和标签打印管理工具。项目当前只保留客户管理、按需生成 MoEmail、JSON 导入导出、云盘备份和可视化标签模板；旧版订阅提醒/定时续期提醒功能已经废弃。
+一个轻量的 Giffgaff 客户、MoEmail 临时邮箱和标签打印管理工具。项目功能包括客户管理、按需生成 MoEmail、JSON 导入导出、云盘备份和可视化标签模板。
 
 ---
 
@@ -29,8 +29,6 @@ MoEmail API 生成邮箱和分享链接
 ```
 
 MoEmail 部署地址和 API Key 在管理界面的「系统设置」中保存，不依赖本地 `.env` 文件。
-
-不再使用 Resend 直连发送邮件，因此不需要 `RESEND_API_KEY` 或 `FROM_EMAIL`。
 
 ---
 
