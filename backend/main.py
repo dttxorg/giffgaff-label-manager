@@ -7,7 +7,7 @@ import os
 import json
 
 from database import init_db
-from models import CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail, ReminderOut, SystemSettings
+from models import CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail, ReminderOut, SystemSettings, QuickSendRequest, DomainInfo
 from crud import (
     get_all_customers, get_customer, create_customer,
     update_customer, delete_customer, get_reminders,
@@ -143,13 +143,26 @@ async def add_customer(data: CustomerCreate):
             from moemail import MoEmailClient, generate_email_name
             try:
                 client = MoEmailClient(moemail_url, moemail_key)
+
+                # 确定域名
+                domain = data.moemail_domain
+                if not domain:
+                    domains = client.get_domains()
+                    domain = domains[0] if domains else ""
+
                 email_name = generate_email_name()
                 email_resp = client.generate_email(
                     name=email_name,
                     expiry_time=0,  # 永久有效
+                    domain=domain,
                 )
                 moemail_id = email_resp.get("id", "")
                 moemail_address = email_resp.get("email", "")
+
+                # 自动创建永久分享链接
+                if moemail_id:
+                    share_resp = client.create_share_link(moemail_id, expires_in=0)
+                    share_link = f"{moemail_url}/shared/{share_resp.get('token', '')}"
 
                 if moemail_id:
                     share_resp = client.create_share_link(moemail_id, expires_in=0)
@@ -213,6 +226,50 @@ async def remove_customer(customer_id: int):
 async def pending_reminders():
     rows = await get_pending_reminders()
     return rows
+
+
+# ── MoEmail 域名列表 ──
+
+@app.get("/api/moemail/domains", response_model=DomainInfo)
+async def list_moemail_domains():
+    """从 MoEmail 获取可用域名列表"""
+    moemail_url = await _get_setting("moemail_url")
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置")
+    from moemail import MoEmailClient
+    client = MoEmailClient(moemail_url, moemail_key)
+    try:
+        domains = client.get_domains()
+        return DomainInfo(domains=domains)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取域名失败：{e}")
+
+
+# ── 快捷发送邮件 ──
+
+@app.post("/api/quick-send")
+async def quick_send(data: QuickSendRequest):
+    """用 Resend API 发送邮件（快捷发送）"""
+    resend_key = await _get_setting("resend_api_key")
+    from_email = await _get_setting("from_email")
+    if not resend_key:
+        raise HTTPException(status_code=400, detail="Resend API Key 未配置，请在设置页面配置")
+    if not from_email:
+        raise HTTPException(status_code=400, detail="发件邮箱未配置，请在设置页面配置")
+
+    import resend
+    resend.api_key = resend_key
+    try:
+        r = resend.Emails.send({
+            "from": from_email,
+            "to": [data.to_address],
+            "subject": data.subject,
+            "html": data.content,
+        })
+        return {"ok": True, "email_id": r.get("id", "")}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"发送失败：{e}")
 
 
 # ── 前端静态页面 ──

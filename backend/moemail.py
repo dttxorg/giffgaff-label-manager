@@ -13,28 +13,27 @@ ADJECTIVES = [
     "swift", "brave", "calm", "crisp", "deft", "eager", "fair", "gentle",
     "hardy", "jolly", "keen", "lively", "merry", "noble", "proud", "quick",
     "royal", "shiny", "tidy", "urban", "vivid", "witty", "zesty", "agile",
-    "bright", "clever", "dapper", "eleven", "fresh", "grand", "happy", "ideal",
+    "bright", "clever", "dapper", "fresh", "grand", "happy", "ideal",
     "jazzy", "kindly", "light", "modern", "neat", "open", "pure", "quiet",
-    "rapid", "smart", "tight", "ultra", "valid", "warm", "xenon", "youth",
+    "rapid", "smart", "tight", "ultra", "valid", "warm", "youth",
 ]
 NOUNS = [
     "apple", "beach", "cloud", "dawn", "echo", "fern", "glow", "haven",
     "iris", "jade", "kite", "lake", "maple", "nova", "oak", "peak",
-    "quest", "ridge", "star", "tree", "unit", "vale", "wave", "xerox",
-    "yarn", "zeal", "arrow", "blaze", "coral", "dawn", "ember", "flame",
-    "grace", "haze", "ivory", "jewel", "karma", "leaf", "mist", "nectar",
-    "orbit", "pixel", "quartz", "rain", "stone", "tide", "unity", "vein",
-    "wind", "zenith",
+    "quest", "ridge", "star", "tree", "unit", "vale", "wave", "yarn",
+    "zeal", "arrow", "blaze", "coral", "ember", "flame", "grace", "haze",
+    "ivory", "jewel", "karma", "leaf", "mist", "nectar", "orbit", "pixel",
+    "quartz", "rain", "stone", "tide", "unity", "vein", "wind", "zenith",
 ]
 SUFFIX_CHARS = string.ascii_lowercase + string.digits
 
 
 def generate_email_name() -> str:
-    """生成随机但有意义的邮箱名前缀，如 brave.owl.x7k2"""
+    """生成随机但有意义的邮箱名前缀，如 braveowlp3w"""
     adj = random.choice(ADJECTIVES)
     noun = random.choice(NOUNS)
     suffix = "".join(random.choices(SUFFIX_CHARS, k=3))
-    return f"{adj}.{noun}.{suffix}"
+    return f"{adj}{noun}{suffix}"
 
 
 class MoEmailClient:
@@ -87,6 +86,37 @@ class MoEmailClient:
             f"{self.base_url}/api/config",
             headers=self._headers(),
             timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def get_domains(self) -> list[str]:
+        """返回可用邮箱域名列表"""
+        config = self.get_config()
+        domains_str = config.get("emailDomains", "")
+        return [d.strip() for d in domains_str.split(",") if d.strip()]
+
+    def send_email(self, email_id: str, to_address: str, subject: str,
+                   html: str = "", text: str = "") -> dict:
+        """
+        用指定临时邮箱发邮件（基于 Resend）
+        注意：需要用户在 MoEmail 已配置 Resend 服务
+        """
+        payload = {
+            "fromAddress": email_id,
+            "toAddress": to_address,
+            "subject": subject,
+        }
+        if html:
+            payload["html"] = html
+        if text:
+            payload["text"] = text
+
+        r = httpx.post(
+            f"{self.base_url}/api/emails/send",
+            json=payload,
+            headers=self._headers(),
+            timeout=15,
         )
         r.raise_for_status()
         return r.json()

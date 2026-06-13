@@ -8,6 +8,7 @@ class CustomerCreate(BaseModel):
     email: str
     activation_date: date
     auto_moemail: bool = False  # True = 自动生成 MoEmail 邮箱
+    moemail_domain: Optional[str] = None  # 可选指定域名，不填则用第一个
 
 
 class CustomerUpdate(BaseModel):
@@ -33,6 +34,16 @@ class SystemSettings(BaseModel):
     moemail_api_key: Optional[str] = None
     resend_api_key: Optional[str] = None
     from_email: Optional[str] = None
+
+
+class QuickSendRequest(BaseModel):
+    to_address: str
+    subject: str
+    content: str  # HTML 内容
+
+
+class DomainInfo(BaseModel):
+    domains: list[str]
 
 
 class ReminderOut(BaseModel):

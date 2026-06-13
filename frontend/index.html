@@ -89,9 +89,9 @@
     }
     .card-body { padding: 24px; }
 
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto auto; gap: 12px; align-items: end; }
     label { display: block; font-size: 13px; font-weight: 600; color: var(--purple-dark); margin-bottom: 6px; }
-    input {
+    input, select {
       width: 100%;
       padding: 10px 14px;
       border: 1.5px solid var(--border);
@@ -99,10 +99,13 @@
       font-size: 14px;
       outline: none;
       transition: border-color 0.2s;
+      background: white;
     }
-    input:focus { border-color: var(--purple); }
+    input:focus, select:focus { border-color: var(--purple); }
     .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; font-size: 13px; }
     .toggle-label input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--purple); }
+    .moemail-domain-row { display: none; }
+    .moemail-domain-row.visible { display: flex; }
     button {
       padding: 10px 20px;
       background: var(--purple);
@@ -307,9 +310,15 @@
             <input type="date" id="act-date" required>
           </div>
           <label class="toggle-label">
-            <input type="checkbox" id="auto-moemail">
-            <span>🤖 MoEmail 自动生成邮箱</span>
+            <input type="checkbox" id="auto-moemail" onchange="toggleMoemailDomain(this.checked)">
+            <span>🤖 自动生成邮箱</span>
           </label>
+          <div class="moemail-domain-row" style="flex-direction:column;gap:6px;">
+            <label style="margin:0;">MoEmail 域名</label>
+            <select id="moemail-domain" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;">
+              <option value="">加载中…</option>
+            </select>
+          </div>
           <button type="submit">添加并预约邮件</button>
         </form>
       </div>
@@ -462,7 +471,10 @@ async function loadCustomers() {
       <td>${moemailBadge}<br>${moemailAddr}</td>
       <td>${c.activation_date}</td>
       <td><button class="small" onclick="viewCustomer(${c.id})">查看详情 →</button></td>
-      <td class="actions"><button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button></td>
+      <td class="actions">
+        <button class="small" id="qs-btn-${c.id}" onclick="quickSend(${c.id})">✉️ 快捷发送</button>
+        <button class="small danger" onclick="deleteCustomer(${c.id}, '${c.phone_number}')">删除</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -507,6 +519,53 @@ async function viewCustomer(id) {
 }
 
 function closeDetail() { document.getElementById('detail-panel').classList.remove('open'); }
+
+async function loadMoemailDomains() {
+  try {
+    const res = await fetch(API + '/moemail/domains');
+    if (!res.ok) return;
+    const data = await res.json();
+    const sel = document.getElementById('moemail-domain');
+    sel.innerHTML = data.domains.map(d => `<option value="${d}">${d}</option>`).join('');
+  } catch(e) {
+    const sel = document.getElementById('moemail-domain');
+    sel.innerHTML = '<option value="">获取失败</option>';
+  }
+}
+
+let moemailDomainsLoaded = false;
+function toggleMoemailDomain(checked) {
+  const row = document.querySelector('.moemail-domain-row');
+  row.classList.toggle('visible', checked);
+  if (checked && !moemailDomainsLoaded) {
+    moemailDomainsLoaded = true;
+    loadMoemailDomains();
+  }
+}
+
+async function quickSend(customerId) {
+  const email = prompt('输入收件人邮箱地址：');
+  if (!email) return;
+  const subject = prompt('输入邮件主题：');
+  if (!subject) return;
+  const content = prompt('输入邮件内容（支持 HTML）：') || '';
+  const btn = document.getElementById('qs-btn-' + customerId);
+  if (btn) { btn.disabled = true; btn.textContent = '发送中…'; }
+  try {
+    const res = await fetch(API + '/quick-send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ to_address: email, subject, content }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '发送失败');
+    toast('发送成功', 'success');
+  } catch(err) {
+    toast(err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✉️ 快捷发送'; }
+  }
+}
 
 async function deleteCustomer(id, phone) {
   if (!confirm(`确认删除客户 ${phone}？所有已预约邮件将一并清除。`)) return;
