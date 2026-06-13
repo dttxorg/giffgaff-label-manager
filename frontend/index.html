@@ -333,6 +333,38 @@
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.error { background: var(--red); }
     .toast.success { background: var(--green); }
+    .auth-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+      background: rgba(248, 247, 251, 0.96);
+      padding: 24px;
+    }
+    .auth-screen.open { display: flex; }
+    .auth-card {
+      width: 100%;
+      max-width: 360px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 12px 44px rgba(0,0,0,0.16);
+      padding: 24px;
+    }
+    .auth-card h2 {
+      color: var(--purple-dark);
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .auth-card p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .auth-card button { width: 100%; margin-top: 12px; }
 
     @media (max-width: 1000px) {
       .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls {
@@ -355,8 +387,19 @@
     <button class="btn-header" type="button" onclick="document.getElementById('import-file').click()">导入</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
     <button class="btn-header" type="button" onclick="openSettings()">设置</button>
+    <button class="btn-header" type="button" id="logout-btn" style="display:none" onclick="logout()">退出</button>
   </div>
 </header>
+
+<div class="auth-screen" id="auth-screen">
+  <form class="auth-card" id="auth-form">
+    <h2>访问口令</h2>
+    <p>请输入部署时配置的口令后继续。</p>
+    <label>口令</label>
+    <input type="password" id="auth-password" autocomplete="current-password" required>
+    <button type="submit">进入</button>
+  </form>
+</div>
 
 <div class="container">
   <div class="tabs">
@@ -574,6 +617,8 @@ let labelConfig = { giffgaff_download_url: DEFAULT_GIFFGAFF_URL, templates: [] }
 let selectedTemplateId = '';
 let selectedElementId = '';
 let dragging = null;
+let authRequired = false;
+let appStarted = false;
 
 function toast(msg, type='') {
   const t = document.getElementById('toast');
@@ -597,6 +642,51 @@ function switchTab(name, el) {
   document.getElementById('tab-' + name).classList.add('active');
   el.classList.add('active');
   if (name === 'labels') renderTemplateEditor();
+}
+
+async function checkAuth() {
+  const res = await fetch(API + '/auth/status');
+  const status = await res.json();
+  authRequired = !!status.auth_required;
+  document.getElementById('logout-btn').style.display = authRequired ? '' : 'none';
+  if (authRequired && !status.authenticated) {
+    document.getElementById('auth-screen').classList.add('open');
+    document.getElementById('auth-password').focus();
+    return false;
+  }
+  document.getElementById('auth-screen').classList.remove('open');
+  return true;
+}
+
+document.getElementById('auth-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const password = document.getElementById('auth-password').value;
+  const button = e.target.querySelector('button');
+  button.disabled = true;
+  button.textContent = '验证中...';
+  try {
+    const res = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '口令错误');
+    document.getElementById('auth-password').value = '';
+    document.getElementById('auth-screen').classList.remove('open');
+    await initApp();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = '进入';
+  }
+};
+
+async function logout() {
+  await fetch(API + '/auth/logout', { method: 'POST' });
+  appStarted = false;
+  document.getElementById('auth-screen').classList.add('open');
 }
 
 async function loadCustomers() {
@@ -1231,11 +1321,19 @@ document.getElementById('label-canvas').onclick = e => {
   }
 };
 
-async function init() {
+async function initApp() {
+  if (appStarted) return;
+  appStarted = true;
   await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig()]);
 }
 
-init();
+async function boot() {
+  if (await checkAuth()) {
+    await initApp();
+  }
+}
+
+boot();
 </script>
 </body>
 </html>

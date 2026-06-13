@@ -1,17 +1,19 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 import os
 import json
 import datetime
 import aiosqlite
+import hmac
+import hashlib
 from copy import deepcopy
 
 from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
-    SystemSettings, MoEmailCreateRequest, DomainInfo, LabelConfig
+    SystemSettings, AuthLoginRequest, MoEmailCreateRequest, DomainInfo, LabelConfig
 )
 from crud import (
     get_all_customers, get_customer, create_customer,
@@ -22,6 +24,8 @@ from crud import (
 
 app = FastAPI(title="giffgaff-label-manager API")
 
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_LABEL_TEMPLATES = [
     {
@@ -79,9 +83,68 @@ app.add_middleware(
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 
+def _auth_enabled() -> bool:
+    return bool(APP_PASSWORD)
+
+
+def _auth_token() -> str:
+    return hmac.new(APP_PASSWORD.encode("utf-8"), b"giffgaff-label-manager", hashlib.sha256).hexdigest()
+
+
+def _is_authenticated(request: Request) -> bool:
+    if not _auth_enabled():
+        return True
+    cookie = request.cookies.get(AUTH_COOKIE_NAME, "")
+    return hmac.compare_digest(cookie, _auth_token())
+
+
+@app.middleware("http")
+async def require_app_password(request, call_next):
+    public_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/logout"}
+    protected_prefixes = ("/api", "/docs", "/redoc", "/openapi.json")
+    if _auth_enabled() and request.url.path not in public_paths and request.url.path.startswith(protected_prefixes):
+        if not _is_authenticated(request):
+            return JSONResponse({"detail": "需要登录"}, status_code=401)
+    return await call_next(request)
+
+
 @app.on_event("startup")
 async def startup():
     await init_db()
+
+
+# ── 访问口令 ──
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    return {
+        "auth_required": _auth_enabled(),
+        "authenticated": _is_authenticated(request),
+    }
+
+
+@app.post("/api/auth/login")
+async def auth_login(data: AuthLoginRequest):
+    if not _auth_enabled():
+        return {"ok": True}
+    if not hmac.compare_digest(data.password, APP_PASSWORD):
+        raise HTTPException(status_code=401, detail="口令错误")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        _auth_token(),
+        httponly=True,
+        samesite="lax",
+        secure=False,
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return response
 
 
 # ── 系统设置 ──

@@ -45,6 +45,10 @@ class SystemSettings(BaseModel):
     giffgaff_download_url: Optional[str] = None
 
 
+class AuthLoginRequest(BaseModel):
+    password: str
+
+
 class MoEmailCreateRequest(BaseModel):
     domain: Optional[str] = None
 
