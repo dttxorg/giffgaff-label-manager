@@ -360,21 +360,12 @@
             <div class="setting-item">
               <label>MoEmail API Key</label>
               <input type="password" id="s-moemail-key" placeholder="re_xxxxxx">
-              <span class="setting-hint">公爵角色才能创建 API Key</span>
+              <span class="setting-hint">公爵或皇帝角色才能创建 API Key</span>
             </div>
           </div>
-          <div class="settings-group">
-            <div class="setting-item">
-              <label>Resend API Key</label>
-              <input type="password" id="s-resend-key" placeholder="re_xxxxxx">
-              <span class="setting-hint">用于发送到期提醒邮件（可选，不填则不发邮件）</span>
-            </div>
-            <div class="setting-item">
-              <label>发件邮箱地址</label>
-              <input type="email" id="s-from-email" placeholder="reminder@yourdomain.com">
-              <span class="setting-hint">在 Resend 验证过的发件域名</span>
-            </div>
-          </div>
+        </div>
+        <div style="font-size:13px;color:#888;margin-top:8px;">
+          💡 发件使用 MoEmail 已配置的 Resend（设置 → 邮件服务配置），无需单独配置 Resend。
         </div>
         <div class="save-btn-wrap">
           <button onclick="saveSettings()">💾 保存设置</button>
@@ -544,8 +535,23 @@ function toggleMoemailDomain(checked) {
 }
 
 async function quickSend(customerId) {
-  const email = prompt('输入收件人邮箱地址：');
-  if (!email) return;
+  // 先获取客户信息（需要 moemail_address）
+  let moemailAddress = '';
+  try {
+    const r = await fetch(API + '/customers/' + customerId);
+    if (r.ok) {
+      const c = await r.json();
+      moemailAddress = c.moemail_address || '';
+    }
+  } catch(e) {}
+
+  if (!moemailAddress) {
+    toast('该客户没有 MoEmail 邮箱，无法使用快捷发送', 'error');
+    return;
+  }
+
+  const toEmail = prompt('输入收件人邮箱地址：');
+  if (!toEmail) return;
   const subject = prompt('输入邮件主题：');
   if (!subject) return;
   const content = prompt('输入邮件内容（支持 HTML）：') || '';
@@ -555,7 +561,7 @@ async function quickSend(customerId) {
     const res = await fetch(API + '/quick-send', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ to_address: email, subject, content }),
+      body: JSON.stringify({ from_address: moemailAddress, to_address: toEmail, subject, content }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '发送失败');
@@ -635,8 +641,6 @@ async function loadSettings() {
     const s = await res.json();
     document.getElementById('s-moemail-url').value = s.moemail_url || '';
     document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
-    document.getElementById('s-resend-key').value = s.resend_api_key === '***' ? '' : (s.resend_api_key || '');
-    document.getElementById('s-from-email').value = s.from_email || '';
   } catch(e) { toast('加载设置失败', 'error'); }
 }
 
@@ -644,8 +648,6 @@ async function saveSettings() {
   const payload = {
     moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
     moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
-    resend_api_key: document.getElementById('s-resend-key').value.trim() || null,
-    from_email: document.getElementById('s-from-email').value.trim() || null,
   };
   try {
     const res = await fetch(API + '/settings', {

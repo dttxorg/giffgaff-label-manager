@@ -32,11 +32,10 @@ class CustomerOut(BaseModel):
 class SystemSettings(BaseModel):
     moemail_url: Optional[str] = None
     moemail_api_key: Optional[str] = None
-    resend_api_key: Optional[str] = None
-    from_email: Optional[str] = None
 
 
 class QuickSendRequest(BaseModel):
+    from_address: str  # MoEmail 邮箱地址（作为发件人）
     to_address: str
     subject: str
     content: str  # HTML 内容

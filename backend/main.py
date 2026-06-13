@@ -46,8 +46,6 @@ async def get_sys_settings():
     return SystemSettings(
         moemail_url=rows.get("moemail_url", ""),
         moemail_api_key="***" if rows.get("moemail_api_key") else "",
-        resend_api_key="***" if rows.get("resend_api_key") else "",
-        from_email=rows.get("from_email", ""),
     )
 
 
@@ -58,10 +56,6 @@ async def update_settings(data: SystemSettings):
         await set_setting("moemail_url", data.moemail_url)
     if data.moemail_api_key not in (None, "***", ""):
         await set_setting("moemail_api_key", data.moemail_api_key)
-    if data.resend_api_key not in (None, "***", ""):
-        await set_setting("resend_api_key", data.resend_api_key)
-    if data.from_email is not None:
-        await set_setting("from_email", data.from_email)
     return {"ok": True}
 
 
@@ -250,24 +244,28 @@ async def list_moemail_domains():
 
 @app.post("/api/quick-send")
 async def quick_send(data: QuickSendRequest):
-    """用 Resend API 发送邮件（快捷发送）"""
-    resend_key = await _get_setting("resend_api_key")
-    from_email = await _get_setting("from_email")
-    if not resend_key:
-        raise HTTPException(status_code=400, detail="Resend API Key 未配置，请在设置页面配置")
-    if not from_email:
-        raise HTTPException(status_code=400, detail="发件邮箱未配置，请在设置页面配置")
+    """
+    用 MoEmail 的 Resend 集成发送邮件（快捷发送）。
+    fromAddress 使用客户登记的 MoEmail 邮箱。
+    """
+    moemail_url = await _get_setting("moemail_url")
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
 
-    import resend
-    resend.api_key = resend_key
+    from moemail import MoEmailClient
     try:
-        r = resend.Emails.send({
-            "from": from_email,
-            "to": [data.to_address],
-            "subject": data.subject,
-            "html": data.content,
-        })
-        return {"ok": True, "email_id": r.get("id", "")}
+        client = MoEmailClient(moemail_url, moemail_key)
+        # 用客户关联的 MoEmail 邮箱作为发件人
+        # 需要从请求里带上 from_address（MoEmail 邮箱地址）
+        # 这里简化处理：调用方需要在请求里指定 from_address
+        r = client.send_email(
+            email_id=data.from_address,
+            to_address=data.to_address,
+            subject=data.subject,
+            html=data.content,
+        )
+        return {"ok": True, "message_id": r.get("id", "")}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"发送失败：{e}")
 

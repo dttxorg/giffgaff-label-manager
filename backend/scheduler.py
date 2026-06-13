@@ -96,22 +96,23 @@ async def get_setting(key: str, default: str = "") -> str:
 async def check_and_send_due_reminders():
     """
     每天运行：查所有 due_date <= 今天 AND sent=0 的记录，立即发送并标记。
-    Resend API Key 从数据库 settings 读取，节省量从 .env 读（不回显）
+    通过 MoEmail 的 Resend 集成发送（fromAddress 使用客户的 MoEmail 邮箱）。
     """
-    resend_key = os.getenv("RESEND_API_KEY") or await get_setting("resend_api_key")
-    from_email = await get_setting("from_email")
-    if not resend_key:
-        print("[WARN] Resend API Key 未配置，跳过发送")
+    moemail_url = await get_setting("moemail_url")
+    moemail_key = await get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        print("[WARN] MoEmail 未配置，跳过发送")
         return
 
-    import resend
-    resend.api_key = resend_key
+    from moemail import MoEmailClient
+    client = MoEmailClient(moemail_url, moemail_key)
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall(
             """SELECT r.id, r.customer_id, r.cycle_number, r.due_date,
-                      c.phone_number, c.email, c.activation_date, c.share_link
+                      c.phone_number, c.email, c.activation_date, c.share_link,
+                      c.moemail_address
                FROM reminders r
                JOIN customers c ON r.customer_id = c.id
                WHERE r.sent = 0 AND r.due_date <= date('now')
@@ -120,6 +121,9 @@ async def check_and_send_due_reminders():
 
     sent_count = 0
     for row in rows:
+        if not row["moemail_address"]:
+            print(f"[SKIP] {row['phone_number']} 无 MoEmail 邮箱，跳过")
+            continue
         try:
             due_date = date.fromisoformat(row["due_date"])
             subject = build_email_subject(row["phone_number"], due_date, row["cycle_number"])
@@ -129,12 +133,12 @@ async def check_and_send_due_reminders():
                 due_date, row["cycle_number"],
                 row.get("share_link") or ""
             )
-            r = resend.Emails.send({
-                "from": from_email or "giffgaff-reminder@yourdomain.com",
-                "to": [row["email"]],
-                "subject": subject,
-                "html": html,
-            })
+            r = client.send_email(
+                email_id=row["moemail_address"],
+                to_address=row["email"],
+                subject=subject,
+                html=html,
+            )
             email_id = r.get("id", "unknown")
 
             async with aiosqlite.connect(DB_PATH) as db:
