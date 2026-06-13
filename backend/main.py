@@ -140,11 +140,12 @@ async def add_customer(data: CustomerCreate):
         moemail_key = await _get_setting("moemail_api_key")
 
         if moemail_url and moemail_key:
-            from moemail import MoEmailClient
+            from moemail import MoEmailClient, generate_email_name
             try:
                 client = MoEmailClient(moemail_url, moemail_key)
+                email_name = generate_email_name()
                 email_resp = client.generate_email(
-                    name=data.phone_number,
+                    name=email_name,
                     expiry_time=0,  # 永久有效
                 )
                 moemail_id = email_resp.get("id", "")

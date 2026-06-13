@@ -4,7 +4,37 @@ MoEmail API 集成：生成临时邮箱 + 获取永久分享链接
 """
 
 import httpx
+import random
+import string
 from typing import Optional
+
+# 有意义的英语单词池
+ADJECTIVES = [
+    "swift", "brave", "calm", "crisp", "deft", "eager", "fair", "gentle",
+    "hardy", "jolly", "keen", "lively", "merry", "noble", "proud", "quick",
+    "royal", "shiny", "tidy", "urban", "vivid", "witty", "zesty", "agile",
+    "bright", "clever", "dapper", "eleven", "fresh", "grand", "happy", "ideal",
+    "jazzy", "kindly", "light", "modern", "neat", "open", "pure", "quiet",
+    "rapid", "smart", "tight", "ultra", "valid", "warm", "xenon", "youth",
+]
+NOUNS = [
+    "apple", "beach", "cloud", "dawn", "echo", "fern", "glow", "haven",
+    "iris", "jade", "kite", "lake", "maple", "nova", "oak", "peak",
+    "quest", "ridge", "star", "tree", "unit", "vale", "wave", "xerox",
+    "yarn", "zeal", "arrow", "blaze", "coral", "dawn", "ember", "flame",
+    "grace", "haze", "ivory", "jewel", "karma", "leaf", "mist", "nectar",
+    "orbit", "pixel", "quartz", "rain", "stone", "tide", "unity", "vein",
+    "wind", "zenith",
+]
+SUFFIX_CHARS = string.ascii_lowercase + string.digits
+
+
+def generate_email_name() -> str:
+    """生成随机但有意义的邮箱名前缀，如 brave.owl.x7k2"""
+    adj = random.choice(ADJECTIVES)
+    noun = random.choice(NOUNS)
+    suffix = "".join(random.choices(SUFFIX_CHARS, k=3))
+    return f"{adj}.{noun}.{suffix}"
 
 
 class MoEmailClient:
