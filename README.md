@@ -7,6 +7,8 @@
 ## 功能总览
 
 - **客户管理**：先按开通日期建档，邮箱可手填或生成 MoEmail，手机号和收货地址可后补
+- **SIM 激活码库**：批量导入 giffgaff SIM 激活码，添加客户时自动分配未使用激活码
+- **激活任务中心**：自动生成初始密码和激活任务，供本地桌面客户端领取并回写手机号/状态
 - **发货状态**：客户列表显示收货地址、快递公司、快递单号和手动维护的未发货、已发货、已收货状态
 - **菜鸟取号**：配置菜鸟/淘宝开放平台凭证和固定发件地址后，可按客户收货地址调用电子面单取号
 - **MoEmail 集成**：客户行按钮按需生成临时邮箱，保存分享链接，拉取可用域名
@@ -72,6 +74,18 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 设置后，访问页面会先要求输入口令，所有 API 也会被同一个口令保护。未设置 `APP_PASSWORD` 时，系统默认不启用登录保护，适合本地开发。
 
+桌面客户端 API 使用独立 Token：
+
+```bash
+export AGENT_API_TOKEN="换成一串很长的随机密钥"
+```
+
+本地自动化客户端请求 `/api/agent/*` 时需要带：
+
+```text
+Authorization: Bearer <AGENT_API_TOKEN>
+```
+
 ### 4. 配置 MoEmail
 
 打开页面右上角「设置」，填入：
@@ -81,9 +95,30 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | MoEmail 部署地址 | 例如 `https://moemail.yourdomain.com`，不带尾部斜杠 |
 | MoEmail API Key | 在 MoEmail 后台创建的 API Key |
 
-保存后即可在客户列表里点击「生成邮箱」，系统会让 MoEmail 自动分配邮箱名，并把生成的地址写入该客户唯一的邮箱字段。客户详情里的「验证码」区域可以点击「刷新」，系统会读取该 MoEmail 收件箱最新邮件，并从 Giffgaff `Confirm it's you` 邮件中提取 6 位验证码。手填邮箱没有 MoEmail 邮箱 ID，无法自动读取邮件。
+保存后添加客户时，如果邮箱留空，系统会让 MoEmail 自动分配邮箱名，并把生成的地址写入该客户唯一的邮箱字段。客户详情里的「验证码」区域可以点击「刷新」，系统会读取该 MoEmail 收件箱最新邮件，并从 Giffgaff `Confirm it's you` 邮件中提取 6 位验证码。手填邮箱没有 MoEmail 邮箱 ID，无法自动读取邮件。
 
-### 5. 使用标签模板
+### 5. SIM 激活码与桌面客户端
+
+在「SIM 激活码」页面批量导入激活码后，添加客户会自动：
+
+- 分配一个未使用 SIM 激活码
+- 生成初始密码
+- 使用手填邮箱，或在邮箱留空时生成 MoEmail
+- 创建状态为「等待客户端领取」的激活任务
+
+桌面客户端可使用这些接口：
+
+```text
+GET   /api/agent/activation-tasks/next
+POST  /api/agent/customers/{id}/activation-log
+PATCH /api/agent/customers/{id}/activation-status
+PATCH /api/agent/customers/{id}/activation-result
+GET   /api/agent/customers/{id}/verification-code
+```
+
+客户端领取任务后会拿到客户 ID、邮箱、初始密码、SIM 激活码和收货地址；完成网页流程后回传手机号，并把状态推进到「等待转 eSIM」或「已完成」。
+
+### 6. 使用标签模板
 
 「标签模板」页面内置四个模板：
 

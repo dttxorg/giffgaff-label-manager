@@ -75,6 +75,10 @@ async def update_customer(customer_id: int, data: CustomerUpdate):
         fields.append("courier_print_data = ?"); values.append(normalize_optional_text(data.courier_print_data))
     if data.activation_date is not None:
         fields.append("activation_date = ?"); values.append(data.activation_date.isoformat())
+    if data.activation_status is not None:
+        fields.append("activation_status = ?"); values.append(data.activation_status)
+    if data.activation_error is not None:
+        fields.append("activation_error = ?"); values.append(normalize_optional_text(data.activation_error))
     if not fields:
         return True
     values.append(customer_id)

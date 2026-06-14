@@ -22,6 +22,14 @@ async def init_db():
                 moemail_address TEXT,
                 share_link TEXT,
                 is_moemail_auto INTEGER NOT NULL DEFAULT 0,
+                sim_code_id INTEGER,
+                sim_activation_code TEXT,
+                initial_password TEXT,
+                activation_status TEXT NOT NULL DEFAULT '未开始',
+                activation_error TEXT,
+                activated_at TEXT,
+                automation_lock_owner TEXT,
+                automation_locked_at TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
@@ -35,8 +43,40 @@ async def init_db():
         await _ensure_column(db, "customers", "tracking_number", "TEXT")
         await _ensure_column(db, "customers", "courier_order_code", "TEXT")
         await _ensure_column(db, "customers", "courier_print_data", "TEXT")
+        await _ensure_column(db, "customers", "sim_code_id", "INTEGER")
+        await _ensure_column(db, "customers", "sim_activation_code", "TEXT")
+        await _ensure_column(db, "customers", "initial_password", "TEXT")
+        await _ensure_column(db, "customers", "activation_status", "TEXT NOT NULL DEFAULT '未开始'")
+        await _ensure_column(db, "customers", "activation_error", "TEXT")
+        await _ensure_column(db, "customers", "activated_at", "TEXT")
+        await _ensure_column(db, "customers", "automation_lock_owner", "TEXT")
+        await _ensure_column(db, "customers", "automation_locked_at", "TEXT")
         await _ensure_shipping_status_values(db)
+        await _ensure_activation_status_values(db)
         await _ensure_nullable_phone_number(db)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sim_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT '未分配',
+                customer_id INTEGER,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS activation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                level TEXT NOT NULL DEFAULT 'info',
+                step TEXT,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sim_codes_status ON sim_codes(status)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_activation_logs_customer ON activation_logs(customer_id, created_at)")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -76,6 +116,14 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             moemail_address TEXT,
             share_link TEXT,
             is_moemail_auto INTEGER NOT NULL DEFAULT 0,
+            sim_code_id INTEGER,
+            sim_activation_code TEXT,
+            initial_password TEXT,
+            activation_status TEXT NOT NULL DEFAULT '未开始',
+            activation_error TEXT,
+            activated_at TEXT,
+            automation_lock_owner TEXT,
+            automation_locked_at TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -83,10 +131,12 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
         INSERT INTO customers
             (id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
              courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
-             is_moemail_auto, created_at)
+             is_moemail_auto, sim_code_id, sim_activation_code, initial_password, activation_status,
+             activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at)
         SELECT id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
                courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
-               is_moemail_auto, created_at
+               is_moemail_auto, sim_code_id, sim_activation_code, initial_password, activation_status,
+               activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at
         FROM customers_old
     """)
     await db.execute("DROP TABLE customers_old")
@@ -99,4 +149,17 @@ async def _ensure_shipping_status_values(db: aiosqlite.Connection):
         WHERE shipping_status IS NULL
            OR shipping_status = ''
            OR shipping_status NOT IN ('未发货', '已发货', '已收货')
+    """)
+
+
+async def _ensure_activation_status_values(db: aiosqlite.Connection):
+    await db.execute("""
+        UPDATE customers
+        SET activation_status = '未开始'
+        WHERE activation_status IS NULL
+           OR activation_status = ''
+           OR activation_status NOT IN (
+               '未开始', '已分配激活码', '等待客户端领取', '激活中',
+               '等待人工支付', '等待转 eSIM', '已完成', '失败'
+           )
     """)

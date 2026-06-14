@@ -4,6 +4,8 @@ from typing import Any, Literal, Optional
 
 
 ShippingStatus = Literal["未发货", "已发货", "已收货"]
+ActivationStatus = Literal["未开始", "已分配激活码", "等待客户端领取", "激活中", "等待人工支付", "等待转 eSIM", "已完成", "失败"]
+SimCodeStatus = Literal["未分配", "已分配", "激活中", "已使用", "失败", "作废"]
 
 
 class CustomerCreate(BaseModel):
@@ -28,6 +30,8 @@ class CustomerUpdate(BaseModel):
     courier_order_code: Optional[str] = None
     courier_print_data: Optional[str] = None
     activation_date: Optional[date] = None
+    activation_status: Optional[ActivationStatus] = None
+    activation_error: Optional[str] = None
 
 
 class CustomerOut(BaseModel):
@@ -44,6 +48,11 @@ class CustomerOut(BaseModel):
     moemail_address: Optional[str]
     share_link: Optional[str]
     is_moemail_auto: bool
+    sim_code_id: Optional[int] = None
+    sim_activation_code: Optional[str] = None
+    activation_status: ActivationStatus = "未开始"
+    activation_error: Optional[str] = None
+    activated_at: Optional[str] = None
     created_at: str
 
 
@@ -62,6 +71,12 @@ class CustomerDetail(BaseModel):
     moemail_address: Optional[str]
     share_link: Optional[str]
     is_moemail_auto: bool
+    sim_code_id: Optional[int] = None
+    sim_activation_code: Optional[str] = None
+    initial_password: Optional[str] = None
+    activation_status: ActivationStatus = "未开始"
+    activation_error: Optional[str] = None
+    activated_at: Optional[str] = None
 
 
 class SystemSettings(BaseModel):
@@ -99,6 +114,56 @@ class MoEmailCreateRequest(BaseModel):
 
 class CainiaoWaybillRequest(BaseModel):
     dry_run: bool = False
+
+
+class SimCodeImport(BaseModel):
+    codes: Optional[list[str]] = None
+    text: Optional[str] = None
+
+
+class SimCodeOut(BaseModel):
+    id: int
+    code: str
+    status: SimCodeStatus
+    customer_id: Optional[int] = None
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class ActivationLogIn(BaseModel):
+    level: str = "info"
+    step: Optional[str] = None
+    message: str
+
+
+class ActivationStatusUpdate(BaseModel):
+    status: ActivationStatus
+    error: Optional[str] = None
+    step: Optional[str] = None
+    message: Optional[str] = None
+
+
+class ActivationResultUpdate(BaseModel):
+    phone_number: Optional[str] = None
+    status: ActivationStatus = "等待转 eSIM"
+    error: Optional[str] = None
+    step: Optional[str] = None
+    message: Optional[str] = None
+
+
+class ActivationTaskOut(BaseModel):
+    customer_id: int
+    phone_number: Optional[str] = None
+    email: str
+    initial_password: str
+    sim_activation_code: str
+    activation_status: ActivationStatus
+    activation_date: date
+    moemail_id: Optional[str] = None
+    moemail_address: Optional[str] = None
+    share_link: Optional[str] = None
+    shipping_address: Optional[str] = None
 
 
 class VerificationCodeOut(BaseModel):

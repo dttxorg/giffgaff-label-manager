@@ -10,6 +10,8 @@ import hmac
 import hashlib
 import html
 import re
+import secrets
+import string
 from copy import deepcopy
 from typing import Optional
 
@@ -17,10 +19,11 @@ from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
-    VerificationCodeOut, DomainInfo, LabelConfig
+    SimCodeImport, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
+    ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, DomainInfo, LabelConfig
 )
 from crud import (
-    get_all_customers, get_customer, create_customer,
+    get_all_customers, get_customer,
     update_customer, delete_customer,
     update_customer_moemail,
     get_settings, set_setting, fetch_one, normalize_optional_text
@@ -29,10 +32,16 @@ from crud import (
 app = FastAPI(title="giffgaff-label-manager API")
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", "").strip()
 AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_SHIPPING_STATUS = "未发货"
 SHIPPING_STATUSES = {"未发货", "已发货", "已收货"}
+ACTIVATION_STATUSES = {
+    "未开始", "已分配激活码", "等待客户端领取", "激活中",
+    "等待人工支付", "等待转 eSIM", "已完成", "失败",
+}
+SIM_CODE_STATUSES = {"未分配", "已分配", "激活中", "已使用", "失败", "作废"}
 DEFAULT_CAINIAO_ENDPOINT = "https://eco.taobao.com/router/rest"
 CAINIAO_PLAIN_SETTINGS = (
     "cainiao_endpoint",
@@ -141,6 +150,23 @@ def _is_authenticated(request: Request) -> bool:
     return hmac.compare_digest(cookie, _auth_token())
 
 
+def _is_agent_authenticated(request: Request) -> bool:
+    if not AGENT_API_TOKEN:
+        return False
+    auth_header = request.headers.get("authorization", "")
+    prefix = "Bearer "
+    if not auth_header.startswith(prefix):
+        return False
+    return hmac.compare_digest(auth_header[len(prefix):].strip(), AGENT_API_TOKEN)
+
+
+def _require_agent_auth(request: Request):
+    if not AGENT_API_TOKEN:
+        raise HTTPException(status_code=503, detail="桌面客户端 API 未启用，请配置 AGENT_API_TOKEN")
+    if not _is_agent_authenticated(request):
+        raise HTTPException(status_code=401, detail="桌面客户端 Token 无效")
+
+
 def _normalize_base_url(value: Optional[str]) -> str:
     return (value or "").strip().rstrip("/")
 
@@ -155,12 +181,43 @@ def _customer_payload(row) -> dict:
     customer = dict(row)
     customer["share_link"] = _normalize_share_link(customer.get("share_link"))
     customer["shipping_status"] = _normalize_shipping_status(customer.get("shipping_status"))
+    customer["activation_status"] = _normalize_activation_status(customer.get("activation_status"))
+    customer.pop("initial_password", None)
+    customer.pop("automation_lock_owner", None)
+    customer.pop("automation_locked_at", None)
     return customer
 
 
 def _normalize_shipping_status(value: Optional[str]) -> str:
     value = (value or "").strip()
     return value if value in SHIPPING_STATUSES else DEFAULT_SHIPPING_STATUS
+
+
+def _normalize_activation_status(value: Optional[str]) -> str:
+    value = (value or "").strip()
+    return value if value in ACTIVATION_STATUSES else "未开始"
+
+
+def _normalize_sim_code_status(value: Optional[str]) -> str:
+    value = (value or "").strip()
+    return value if value in SIM_CODE_STATUSES else "未分配"
+
+
+def _normalize_sim_code(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _generate_initial_password() -> str:
+    alphabet = string.ascii_uppercase + string.ascii_lowercase + string.digits
+    random_part = "".join(secrets.choice(alphabet) for _ in range(8))
+    return f"Gg-{random_part}!"
+
+
+def _utc_now() -> str:
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
 def _masked_setting(rows: dict, key: str) -> str:
@@ -250,6 +307,8 @@ def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
 async def require_app_password(request, call_next):
     public_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/logout"}
     protected_prefixes = ("/api", "/docs", "/redoc", "/openapi.json")
+    if request.url.path.startswith("/api/agent"):
+        return await call_next(request)
     if _auth_enabled() and request.url.path not in public_paths and request.url.path.startswith(protected_prefixes):
         if not _is_authenticated(request):
             return JSONResponse({"detail": "需要登录"}, status_code=401)
@@ -345,6 +404,103 @@ async def update_settings(data: SystemSettings):
     return {"ok": True}
 
 
+async def _get_setting(key: str) -> str:
+    rows = await get_settings()
+    return rows.get(key, "")
+
+
+async def _generate_moemail_account(domain: Optional[str] = None) -> dict:
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
+    from moemail import MoEmailClient
+    client = MoEmailClient(moemail_url, moemail_key)
+    if not domain:
+        domains = client.get_domains()
+        domain = domains[0] if domains else ""
+    email_resp = client.generate_email(expiry_time=0, domain=domain)
+    moemail_id = email_resp.get("id", "")
+    moemail_address = email_resp.get("email", "")
+    if not moemail_id or not moemail_address:
+        raise ValueError("MoEmail 未返回邮箱 ID 或地址")
+    share_resp = client.create_share_link(moemail_id, expires_in=0)
+    token = share_resp.get("token", "")
+    return {
+        "email": moemail_address,
+        "moemail_id": moemail_id,
+        "moemail_address": moemail_address,
+        "share_link": f"{moemail_url}/shared/{token}" if token else "",
+    }
+
+
+async def _has_available_sim_code() -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        row = await fetch_one(db, "SELECT id FROM sim_codes WHERE status = '未分配' ORDER BY id ASC LIMIT 1")
+        return bool(row)
+
+
+async def _create_customer_with_activation(data: CustomerCreate, email_bundle: dict, initial_password: str) -> tuple[int, dict]:
+    phone_number = normalize_optional_text(data.phone_number)
+    shipping_address = normalize_optional_text(data.shipping_address)
+    courier_company = normalize_optional_text(data.courier_company)
+    tracking_number = normalize_optional_text(data.tracking_number)
+    courier_order_code = normalize_optional_text(data.courier_order_code)
+    courier_print_data = normalize_optional_text(data.courier_print_data)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            sim = await fetch_one(
+                db,
+                "SELECT id, code FROM sim_codes WHERE status = '未分配' ORDER BY id ASC LIMIT 1",
+            )
+            if not sim:
+                raise HTTPException(status_code=400, detail="没有可用 SIM 激活码，请先导入激活码")
+            cursor = await db.execute(
+                """INSERT INTO customers
+                   (phone_number, email, shipping_address, shipping_status, courier_company,
+                    tracking_number, courier_order_code, courier_print_data, activation_date,
+                    moemail_id, moemail_address, share_link, is_moemail_auto,
+                    sim_code_id, sim_activation_code, initial_password, activation_status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    phone_number,
+                    email_bundle.get("email", ""),
+                    shipping_address,
+                    data.shipping_status,
+                    courier_company,
+                    tracking_number,
+                    courier_order_code,
+                    courier_print_data,
+                    data.activation_date.isoformat(),
+                    email_bundle.get("moemail_id"),
+                    email_bundle.get("moemail_address"),
+                    email_bundle.get("share_link"),
+                    1 if email_bundle.get("is_moemail_auto") else 0,
+                    sim["id"],
+                    sim["code"],
+                    initial_password,
+                    "等待客户端领取",
+                ),
+            )
+            customer_id = cursor.lastrowid
+            await db.execute(
+                "UPDATE sim_codes SET status = '已分配', customer_id = ?, updated_at = datetime('now') WHERE id = ?",
+                (customer_id, sim["id"]),
+            )
+            await db.execute(
+                """INSERT INTO activation_logs (customer_id, level, step, message)
+                   VALUES (?, 'info', 'created', ?)""",
+                (customer_id, f"已分配 SIM 激活码 {sim['code']}，等待桌面客户端领取"),
+            )
+            await db.commit()
+            return customer_id, {"id": sim["id"], "code": sim["code"]}
+        except Exception:
+            await db.rollback()
+            raise
+
+
 # ── 客户管理 ──
 
 @app.get("/api/customers", response_model=list[CustomerOut])
@@ -364,6 +520,11 @@ async def list_customers():
         moemail_address=r.get("moemail_address"),
         share_link=_normalize_share_link(r.get("share_link")),
         is_moemail_auto=bool(r.get("is_moemail_auto")),
+        sim_code_id=r.get("sim_code_id"),
+        sim_activation_code=r.get("sim_activation_code"),
+        activation_status=_normalize_activation_status(r.get("activation_status")),
+        activation_error=r.get("activation_error"),
+        activated_at=r.get("activated_at"),
         created_at=r["created_at"],
     ) for r in rows]
 
@@ -388,6 +549,12 @@ async def get_customer_detail(customer_id: int):
         moemail_address=c.get("moemail_address"),
         share_link=_normalize_share_link(c.get("share_link")),
         is_moemail_auto=bool(c.get("is_moemail_auto")),
+        sim_code_id=c.get("sim_code_id"),
+        sim_activation_code=c.get("sim_activation_code"),
+        initial_password=c.get("initial_password"),
+        activation_status=_normalize_activation_status(c.get("activation_status")),
+        activation_error=c.get("activation_error"),
+        activated_at=c.get("activated_at"),
     )
 
 
@@ -404,20 +571,32 @@ async def add_customer(data: CustomerCreate):
             if existing:
                 raise HTTPException(status_code=409, detail="该手机号已录入")
 
+    if not await _has_available_sim_code():
+        raise HTTPException(status_code=400, detail="没有可用 SIM 激活码，请先导入激活码")
+
     try:
-        customer_id = await create_customer(data)
+        email = (data.email or "").strip()
+        if email:
+            email_bundle = {"email": email, "is_moemail_auto": False}
+        else:
+            email_bundle = await _generate_moemail_account()
+            email_bundle["is_moemail_auto"] = True
+        initial_password = _generate_initial_password()
+        customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="该手机号已录入")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"自动建档失败：{exc}") from exc
 
     return {
         "customer_id": customer_id,
-        "message": "客户已录入",
+        "message": "客户已录入，已分配激活码并创建激活任务",
+        "email": email_bundle.get("email", ""),
+        "sim_activation_code": sim["code"],
+        "initial_password": initial_password,
     }
-
-
-async def _get_setting(key: str) -> str:
-    rows = await get_settings()
-    return rows.get(key, "")
 
 
 @app.patch("/api/customers/{customer_id}", status_code=200)
@@ -481,6 +660,19 @@ async def remove_customer(customer_id: int):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
+    sim_code_id = c.get("sim_code_id")
+    if sim_code_id:
+        status = _normalize_activation_status(c.get("activation_status"))
+        sim_status = "已使用" if status in {"等待转 eSIM", "已完成"} else "未分配"
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            await db.execute(
+                """UPDATE sim_codes
+                   SET status = ?, customer_id = NULL, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (sim_status, sim_code_id),
+            )
+            await db.execute("DELETE FROM activation_logs WHERE customer_id = ?", (customer_id,))
+            await db.commit()
     await delete_customer(customer_id)
     return {"ok": True}
 
@@ -490,32 +682,23 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
-    moemail_key = await _get_setting("moemail_api_key")
-    if not moemail_url or not moemail_key:
-        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
-    from moemail import MoEmailClient
     try:
-        client = MoEmailClient(moemail_url, moemail_key)
-        domain = data.domain
-        if not domain:
-            domains = client.get_domains()
-            domain = domains[0] if domains else ""
-        email_resp = client.generate_email(expiry_time=0, domain=domain)
-        moemail_id = email_resp.get("id", "")
-        moemail_address = email_resp.get("email", "")
-        if not moemail_id or not moemail_address:
-            raise ValueError("MoEmail 未返回邮箱 ID 或地址")
-        share_resp = client.create_share_link(moemail_id, expires_in=0)
-        token = share_resp.get("token", "")
-        share_link = f"{moemail_url}/shared/{token}" if token else ""
-        await update_customer_moemail(customer_id, moemail_id, moemail_address, share_link, True)
+        email_bundle = await _generate_moemail_account(data.domain)
+        await update_customer_moemail(
+            customer_id,
+            email_bundle["moemail_id"],
+            email_bundle["moemail_address"],
+            email_bundle["share_link"],
+            True,
+        )
         return {
             "ok": True,
-            "email": moemail_address,
-            "moemail_id": moemail_id,
-            "share_link": share_link,
+            "email": email_bundle["email"],
+            "moemail_id": email_bundle["moemail_id"],
+            "share_link": email_bundle["share_link"],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"MoEmail 调用失败：{e}") from e
 
@@ -596,6 +779,239 @@ async def list_moemail_domains():
         raise HTTPException(status_code=502, detail=f"获取域名失败：{e}")
 
 
+# ── SIM 激活码库 ──
+
+def _parse_sim_codes(data: SimCodeImport) -> list[str]:
+    values = []
+    if data.codes:
+        values.extend(data.codes)
+    if data.text:
+        values.extend(re.split(r"[\s,;，；]+", data.text))
+    seen = set()
+    codes = []
+    for value in values:
+        code = _normalize_sim_code(value)
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(code)
+    return codes
+
+
+@app.get("/api/sim-codes", response_model=list[SimCodeOut])
+async def list_sim_codes():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall("SELECT * FROM sim_codes ORDER BY id DESC LIMIT 1000")
+    return [
+        SimCodeOut(
+            id=row["id"],
+            code=row["code"],
+            status=_normalize_sim_code_status(row["status"]),
+            customer_id=row["customer_id"],
+            notes=row["notes"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+        for row in rows
+    ]
+
+
+@app.post("/api/sim-codes/import", status_code=201)
+async def import_sim_codes(data: SimCodeImport):
+    codes = _parse_sim_codes(data)
+    if not codes:
+        raise HTTPException(status_code=400, detail="请粘贴或填写 SIM 激活码")
+    imported = 0
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        for code in codes:
+            cursor = await db.execute(
+                "INSERT OR IGNORE INTO sim_codes (code, status) VALUES (?, '未分配')",
+                (code,),
+            )
+            imported += cursor.rowcount
+        await db.commit()
+    return {
+        "ok": True,
+        "imported": imported,
+        "duplicates": len(codes) - imported,
+        "total": len(codes),
+    }
+
+
+# ── 桌面客户端 API ──
+
+def _sim_status_for_activation(status: str) -> str:
+    status = _normalize_activation_status(status)
+    if status in {"未开始", "已分配激活码", "等待客户端领取"}:
+        return "已分配"
+    if status in {"激活中", "等待人工支付"}:
+        return "激活中"
+    if status in {"等待转 eSIM", "已完成"}:
+        return "已使用"
+    if status == "失败":
+        return "失败"
+    return "已分配"
+
+
+async def _insert_activation_log(customer_id: int, level: str, step: Optional[str], message: str):
+    if not message:
+        return
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO activation_logs (customer_id, level, step, message)
+               VALUES (?, ?, ?, ?)""",
+            (customer_id, (level or "info").strip() or "info", normalize_optional_text(step), message),
+        )
+        await db.commit()
+
+
+async def _apply_activation_status(customer_id: int, status: str, error: Optional[str] = None):
+    status = _normalize_activation_status(status)
+    sim_status = _sim_status_for_activation(status)
+    clear_lock = status != "激活中"
+    activated_at_sql = ", activated_at = COALESCE(activated_at, ?)" if status in {"等待转 eSIM", "已完成"} else ""
+    params = [status, normalize_optional_text(error)]
+    if status in {"等待转 eSIM", "已完成"}:
+        params.append(_utc_now())
+    if clear_lock:
+        lock_sql = ", automation_lock_owner = NULL, automation_locked_at = NULL"
+    else:
+        lock_sql = ""
+    params.append(customer_id)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            f"""UPDATE customers
+                SET activation_status = ?, activation_error = ?{activated_at_sql}{lock_sql}
+                WHERE id = ?""",
+            params,
+        )
+        await db.execute(
+            """UPDATE sim_codes
+               SET status = ?, updated_at = datetime('now')
+               WHERE customer_id = ?""",
+            (sim_status, customer_id),
+        )
+        await db.commit()
+
+
+@app.get("/api/agent/activation-tasks/next")
+async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
+    _require_agent_auth(request)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute("BEGIN IMMEDIATE")
+        row = await fetch_one(
+            db,
+            """SELECT * FROM customers
+               WHERE activation_status = '等待客户端领取'
+                 AND sim_activation_code IS NOT NULL
+                 AND sim_activation_code != ''
+                 AND email != ''
+                 AND initial_password IS NOT NULL
+                 AND initial_password != ''
+               ORDER BY created_at ASC, id ASC
+               LIMIT 1""",
+        )
+        if not row:
+            await db.commit()
+            return {"task": None}
+        await db.execute(
+            """UPDATE customers
+               SET activation_status = '激活中',
+                   automation_lock_owner = ?,
+                   automation_locked_at = ?
+               WHERE id = ?""",
+            (agent_id, _utc_now(), row["id"]),
+        )
+        await db.execute(
+            "UPDATE sim_codes SET status = '激活中', updated_at = datetime('now') WHERE customer_id = ?",
+            (row["id"],),
+        )
+        await db.execute(
+            """INSERT INTO activation_logs (customer_id, level, step, message)
+               VALUES (?, 'info', 'claimed', ?)""",
+            (row["id"], f"桌面客户端 {agent_id} 已领取任务"),
+        )
+        await db.commit()
+        task = dict(row)
+        task["activation_status"] = "激活中"
+    task_out = ActivationTaskOut(
+        customer_id=task["id"],
+        phone_number=task.get("phone_number"),
+        email=task["email"],
+        initial_password=task["initial_password"],
+        sim_activation_code=task["sim_activation_code"],
+        activation_status=_normalize_activation_status(task.get("activation_status")),
+        activation_date=task["activation_date"],
+        moemail_id=task.get("moemail_id"),
+        moemail_address=task.get("moemail_address"),
+        share_link=_normalize_share_link(task.get("share_link")),
+        shipping_address=task.get("shipping_address"),
+    )
+    return {"task": task_out.dict()}
+
+
+@app.post("/api/agent/customers/{customer_id}/activation-log")
+async def add_agent_activation_log(customer_id: int, data: ActivationLogIn, request: Request):
+    _require_agent_auth(request)
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    await _insert_activation_log(customer_id, data.level, data.step, data.message)
+    return {"ok": True}
+
+
+@app.patch("/api/agent/customers/{customer_id}/activation-status")
+async def update_agent_activation_status(customer_id: int, data: ActivationStatusUpdate, request: Request):
+    _require_agent_auth(request)
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    await _apply_activation_status(customer_id, data.status, data.error)
+    if data.message:
+        await _insert_activation_log(customer_id, "info", data.step, data.message)
+    elif data.error:
+        await _insert_activation_log(customer_id, "error", data.step, data.error)
+    return {"ok": True}
+
+
+@app.patch("/api/agent/customers/{customer_id}/activation-result")
+async def update_agent_activation_result(customer_id: int, data: ActivationResultUpdate, request: Request):
+    _require_agent_auth(request)
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    phone_number = normalize_optional_text(data.phone_number)
+    if phone_number:
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            existing = await fetch_one(
+                db,
+                "SELECT id FROM customers WHERE phone_number = ? AND id != ?",
+                (phone_number, customer_id),
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail="该手机号已录入")
+            await db.execute(
+                "UPDATE customers SET phone_number = ? WHERE id = ?",
+                (phone_number, customer_id),
+            )
+            await db.commit()
+    await _apply_activation_status(customer_id, data.status, data.error)
+    message = data.message or (f"桌面客户端回传手机号 {phone_number}" if phone_number else "")
+    if message:
+        await _insert_activation_log(customer_id, "info", data.step or "result", message)
+    if data.error:
+        await _insert_activation_log(customer_id, "error", data.step, data.error)
+    return {"ok": True}
+
+
+@app.get("/api/agent/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
+async def get_agent_customer_verification_code(customer_id: int, request: Request):
+    _require_agent_auth(request)
+    return await get_customer_verification_code(customer_id)
+
+
 # ── 标签模板 ──
 
 def _load_label_templates(raw: str):
@@ -635,10 +1051,12 @@ async def _export_backup_payload() -> dict:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         customers = await db.execute_fetchall("SELECT * FROM customers ORDER BY id ASC")
+        sim_codes = await db.execute_fetchall("SELECT * FROM sim_codes ORDER BY id ASC")
     return {
         "exported_at": datetime.datetime.now().isoformat(),
         "version": "1.0",
         "customers": [_customer_payload(r) for r in customers],
+        "sim_codes": [dict(r) for r in sim_codes],
         "settings": {
             "moemail_url": _normalize_base_url(rows.get("moemail_url", "")),
             "giffgaff_download_url": rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
@@ -664,8 +1082,21 @@ def _validate_backup_payload(data: dict) -> list[dict]:
     return customers
 
 
+def _validate_sim_codes_payload(data: dict) -> list[dict]:
+    sim_codes = data.get("sim_codes", [])
+    if sim_codes is None:
+        return []
+    if not isinstance(sim_codes, list):
+        raise HTTPException(status_code=400, detail="备份文件 sim_codes 格式错误")
+    for index, item in enumerate(sim_codes, start=1):
+        if not isinstance(item, dict) or not item.get("code"):
+            raise HTTPException(status_code=400, detail=f"第 {index} 条 SIM 激活码数据格式错误")
+    return sim_codes
+
+
 async def _restore_backup_payload(data: dict) -> dict:
     customers = _validate_backup_payload(data)
+    sim_codes = _validate_sim_codes_payload(data)
     settings = data.get("settings") if isinstance(data.get("settings"), dict) else {}
     safe_settings = {}
 
@@ -686,13 +1117,31 @@ async def _restore_backup_payload(data: dict) -> dict:
         try:
             await db.execute("BEGIN")
             await db.execute("DELETE FROM customers")
+            await db.execute("DELETE FROM sim_codes")
+            for sim in sim_codes:
+                await db.execute(
+                    """INSERT INTO sim_codes
+                       (id, code, status, customer_id, notes, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        sim.get("id"),
+                        _normalize_sim_code(sim.get("code")),
+                        _normalize_sim_code_status(sim.get("status")),
+                        sim.get("customer_id"),
+                        normalize_optional_text(sim.get("notes")),
+                        sim.get("created_at") or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        sim.get("updated_at") or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
             for c in customers:
                 await db.execute(
                     """INSERT INTO customers
                        (id, phone_number, email, shipping_address, shipping_status, courier_company,
                         tracking_number, courier_order_code, courier_print_data, activation_date,
-                        moemail_id, moemail_address, share_link, is_moemail_auto, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        moemail_id, moemail_address, share_link, is_moemail_auto,
+                        sim_code_id, sim_activation_code, activation_status, activation_error, activated_at,
+                        created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
                      normalize_optional_text(c.get("shipping_address")),
                      _normalize_shipping_status(c.get("shipping_status")),
@@ -701,7 +1150,11 @@ async def _restore_backup_payload(data: dict) -> dict:
                      normalize_optional_text(c.get("courier_order_code")),
                      normalize_optional_text(c.get("courier_print_data")), c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
-                     _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
+                     _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0),
+                     c.get("sim_code_id"), _normalize_sim_code(c.get("sim_activation_code")),
+                     _normalize_activation_status(c.get("activation_status")),
+                     normalize_optional_text(c.get("activation_error")), c.get("activated_at"),
+                     c["created_at"]),
                 )
             for key, value in safe_settings.items():
                 await db.execute(
@@ -713,7 +1166,7 @@ async def _restore_backup_payload(data: dict) -> dict:
         except Exception as exc:
             await db.rollback()
             raise HTTPException(status_code=400, detail=f"恢复失败：{exc}") from exc
-    return {"customers_restored": len(customers), "settings_restored": len(safe_settings)}
+    return {"customers_restored": len(customers), "sim_codes_restored": len(sim_codes), "settings_restored": len(safe_settings)}
 
 
 @app.get("/api/export")
