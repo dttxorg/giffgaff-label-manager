@@ -750,11 +750,11 @@
 <div class="modal" id="print-panel">
   <div class="modal-inner">
     <div class="modal-header">
-      <h2>打印标签</h2>
+      <h2 id="print-panel-title">打印标签</h2>
       <button class="close-btn" type="button" onclick="closePrintPanel()">×</button>
     </div>
     <div class="print-controls">
-      <div>
+      <div id="print-template-field">
         <label>模板</label>
         <select id="print-template-select" onchange="renderPrintPreview()"></select>
       </div>
@@ -821,6 +821,8 @@ const SETTING_INPUT_IDS = {
 let customers = [];
 let activeCustomer = null;
 let printCustomer = null;
+let printMode = 'label';
+let printTemplateId = '';
 let labelConfig = { giffgaff_download_url: DEFAULT_GIFFGAFF_URL, templates: [] };
 let selectedTemplateId = '';
 let selectedElementId = '';
@@ -1390,12 +1392,34 @@ function mergeDefaultTemplates(templates) {
 }
 
 function hydrateTemplateSelects() {
-  const selects = [document.getElementById('template-select'), document.getElementById('print-template-select')];
-  for (const select of selects) {
-    if (!select) continue;
-    select.replaceChildren(...labelConfig.templates.map(t => new Option(t.name, t.id)));
-    select.value = selectedTemplateId;
+  const templateSelect = document.getElementById('template-select');
+  if (templateSelect) {
+    templateSelect.replaceChildren(...labelConfig.templates.map(t => new Option(t.name, t.id)));
+    templateSelect.value = selectedTemplateId;
   }
+  hydratePrintTemplateSelect();
+}
+
+function getPrintTemplates() {
+  if (printMode === 'courier') {
+    return labelConfig.templates.filter(t => t.id === COURIER_TEMPLATE_ID);
+  }
+  return labelConfig.templates.filter(t => t.id !== COURIER_TEMPLATE_ID);
+}
+
+function hydratePrintTemplateSelect() {
+  const select = document.getElementById('print-template-select');
+  if (!select) return;
+  const templates = getPrintTemplates();
+  select.replaceChildren(...templates.map(t => new Option(t.name, t.id)));
+  if (!templates.length) {
+    printTemplateId = '';
+    return;
+  }
+  if (!templates.some(t => t.id === printTemplateId)) {
+    printTemplateId = templates[0].id;
+  }
+  select.value = printTemplateId;
 }
 
 function getTemplate(id=selectedTemplateId) {
@@ -1619,10 +1643,12 @@ async function openPrintPanelForActive(templateId='') {
 async function openPrintPanel(id, templateId='') {
   try {
     printCustomer = await getCustomer(id);
+    printMode = templateId === COURIER_TEMPLATE_ID ? 'courier' : 'label';
+    printTemplateId = printMode === 'courier' ? COURIER_TEMPLATE_ID : '';
     document.getElementById('print-panel').classList.add('open');
+    document.getElementById('print-panel-title').textContent = printMode === 'courier' ? '打印快递单' : '打印标签';
+    document.getElementById('print-template-field').style.display = printMode === 'courier' ? 'none' : '';
     hydrateTemplateSelects();
-    if (templateId && getTemplate(templateId)) selectedTemplateId = templateId;
-    document.getElementById('print-template-select').value = selectedTemplateId;
     await renderPrintPreview();
   } catch (err) {
     toast(err.message, 'error');
@@ -1632,27 +1658,34 @@ async function openPrintPanel(id, templateId='') {
 function closePrintPanel() {
   document.getElementById('print-panel').classList.remove('open');
   printCustomer = null;
+  printMode = 'label';
+  printTemplateId = '';
 }
 
 async function renderPrintPreview() {
   if (!printCustomer) return;
-  const id = document.getElementById('print-template-select').value || selectedTemplateId;
-  selectedTemplateId = id;
+  const id = printMode === 'courier'
+    ? COURIER_TEMPLATE_ID
+    : (document.getElementById('print-template-select').value || printTemplateId);
+  printTemplateId = id;
   await renderTemplateCanvas(document.getElementById('print-preview'), getTemplate(id), printCustomer, false);
 }
 
 async function printCurrentLabel() {
   if (!printCustomer) return;
-  const id = document.getElementById('print-template-select').value || selectedTemplateId;
+  const id = printMode === 'courier'
+    ? COURIER_TEMPLATE_ID
+    : (document.getElementById('print-template-select').value || printTemplateId);
   const tpl = getTemplate(id);
   const markup = await buildPrintableLabel(tpl, printCustomer);
+  const printTitle = printMode === 'courier' ? '打印快递单' : '打印标签';
   const win = window.open('', '_blank');
   if (!win) {
     toast('浏览器拦截了打印窗口', 'error');
     return;
   }
   const printScript = '<scr' + 'ipt>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };' + '</scr' + 'ipt>';
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>打印标签</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${printTitle}</title>
     <style>
       @page { size: ${tpl.width_mm}mm ${tpl.height_mm}mm; margin: 0; }
       * { box-sizing: border-box; }
