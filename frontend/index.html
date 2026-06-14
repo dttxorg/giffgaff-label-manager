@@ -88,7 +88,7 @@
     .muted { color: var(--muted); font-size: 12px; }
     .form-grid {
       display: grid;
-      grid-template-columns: 1fr 1.1fr 0.8fr 1.4fr auto;
+      grid-template-columns: 1fr 1.1fr 0.8fr 1.3fr 0.85fr auto;
       gap: 12px;
       align-items: end;
     }
@@ -135,6 +135,9 @@
       gap: 10px;
       align-items: end;
     }
+    .inline-form.three-col {
+      grid-template-columns: minmax(260px, 1fr) 160px auto;
+    }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
@@ -164,8 +167,9 @@
     }
     .badge-auto { background: #e3f2fd; color: #1565c0; }
     .badge-manual { background: #f3e5f5; color: #7b1fa2; }
-    .badge-sold { background: #e8f5e9; color: #2e7d32; }
-    .badge-unsold { background: #fff3e0; color: #e65100; }
+    .badge-status-pending { background: #fff3e0; color: #e65100; }
+    .badge-status-shipped { background: #e3f2fd; color: #1565c0; }
+    .badge-status-received { background: #e8f5e9; color: #2e7d32; }
     .address-preview {
       margin-top: 6px;
       max-width: 260px;
@@ -225,7 +229,7 @@
     }
     .detail-info {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 14px;
       padding: 18px 22px;
       background: var(--purple-light);
@@ -384,7 +388,7 @@
     .auth-card button { width: 100%; margin-top: 12px; }
 
     @media (max-width: 1000px) {
-      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls, .inline-form {
+      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls, .inline-form, .inline-form.three-col {
         grid-template-columns: 1fr;
       }
       .detail-info { grid-template-columns: 1fr; }
@@ -449,6 +453,14 @@
             <label>收货地址</label>
             <input type="text" id="shipping-address" placeholder="成交后可补充">
           </div>
+          <div>
+            <label>发货状态</label>
+            <select id="shipping-status">
+              <option value="未发货">未发货</option>
+              <option value="已发货">已发货</option>
+              <option value="已收货">已收货</option>
+            </select>
+          </div>
           <button type="submit">添加客户</button>
         </form>
       </div>
@@ -467,7 +479,7 @@
               <th>邮箱</th>
               <th>邮箱来源</th>
               <th>开通日期</th>
-              <th>销售/地址</th>
+              <th>发货状态 / 收货地址</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -582,6 +594,7 @@
       <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
       <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
       <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
+      <div class="info-item"><label>发货状态</label><p id="d-shipping-status"></p></div>
     </div>
     <div class="detail-body">
       <div class="info-box" id="d-moemail-box"></div>
@@ -592,12 +605,20 @@
         </div>
         <button type="submit">保存手机号</button>
       </form>
-      <form class="inline-form" id="address-update-form">
+      <form class="inline-form three-col" id="address-update-form">
         <div>
           <label>收货地址</label>
           <textarea id="d-address-input" rows="3" placeholder="成交后录入客户收货地址"></textarea>
         </div>
-        <button type="submit">保存地址</button>
+        <div>
+          <label>发货状态</label>
+          <select id="d-shipping-status-input">
+            <option value="未发货">未发货</option>
+            <option value="已发货">已发货</option>
+            <option value="已收货">已收货</option>
+          </select>
+        </div>
+        <button type="submit">保存地址和状态</button>
       </form>
       <div class="button-row">
         <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
@@ -643,7 +664,9 @@ const DEMO_CUSTOMER = {
   moemail_address: 'sample@giffgaff.example',
   is_moemail_auto: true,
   shipping_address: '',
+  shipping_status: '未发货',
 };
+const SHIPPING_STATUSES = ['未发货', '已发货', '已收货'];
 const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
 
@@ -770,6 +793,18 @@ function makeButton(label, onClick, className='small') {
   return button;
 }
 
+function normalizeShippingStatus(value) {
+  return SHIPPING_STATUSES.includes(value) ? value : '未发货';
+}
+
+function shippingStatusBadgeClass(status) {
+  switch (normalizeShippingStatus(status)) {
+    case '已发货': return 'badge-status-shipped';
+    case '已收货': return 'badge-status-received';
+    default: return 'badge-status-pending';
+  }
+}
+
 function buildCustomerRow(c, index) {
   const row = document.createElement('tr');
   appendTextCell(row, String(index + 1));
@@ -796,11 +831,12 @@ function buildCustomerRow(c, index) {
   appendTextCell(row, c.activation_date);
 
   const addressCell = document.createElement('td');
-  const soldBadge = document.createElement('span');
   const hasAddress = !!(c.shipping_address || '').trim();
-  soldBadge.className = `badge ${hasAddress ? 'badge-sold' : 'badge-unsold'}`;
-  soldBadge.textContent = hasAddress ? '已售' : '未售';
-  addressCell.appendChild(soldBadge);
+  const shippingStatus = normalizeShippingStatus(c.shipping_status);
+  const statusBadge = document.createElement('span');
+  statusBadge.className = `badge ${shippingStatusBadgeClass(shippingStatus)}`;
+  statusBadge.textContent = shippingStatus;
+  addressCell.appendChild(statusBadge);
   const addressPreview = document.createElement('div');
   addressPreview.className = 'address-preview';
   addressPreview.textContent = hasAddress ? c.shipping_address : '未录入地址';
@@ -811,7 +847,7 @@ function buildCustomerRow(c, index) {
   actions.className = 'actions';
   actions.append(
     makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id, c.phone_number ? '' : 'phone')),
-    makeButton(hasAddress ? '改地址' : '录地址', () => viewCustomer(c.id, 'address'), 'small ghost'),
+    makeButton(hasAddress ? '地址/状态' : '录地址', () => viewCustomer(c.id, hasAddress ? 'status' : 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
     makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
@@ -837,10 +873,13 @@ async function viewCustomer(id, focusTarget='') {
     document.getElementById('d-email').textContent = activeCustomer.email || '—';
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
     document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
+    document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
+    document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
     renderMoemailBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
     if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
     if (focusTarget === 'address') setTimeout(() => document.getElementById('d-address-input').focus(), 0);
+    if (focusTarget === 'status') setTimeout(() => document.getElementById('d-shipping-status-input').focus(), 0);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -915,6 +954,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const phone = document.getElementById('phone').value.trim();
   const email = document.getElementById('email').value.trim();
   const shippingAddress = document.getElementById('shipping-address').value.trim();
+  const shippingStatus = normalizeShippingStatus(document.getElementById('shipping-status').value);
   const actDate = document.getElementById('act-date').value;
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
@@ -923,7 +963,13 @@ document.getElementById('add-form').onsubmit = async (e) => {
     const res = await fetch(API + '/customers', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ phone_number: phone, email, shipping_address: shippingAddress, activation_date: actDate }),
+      body: JSON.stringify({
+        phone_number: phone,
+        email,
+        shipping_address: shippingAddress,
+        shipping_status: shippingStatus,
+        activation_date: actDate,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '添加失败');
@@ -970,6 +1016,7 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
   e.preventDefault();
   if (!activeCustomer) return;
   const shippingAddress = document.getElementById('d-address-input').value.trim();
+  const shippingStatus = normalizeShippingStatus(document.getElementById('d-shipping-status-input').value);
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '保存中...';
@@ -977,19 +1024,21 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
     const res = await fetch(API + '/customers/' + activeCustomer.id, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ shipping_address: shippingAddress }),
+      body: JSON.stringify({ shipping_address: shippingAddress, shipping_status: shippingStatus }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
     activeCustomer = await getCustomer(activeCustomer.id);
     document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
-    toast(shippingAddress ? '地址已保存，状态已标记为已售' : '地址已清空，状态已标记为未售', 'success');
+    document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
+    document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
+    toast('地址和发货状态已保存', 'success');
     await loadCustomers();
   } catch (err) {
     toast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '保存地址';
+    btn.textContent = '保存地址和状态';
   }
 };
 

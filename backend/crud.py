@@ -40,9 +40,11 @@ async def create_customer(data: CustomerCreate):
     shipping_address = normalize_optional_text(data.shipping_address)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            """INSERT INTO customers (phone_number, email, shipping_address, activation_date)
-               VALUES (?, ?, ?, ?)""",
-            (phone_number, data.email, shipping_address, data.activation_date.isoformat()),
+            """INSERT INTO customers
+               (phone_number, email, shipping_address, shipping_status, activation_date)
+               VALUES (?, ?, ?, ?, ?)""",
+            (phone_number, data.email, shipping_address, data.shipping_status,
+             data.activation_date.isoformat()),
         )
         await db.commit()
         return cursor.lastrowid
@@ -56,6 +58,8 @@ async def update_customer(customer_id: int, data: CustomerUpdate):
         fields.append("email = ?"); values.append(data.email)
     if data.shipping_address is not None:
         fields.append("shipping_address = ?"); values.append(normalize_optional_text(data.shipping_address))
+    if data.shipping_status is not None:
+        fields.append("shipping_status = ?"); values.append(data.shipping_status)
     if data.activation_date is not None:
         fields.append("activation_date = ?"); values.append(data.activation_date.isoformat())
     if not fields:

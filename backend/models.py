@@ -1,12 +1,16 @@
 from pydantic import BaseModel
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Literal, Optional
+
+
+ShippingStatus = Literal["未发货", "已发货", "已收货"]
 
 
 class CustomerCreate(BaseModel):
     phone_number: Optional[str] = None
     email: str = ""
     shipping_address: Optional[str] = None
+    shipping_status: ShippingStatus = "未发货"
     activation_date: date
 
 
@@ -14,6 +18,7 @@ class CustomerUpdate(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
     shipping_address: Optional[str] = None
+    shipping_status: Optional[ShippingStatus] = None
     activation_date: Optional[date] = None
 
 
@@ -22,6 +27,7 @@ class CustomerOut(BaseModel):
     phone_number: Optional[str]
     email: str
     shipping_address: Optional[str]
+    shipping_status: ShippingStatus
     activation_date: date
     moemail_id: Optional[str]
     moemail_address: Optional[str]
@@ -35,6 +41,7 @@ class CustomerDetail(BaseModel):
     phone_number: Optional[str]
     email: str
     shipping_address: Optional[str]
+    shipping_status: ShippingStatus
     activation_date: date
     created_at: str
     moemail_id: Optional[str]

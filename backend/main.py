@@ -28,6 +28,8 @@ app = FastAPI(title="giffgaff-label-manager API")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
+DEFAULT_SHIPPING_STATUS = "未发货"
+SHIPPING_STATUSES = {"未发货", "已发货", "已收货"}
 DEFAULT_LABEL_TEMPLATES = [
     {
         "id": "basic-50x30",
@@ -112,7 +114,13 @@ def _normalize_share_link(value: Optional[str]) -> Optional[str]:
 def _customer_payload(row) -> dict:
     customer = dict(row)
     customer["share_link"] = _normalize_share_link(customer.get("share_link"))
+    customer["shipping_status"] = _normalize_shipping_status(customer.get("shipping_status"))
     return customer
+
+
+def _normalize_shipping_status(value: Optional[str]) -> str:
+    value = (value or "").strip()
+    return value if value in SHIPPING_STATUSES else DEFAULT_SHIPPING_STATUS
 
 
 @app.middleware("http")
@@ -197,6 +205,7 @@ async def list_customers():
         phone_number=r["phone_number"],
         email=r["email"],
         shipping_address=r.get("shipping_address"),
+        shipping_status=_normalize_shipping_status(r.get("shipping_status")),
         activation_date=r["activation_date"],
         moemail_id=r.get("moemail_id"),
         moemail_address=r.get("moemail_address"),
@@ -216,6 +225,7 @@ async def get_customer_detail(customer_id: int):
         phone_number=c["phone_number"],
         email=c["email"],
         shipping_address=c.get("shipping_address"),
+        shipping_status=_normalize_shipping_status(c.get("shipping_status")),
         activation_date=c["activation_date"],
         created_at=c["created_at"],
         moemail_id=c.get("moemail_id"),
@@ -426,11 +436,12 @@ async def _restore_backup_payload(data: dict) -> dict:
             for c in customers:
                 await db.execute(
                     """INSERT INTO customers
-                       (id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
-                        share_link, is_moemail_auto, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (id, phone_number, email, shipping_address, shipping_status, activation_date,
+                        moemail_id, moemail_address, share_link, is_moemail_auto, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
-                     normalize_optional_text(c.get("shipping_address")), c["activation_date"],
+                     normalize_optional_text(c.get("shipping_address")),
+                     _normalize_shipping_status(c.get("shipping_status")), c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
                      _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
                 )

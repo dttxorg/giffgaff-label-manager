@@ -12,6 +12,7 @@ async def init_db():
                 phone_number TEXT UNIQUE,
                 email TEXT NOT NULL,
                 shipping_address TEXT,
+                shipping_status TEXT NOT NULL DEFAULT '未发货',
                 activation_date TEXT NOT NULL,
                 moemail_id TEXT,
                 moemail_address TEXT,
@@ -25,6 +26,8 @@ async def init_db():
         await _ensure_column(db, "customers", "share_link", "TEXT")
         await _ensure_column(db, "customers", "is_moemail_auto", "INTEGER NOT NULL DEFAULT 0")
         await _ensure_column(db, "customers", "shipping_address", "TEXT")
+        await _ensure_column(db, "customers", "shipping_status", "TEXT NOT NULL DEFAULT '未发货'")
+        await _ensure_shipping_status_values(db)
         await _ensure_nullable_phone_number(db)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -55,6 +58,7 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             phone_number TEXT UNIQUE,
             email TEXT NOT NULL,
             shipping_address TEXT,
+            shipping_status TEXT NOT NULL DEFAULT '未发货',
             activation_date TEXT NOT NULL,
             moemail_id TEXT,
             moemail_address TEXT,
@@ -65,10 +69,20 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
     """)
     await db.execute("""
         INSERT INTO customers
-            (id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
+            (id, phone_number, email, shipping_address, shipping_status, activation_date, moemail_id, moemail_address,
              share_link, is_moemail_auto, created_at)
-        SELECT id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
+        SELECT id, phone_number, email, shipping_address, shipping_status, activation_date, moemail_id, moemail_address,
                share_link, is_moemail_auto, created_at
         FROM customers_old
     """)
     await db.execute("DROP TABLE customers_old")
+
+
+async def _ensure_shipping_status_values(db: aiosqlite.Connection):
+    await db.execute("""
+        UPDATE customers
+        SET shipping_status = '未发货'
+        WHERE shipping_status IS NULL
+           OR shipping_status = ''
+           OR shipping_status NOT IN ('未发货', '已发货', '已收货')
+    """)
