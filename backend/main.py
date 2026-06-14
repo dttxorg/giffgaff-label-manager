@@ -11,6 +11,7 @@ import hashlib
 import re
 from copy import deepcopy
 from pathlib import Path
+from typing import Optional
 
 from database import init_db, DATABASE_PATH
 from models import (
@@ -102,6 +103,22 @@ def _is_authenticated(request: Request) -> bool:
     return hmac.compare_digest(cookie, _auth_token())
 
 
+def _normalize_base_url(value: Optional[str]) -> str:
+    return (value or "").strip().rstrip("/")
+
+
+def _normalize_share_link(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return value
+    return value.strip().replace("//shared/", "/shared/")
+
+
+def _customer_payload(row) -> dict:
+    customer = dict(row)
+    customer["share_link"] = _normalize_share_link(customer.get("share_link"))
+    return customer
+
+
 @app.middleware("http")
 async def require_app_password(request, call_next):
     public_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/logout"}
@@ -167,7 +184,7 @@ async def get_sys_settings():
 @app.patch("/api/settings")
 async def update_settings(data: SystemSettings):
     if data.moemail_url is not None:
-        await set_setting("moemail_url", data.moemail_url)
+        await set_setting("moemail_url", _normalize_base_url(data.moemail_url))
     if data.moemail_api_key not in (None, "***", ""):
         await set_setting("moemail_api_key", data.moemail_api_key)
     if data.giffgaff_download_url is not None:
@@ -189,7 +206,7 @@ async def list_customers():
         activation_date=r["activation_date"],
         moemail_id=r.get("moemail_id"),
         moemail_address=r.get("moemail_address"),
-        share_link=r.get("share_link"),
+        share_link=_normalize_share_link(r.get("share_link")),
         is_moemail_auto=bool(r.get("is_moemail_auto")),
         created_at=r["created_at"],
     ) for r in rows]
@@ -208,7 +225,7 @@ async def get_customer_detail(customer_id: int):
         created_at=c["created_at"],
         moemail_id=c.get("moemail_id"),
         moemail_address=c.get("moemail_address"),
-        share_link=c.get("share_link"),
+        share_link=_normalize_share_link(c.get("share_link")),
         is_moemail_auto=bool(c.get("is_moemail_auto")),
     )
 
@@ -279,7 +296,7 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    moemail_url = await _get_setting("moemail_url")
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
     moemail_key = await _get_setting("moemail_api_key")
     if not moemail_url or not moemail_key:
         raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
@@ -313,7 +330,7 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
 
 @app.get("/api/moemail/domains", response_model=DomainInfo)
 async def list_moemail_domains():
-    moemail_url = await _get_setting("moemail_url")
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
     moemail_key = await _get_setting("moemail_api_key")
     if not moemail_url or not moemail_key:
         raise HTTPException(status_code=400, detail="MoEmail 未配置")
@@ -393,9 +410,9 @@ async def _export_backup_payload() -> dict:
     return {
         "exported_at": datetime.datetime.now().isoformat(),
         "version": "1.0",
-        "customers": [dict(r) for r in customers],
+        "customers": [_customer_payload(r) for r in customers],
         "settings": {
-            "moemail_url": rows.get("moemail_url", ""),
+            "moemail_url": _normalize_base_url(rows.get("moemail_url", "")),
             "giffgaff_download_url": rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
         },
@@ -424,7 +441,7 @@ async def _restore_backup_payload(data: dict) -> dict:
     safe_settings = {}
 
     if isinstance(settings.get("moemail_url"), str):
-        safe_settings["moemail_url"] = settings["moemail_url"]
+        safe_settings["moemail_url"] = _normalize_base_url(settings["moemail_url"])
     if isinstance(settings.get("giffgaff_download_url"), str):
         safe_settings["giffgaff_download_url"] = settings["giffgaff_download_url"]
     if "label_templates" in settings:
@@ -445,7 +462,7 @@ async def _restore_backup_payload(data: dict) -> dict:
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"], c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
-                     c.get("share_link"), c.get("is_moemail_auto", 0), c["created_at"]),
+                     _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
                 )
             for key, value in safe_settings.items():
                 await db.execute(
