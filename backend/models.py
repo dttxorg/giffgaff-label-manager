@@ -11,6 +11,8 @@ class CustomerCreate(BaseModel):
     email: str = ""
     shipping_address: Optional[str] = None
     shipping_status: ShippingStatus = "未发货"
+    courier_company: Optional[str] = None
+    tracking_number: Optional[str] = None
     activation_date: date
 
 
@@ -19,6 +21,8 @@ class CustomerUpdate(BaseModel):
     email: Optional[str] = None
     shipping_address: Optional[str] = None
     shipping_status: Optional[ShippingStatus] = None
+    courier_company: Optional[str] = None
+    tracking_number: Optional[str] = None
     activation_date: Optional[date] = None
 
 
@@ -28,6 +32,8 @@ class CustomerOut(BaseModel):
     email: str
     shipping_address: Optional[str]
     shipping_status: ShippingStatus
+    courier_company: Optional[str]
+    tracking_number: Optional[str]
     activation_date: date
     moemail_id: Optional[str]
     moemail_address: Optional[str]
@@ -42,6 +48,8 @@ class CustomerDetail(BaseModel):
     email: str
     shipping_address: Optional[str]
     shipping_status: ShippingStatus
+    courier_company: Optional[str]
+    tracking_number: Optional[str]
     activation_date: date
     created_at: str
     moemail_id: Optional[str]

@@ -138,6 +138,9 @@
     .inline-form.three-col {
       grid-template-columns: minmax(260px, 1fr) 160px auto;
     }
+    .inline-form.shipping-form {
+      grid-template-columns: minmax(240px, 1.3fr) 140px 150px 170px auto;
+    }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
@@ -229,7 +232,7 @@
     }
     .detail-info {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 14px;
       padding: 18px 22px;
       background: var(--purple-light);
@@ -308,7 +311,7 @@
     }
     .label-element.qr { align-items: center; justify-content: center; }
     .label-element img { width: 100%; height: 100%; object-fit: contain; display: block; }
-    .label-element .fit-text { width: 100%; word-break: break-all; }
+    .label-element .fit-text { width: 100%; word-break: break-all; white-space: pre-wrap; }
     .template-size-pill {
       display: inline-flex;
       align-items: center;
@@ -388,7 +391,7 @@
     .auth-card button { width: 100%; margin-top: 12px; }
 
     @media (max-width: 1000px) {
-      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls, .inline-form, .inline-form.three-col {
+      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls, .inline-form, .inline-form.three-col, .inline-form.shipping-form {
         grid-template-columns: 1fr;
       }
       .detail-info { grid-template-columns: 1fr; }
@@ -461,6 +464,14 @@
               <option value="已收货">已收货</option>
             </select>
           </div>
+          <div>
+            <label>快递公司</label>
+            <input type="text" id="courier-company" placeholder="如 顺丰 / 中通">
+          </div>
+          <div>
+            <label>快递单号</label>
+            <input type="text" id="tracking-number" placeholder="发货后补充">
+          </div>
           <button type="submit">添加客户</button>
         </form>
       </div>
@@ -517,6 +528,10 @@
               <button type="button" onclick="addLabelElement('text', '手机号')">手机号</button>
               <button type="button" onclick="addLabelElement('text', '邮箱')">邮箱</button>
               <button type="button" onclick="addLabelElement('text', '开通日期')">开通日期</button>
+              <button type="button" onclick="addLabelElement('text', '收货地址')">收货地址</button>
+              <button type="button" onclick="addLabelElement('text', '发货状态')">发货状态</button>
+              <button type="button" onclick="addLabelElement('text', '快递公司')">快递公司</button>
+              <button type="button" onclick="addLabelElement('text', '快递单号')">快递单号</button>
               <button type="button" onclick="addLabelElement('qr', '邮箱二维码')">邮箱二维码</button>
               <button type="button" onclick="addLabelElement('qr', 'Giffgaff下载二维码')">下载二维码</button>
             </div>
@@ -595,6 +610,8 @@
       <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
       <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
       <div class="info-item"><label>发货状态</label><p id="d-shipping-status"></p></div>
+      <div class="info-item"><label>快递公司</label><p id="d-courier-company"></p></div>
+      <div class="info-item"><label>快递单号</label><p id="d-tracking-number"></p></div>
     </div>
     <div class="detail-body">
       <div class="info-box" id="d-moemail-box"></div>
@@ -605,7 +622,7 @@
         </div>
         <button type="submit">保存手机号</button>
       </form>
-      <form class="inline-form three-col" id="address-update-form">
+      <form class="inline-form shipping-form" id="address-update-form">
         <div>
           <label>收货地址</label>
           <textarea id="d-address-input" rows="3" placeholder="成交后录入客户收货地址"></textarea>
@@ -618,11 +635,20 @@
             <option value="已收货">已收货</option>
           </select>
         </div>
-        <button type="submit">保存地址和状态</button>
+        <div>
+          <label>快递公司</label>
+          <input type="text" id="d-courier-company-input" placeholder="如 顺丰 / 中通">
+        </div>
+        <div>
+          <label>快递单号</label>
+          <input type="text" id="d-tracking-number-input" placeholder="发货后补充">
+        </div>
+        <button type="submit">保存快递信息</button>
       </form>
       <div class="button-row">
         <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
         <button type="button" class="green" onclick="openPrintPanelForActive()">打印标签</button>
+        <button type="button" class="green" onclick="openPrintPanelForActive(COURIER_TEMPLATE_ID)">打印快递单</button>
         <button type="button" class="ghost" onclick="copyVoicemailTemplate()">复制关闭语音信箱模板</button>
         <button type="button" class="ghost" onclick="openVoicemailForm()">打开关闭语音信箱表单</button>
       </div>
@@ -655,6 +681,7 @@
 <script>
 const API = '/api';
 const DEFAULT_GIFFGAFF_URL = 'https://www.giffgaff.com/mobile-app';
+const COURIER_TEMPLATE_ID = 'courier-50x40';
 const DEMO_CUSTOMER = {
   id: 0,
   phone_number: '447400123456',
@@ -663,11 +690,13 @@ const DEMO_CUSTOMER = {
   share_link: 'https://moemail.example/shared/demo',
   moemail_address: 'sample@giffgaff.example',
   is_moemail_auto: true,
-  shipping_address: '',
+  shipping_address: '张三 13800138000\n上海市浦东新区测试路 88 号 1 幢 101',
   shipping_status: '未发货',
+  courier_company: '顺丰速运',
+  tracking_number: 'SF1234567890',
 };
 const SHIPPING_STATUSES = ['未发货', '已发货', '已收货'];
-const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', 'Giffgaff下载链接'];
+const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '发货状态', '快递公司', '快递单号', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
 
 let customers = [];
@@ -839,7 +868,11 @@ function buildCustomerRow(c, index) {
   addressCell.appendChild(statusBadge);
   const addressPreview = document.createElement('div');
   addressPreview.className = 'address-preview';
-  addressPreview.textContent = hasAddress ? c.shipping_address : '未录入地址';
+  const courierText = [c.courier_company, c.tracking_number].filter(Boolean).join(' ');
+  addressPreview.textContent = [
+    hasAddress ? c.shipping_address : '未录入地址',
+    courierText ? `快递：${courierText}` : '',
+  ].filter(Boolean).join('\n');
   addressCell.appendChild(addressPreview);
   row.appendChild(addressCell);
 
@@ -850,6 +883,7 @@ function buildCustomerRow(c, index) {
     makeButton(hasAddress ? '地址/状态' : '录地址', () => viewCustomer(c.id, hasAddress ? 'status' : 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
+    makeButton('快递单', () => openPrintPanel(c.id, COURIER_TEMPLATE_ID), 'small green'),
     makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
   );
   row.appendChild(actions);
@@ -875,6 +909,10 @@ async function viewCustomer(id, focusTarget='') {
     document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
     document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
     document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
+    document.getElementById('d-courier-company').textContent = activeCustomer.courier_company || '未填写';
+    document.getElementById('d-courier-company-input').value = activeCustomer.courier_company || '';
+    document.getElementById('d-tracking-number').textContent = activeCustomer.tracking_number || '未填写';
+    document.getElementById('d-tracking-number-input').value = activeCustomer.tracking_number || '';
     renderMoemailBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
     if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
@@ -955,6 +993,8 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const email = document.getElementById('email').value.trim();
   const shippingAddress = document.getElementById('shipping-address').value.trim();
   const shippingStatus = normalizeShippingStatus(document.getElementById('shipping-status').value);
+  const courierCompany = document.getElementById('courier-company').value.trim();
+  const trackingNumber = document.getElementById('tracking-number').value.trim();
   const actDate = document.getElementById('act-date').value;
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
@@ -968,6 +1008,8 @@ document.getElementById('add-form').onsubmit = async (e) => {
         email,
         shipping_address: shippingAddress,
         shipping_status: shippingStatus,
+        courier_company: courierCompany,
+        tracking_number: trackingNumber,
         activation_date: actDate,
       }),
     });
@@ -1017,6 +1059,8 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
   if (!activeCustomer) return;
   const shippingAddress = document.getElementById('d-address-input').value.trim();
   const shippingStatus = normalizeShippingStatus(document.getElementById('d-shipping-status-input').value);
+  const courierCompany = document.getElementById('d-courier-company-input').value.trim();
+  const trackingNumber = document.getElementById('d-tracking-number-input').value.trim();
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '保存中...';
@@ -1024,7 +1068,12 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
     const res = await fetch(API + '/customers/' + activeCustomer.id, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ shipping_address: shippingAddress, shipping_status: shippingStatus }),
+      body: JSON.stringify({
+        shipping_address: shippingAddress,
+        shipping_status: shippingStatus,
+        courier_company: courierCompany,
+        tracking_number: trackingNumber,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
@@ -1032,13 +1081,17 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
     document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
     document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
     document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
-    toast('地址和发货状态已保存', 'success');
+    document.getElementById('d-courier-company').textContent = activeCustomer.courier_company || '未填写';
+    document.getElementById('d-courier-company-input').value = activeCustomer.courier_company || '';
+    document.getElementById('d-tracking-number').textContent = activeCustomer.tracking_number || '未填写';
+    document.getElementById('d-tracking-number-input').value = activeCustomer.tracking_number || '';
+    toast('地址和快递信息已保存', 'success');
     await loadCustomers();
   } catch (err) {
     toast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '保存地址和状态';
+    btn.textContent = '保存快递信息';
   }
 };
 
@@ -1105,6 +1158,7 @@ async function loadLabelConfig() {
   if (!labelConfig.templates.length) {
     labelConfig.templates = fallbackTemplates();
   }
+  labelConfig.templates = mergeDefaultTemplates(labelConfig.templates);
   selectedTemplateId = labelConfig.templates[0].id;
   hydrateTemplateSelects();
   renderTemplateEditor();
@@ -1148,7 +1202,32 @@ function fallbackTemplates() {
         {id:'phone', type:'text', source:'手机号', text:'', x:4, y:29, w:42, h:5, fontSize:9, bold:true},
       ],
     },
-  ];
+    {
+      id: COURIER_TEMPLATE_ID,
+      name: '快递单 50x40',
+      width_mm: 50,
+      height_mm: 40,
+      elements: [
+        {id:'courier-title', type:'text', source:'固定文字', text:'收件信息', x:3, y:3, w:18, h:5, fontSize:8, bold:true},
+        {id:'courier-company', type:'text', source:'快递公司', text:'', x:25, y:3, w:22, h:5, fontSize:7, bold:true},
+        {id:'courier-tracking', type:'text', source:'快递单号', text:'', x:3, y:9, w:44, h:6, fontSize:9, bold:true},
+        {id:'courier-address', type:'text', source:'收货地址', text:'', x:3, y:16, w:44, h:13, fontSize:7, bold:true},
+        {id:'courier-phone-label', type:'text', source:'固定文字', text:'SIM', x:3, y:30, w:7, h:4, fontSize:6, bold:true},
+        {id:'courier-phone', type:'text', source:'手机号', text:'', x:11, y:29, w:36, h:6, fontSize:9, bold:true},
+        {id:'courier-status', type:'text', source:'发货状态', text:'', x:3, y:35, w:18, h:4, fontSize:5, bold:false},
+        {id:'courier-date', type:'text', source:'开通日期', text:'', x:23, y:35, w:24, h:4, fontSize:5, bold:false},
+      ],
+    },
+	  ];
+	}
+
+function mergeDefaultTemplates(templates) {
+  const merged = Array.isArray(templates) ? clone(templates) : [];
+  const existingIds = new Set(merged.map(t => t?.id));
+  for (const tpl of fallbackTemplates()) {
+    if (!existingIds.has(tpl.id)) merged.push(clone(tpl));
+  }
+  return merged;
 }
 
 function hydrateTemplateSelects() {
@@ -1244,9 +1323,13 @@ async function renderTemplateCanvas(container, tpl, customer, editable=false) {
 function resolveTextValue(el, customer) {
   switch (el.source) {
     case '固定文字': return el.text || '文字';
-    case '手机号': return customer.phone_number || '';
-    case '邮箱': return customer.email || '';
+	    case '手机号': return customer.phone_number || '';
+	    case '邮箱': return customer.email || '';
     case '开通日期': return customer.activation_date || '';
+    case '收货地址': return customer.shipping_address || '';
+    case '发货状态': return normalizeShippingStatus(customer.shipping_status);
+    case '快递公司': return customer.courier_company || '';
+    case '快递单号': return customer.tracking_number || '';
     case 'Giffgaff下载链接': return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
     default: return el.text || '';
   }
@@ -1369,16 +1452,17 @@ function deleteSelectedElement() {
   renderTemplateEditor();
 }
 
-async function openPrintPanelForActive() {
+async function openPrintPanelForActive(templateId='') {
   if (!activeCustomer) return;
-  await openPrintPanel(activeCustomer.id);
+  await openPrintPanel(activeCustomer.id, templateId);
 }
 
-async function openPrintPanel(id) {
+async function openPrintPanel(id, templateId='') {
   try {
     printCustomer = await getCustomer(id);
     document.getElementById('print-panel').classList.add('open');
     hydrateTemplateSelects();
+    if (templateId && getTemplate(templateId)) selectedTemplateId = templateId;
     document.getElementById('print-template-select').value = selectedTemplateId;
     await renderPrintPreview();
   } catch (err) {
@@ -1418,7 +1502,7 @@ async function printCurrentLabel() {
       .label-item { position: absolute; overflow: hidden; display: flex; align-items: center; line-height: 1.12; }
       .label-item.qr { justify-content: center; }
       .label-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
-      .fit-text { width: 100%; word-break: break-all; }
+	      .fit-text { width: 100%; word-break: break-all; white-space: pre-wrap; }
     </style></head><body>${markup}${printScript}</body></html>`);
   win.document.close();
 }

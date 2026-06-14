@@ -73,6 +73,22 @@ DEFAULT_LABEL_TEMPLATES = [
             {"id": "email", "type": "text", "source": "邮箱", "text": "", "x": 4, "y": 34, "w": 42, "h": 4, "fontSize": 5, "bold": False},
         ],
     },
+    {
+        "id": "courier-50x40",
+        "name": "快递单 50x40",
+        "width_mm": 50,
+        "height_mm": 40,
+        "elements": [
+            {"id": "courier-title", "type": "text", "source": "固定文字", "text": "收件信息", "x": 3, "y": 3, "w": 18, "h": 5, "fontSize": 8, "bold": True},
+            {"id": "courier-company", "type": "text", "source": "快递公司", "text": "", "x": 25, "y": 3, "w": 22, "h": 5, "fontSize": 7, "bold": True},
+            {"id": "courier-tracking", "type": "text", "source": "快递单号", "text": "", "x": 3, "y": 9, "w": 44, "h": 6, "fontSize": 9, "bold": True},
+            {"id": "courier-address", "type": "text", "source": "收货地址", "text": "", "x": 3, "y": 16, "w": 44, "h": 13, "fontSize": 7, "bold": True},
+            {"id": "courier-phone-label", "type": "text", "source": "固定文字", "text": "SIM", "x": 3, "y": 30, "w": 7, "h": 4, "fontSize": 6, "bold": True},
+            {"id": "courier-phone", "type": "text", "source": "手机号", "text": "", "x": 11, "y": 29, "w": 36, "h": 6, "fontSize": 9, "bold": True},
+            {"id": "courier-status", "type": "text", "source": "发货状态", "text": "", "x": 3, "y": 35, "w": 18, "h": 4, "fontSize": 5, "bold": False},
+            {"id": "courier-date", "type": "text", "source": "开通日期", "text": "", "x": 23, "y": 35, "w": 24, "h": 4, "fontSize": 5, "bold": False},
+        ],
+    },
 ]
 
 app.add_middleware(
@@ -121,6 +137,15 @@ def _customer_payload(row) -> dict:
 def _normalize_shipping_status(value: Optional[str]) -> str:
     value = (value or "").strip()
     return value if value in SHIPPING_STATUSES else DEFAULT_SHIPPING_STATUS
+
+
+def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
+    merged = deepcopy(templates)
+    existing_ids = {tpl.get("id") for tpl in merged if isinstance(tpl, dict)}
+    for template in DEFAULT_LABEL_TEMPLATES:
+        if template["id"] not in existing_ids:
+            merged.append(deepcopy(template))
+    return merged
 
 
 @app.middleware("http")
@@ -206,6 +231,8 @@ async def list_customers():
         email=r["email"],
         shipping_address=r.get("shipping_address"),
         shipping_status=_normalize_shipping_status(r.get("shipping_status")),
+        courier_company=r.get("courier_company"),
+        tracking_number=r.get("tracking_number"),
         activation_date=r["activation_date"],
         moemail_id=r.get("moemail_id"),
         moemail_address=r.get("moemail_address"),
@@ -226,6 +253,8 @@ async def get_customer_detail(customer_id: int):
         email=c["email"],
         shipping_address=c.get("shipping_address"),
         shipping_status=_normalize_shipping_status(c.get("shipping_status")),
+        courier_company=c.get("courier_company"),
+        tracking_number=c.get("tracking_number"),
         activation_date=c["activation_date"],
         created_at=c["created_at"],
         moemail_id=c.get("moemail_id"),
@@ -354,7 +383,7 @@ def _load_label_templates(raw: str):
         return deepcopy(DEFAULT_LABEL_TEMPLATES)
     try:
         templates = json.loads(raw)
-        return templates if isinstance(templates, list) else deepcopy(DEFAULT_LABEL_TEMPLATES)
+        return _merge_default_label_templates(templates) if isinstance(templates, list) else deepcopy(DEFAULT_LABEL_TEMPLATES)
     except json.JSONDecodeError:
         return deepcopy(DEFAULT_LABEL_TEMPLATES)
 
@@ -436,12 +465,15 @@ async def _restore_backup_payload(data: dict) -> dict:
             for c in customers:
                 await db.execute(
                     """INSERT INTO customers
-                       (id, phone_number, email, shipping_address, shipping_status, activation_date,
-                        moemail_id, moemail_address, share_link, is_moemail_auto, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (id, phone_number, email, shipping_address, shipping_status, courier_company,
+                        tracking_number, activation_date, moemail_id, moemail_address, share_link,
+                        is_moemail_auto, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
                      normalize_optional_text(c.get("shipping_address")),
-                     _normalize_shipping_status(c.get("shipping_status")), c["activation_date"],
+                     _normalize_shipping_status(c.get("shipping_status")),
+                     normalize_optional_text(c.get("courier_company")),
+                     normalize_optional_text(c.get("tracking_number")), c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
                      _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
                 )
