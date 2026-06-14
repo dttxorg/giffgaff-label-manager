@@ -13,6 +13,7 @@
 - **菜鸟取号**：配置菜鸟/淘宝开放平台凭证和固定发件地址后，可按客户收货地址调用电子面单取号
 - **MoEmail 集成**：客户行按钮按需生成临时邮箱，保存分享链接，拉取可用域名
 - **邮箱接码**：MoEmail 客户可刷新最新邮件并自动提取 Giffgaff 6 位验证码
+- **Windows 客户端**：本地领取激活任务，打开浏览器半自动填写 giffgaff 激活流程，并回传手机号/状态
 - **标签模板**：四个默认模板，可拖拽排版，支持 `50mm x 30mm` 和 `50mm x 40mm`
 - **二维码打印**：模板里可放邮箱二维码和 Giffgaff App 下载二维码
 - **导出导入**：手动导出/恢复客户、标签模板和安全设置 JSON
@@ -109,6 +110,7 @@ Authorization: Bearer <AGENT_API_TOKEN>
 桌面客户端可使用这些接口：
 
 ```text
+GET   /api/agent/ping
 GET   /api/agent/activation-tasks/next
 POST  /api/agent/customers/{id}/activation-log
 PATCH /api/agent/customers/{id}/activation-status
@@ -118,7 +120,40 @@ GET   /api/agent/customers/{id}/verification-code
 
 客户端领取任务后会拿到客户 ID、邮箱、初始密码、SIM 激活码和收货地址；完成网页流程后回传手机号，并把状态推进到「等待转 eSIM」或「已完成」。
 
-### 6. 使用标签模板
+### 6. Windows 本地客户端
+
+`desktop-client/` 目录包含 Windows 半自动客户端：
+
+- 配置后台地址、`AGENT_API_TOKEN` 和客户端 ID
+- 领取下一个激活任务，不会要求提前填写手机号
+- 显示并复制邮箱、初始密码、SIM 激活码和收货地址
+- 支持不使用代理、系统代理、自定义 HTTP/HTTPS/SOCKS5 代理
+- 可测试浏览器出口 IP
+- 打开本机 Edge/Chrome/Chromium 并尝试预填 giffgaff 激活页面
+- 刷新 MoEmail 验证码，复制或填入正在运行的浏览器页面
+- 手动标记等待人工支付、等待转 eSIM、已完成或失败
+
+开发运行：
+
+```powershell
+cd desktop-client
+py -3 -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+python run.py
+```
+
+Windows 打包：
+
+```powershell
+cd desktop-client
+.\build_windows.ps1
+```
+
+客户端是半自动助手，不建议无人值守批量运行；支付、信用卡、eSIM 转换和异常页面都应人工确认。
+
+### 7. 使用标签模板
 
 「标签模板」页面内置四个模板：
 
@@ -185,6 +220,11 @@ giffgaff-label-manager/
 │   ├── models.py        # Pydantic 数据模型
 │   ├── requirements.txt
 │   └── giffgaff.db      # 数据库（自动创建，已被 .gitignore 忽略）
+├── desktop-client/
+│   ├── giffgaff_client/ # Windows 半自动激活客户端
+│   ├── requirements.txt
+│   ├── build_windows.ps1
+│   └── run.py
 ├── frontend/
 │   └── index.html       # 管理界面
 └── README.md
@@ -197,3 +237,4 @@ giffgaff-label-manager/
 - 后端：FastAPI + SQLite（aiosqlite）
 - 邮箱：MoEmail 临时邮箱和分享链接
 - 前端：纯 HTML/CSS/JS
+- 客户端：Python + PySide6 + Playwright

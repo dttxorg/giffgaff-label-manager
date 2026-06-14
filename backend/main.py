@@ -840,6 +840,16 @@ async def import_sim_codes(data: SimCodeImport):
 
 # ── 桌面客户端 API ──
 
+@app.get("/api/agent/ping")
+async def agent_ping(request: Request):
+    _require_agent_auth(request)
+    return {
+        "ok": True,
+        "server_time": _utc_now(),
+        "agent_api": "enabled",
+    }
+
+
 def _sim_status_for_activation(status: str) -> str:
     status = _normalize_activation_status(status)
     if status in {"未开始", "已分配激活码", "等待客户端领取"}:

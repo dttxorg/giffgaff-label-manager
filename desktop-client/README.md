@@ -1,0 +1,69 @@
+# Giffgaff Activation Client
+
+Windows 本地半自动激活客户端。它从 VPS 后台领取客户任务，打开本机浏览器进入 giffgaff 激活页面，尝试填写 SIM 激活码、邮箱和初始密码，并把手机号/状态回传到后台。
+
+客户端不是无人值守工具。验证码、支付、信用卡、eSIM 转换和异常页面都应该保留人工确认。
+
+## 功能
+
+- 后台地址、Agent Token、客户端 ID 配置
+- 测试 `/api/agent/ping`，不会误领取任务
+- 领取 `/api/agent/activation-tasks/next`
+- 显示并复制邮箱、初始密码、SIM 激活码、地址
+- 刷新 MoEmail 验证码并复制到剪贴板
+- 打开 Playwright 浏览器并尝试预填 giffgaff 页面
+- 代理配置：不使用、系统模式、自定义 HTTP/HTTPS/SOCKS5
+- 浏览器出口 IP 测试
+- 回传状态：等待人工支付、等待转 eSIM、已完成、失败
+
+## 开发运行
+
+```powershell
+cd desktop-client
+py -3 -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+python run.py
+```
+
+如果使用 Edge 或 Chrome 渠道，客户端默认优先启动本机 `msedge`，不需要把 Chromium 打包进客户端；如果选择 `chromium`，请先执行 `python -m playwright install chromium`。
+
+## 打包 Windows exe
+
+```powershell
+cd desktop-client
+.\build_windows.ps1
+```
+
+输出位置：
+
+```text
+desktop-client\dist\GiffgaffActivationClient\GiffgaffActivationClient.exe
+```
+
+打包脚本会设置 `PLAYWRIGHT_BROWSERS_PATH=0` 并安装 Chromium，方便把浏览器运行文件随 exe 一起收集。实际使用时也可以继续选择 `msedge`，直接调用 Windows 自带 Edge。
+
+## 使用流程
+
+1. 在 VPS 后台导入 SIM 激活码并添加客户。
+2. VPS 启动时配置 `AGENT_API_TOKEN`。
+3. 客户端填写后台地址和 Token，点击“测试连接”。
+4. 点击“领取下一个任务”。
+5. 点击“打开并预填”，浏览器会打开 giffgaff 激活页。
+6. 遇到邮箱验证码时点击“刷新验证码”，客户端会复制验证码；浏览器自动化还在运行时可点击“填入验证码”。
+7. 人工处理支付、信用卡或 eSIM 步骤。
+8. 拿到手机号后填入客户端，点击“标记等待转 eSIM”或“标记完成”。
+
+## 代理说明
+
+代理只作用于 Playwright 打开的浏览器，不影响客户端请求 VPS 后台。建议使用稳定、可信、低频的出口，不建议频繁轮换代理。
+
+自定义代理填写：
+
+- 类型：`http`、`https` 或 `socks5`
+- 主机：代理服务器 IP/域名
+- 端口：代理端口
+- 用户名/密码：如代理需要认证再填写
+
+设置保存在 Windows 用户目录的 `%APPDATA%\GiffgaffActivationClient\config.json`。这个文件只在本机，不会上传到后台。
