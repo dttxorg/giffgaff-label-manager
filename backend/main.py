@@ -1,16 +1,14 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 import os
 import json
 import datetime
 import aiosqlite
 import hmac
 import hashlib
-import re
 from copy import deepcopy
-from pathlib import Path
 from typing import Optional
 
 from database import init_db, DATABASE_PATH
@@ -30,8 +28,6 @@ app = FastAPI(title="giffgaff-label-manager API")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
-DEFAULT_BACKUP_DIR = Path(__file__).resolve().parent / "backups"
-BACKUP_FILENAME_RE = re.compile(r"^(?:giffgaff_)?backup_\d{8}_\d{6}\.json$")
 DEFAULT_LABEL_TEMPLATES = [
     {
         "id": "basic-50x30",
@@ -177,7 +173,6 @@ async def get_sys_settings():
         moemail_url=rows.get("moemail_url", ""),
         moemail_api_key="***" if rows.get("moemail_api_key") else "",
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
-        backup_dir=rows.get("backup_dir") or str(DEFAULT_BACKUP_DIR),
     )
 
 
@@ -189,8 +184,6 @@ async def update_settings(data: SystemSettings):
         await set_setting("moemail_api_key", data.moemail_api_key)
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
-    if data.backup_dir is not None:
-        await set_setting("backup_dir", data.backup_dir.strip())
     return {"ok": True}
 
 
@@ -370,36 +363,10 @@ async def update_label_config(data: LabelConfig):
     return {"ok": True}
 
 
-# ── 导出 / 导入 / NAS 备份 ──
+# ── 导出 / 导入 ──
 
 def _backup_timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-
-def _backup_file_info(path: Path) -> dict:
-    stat = path.stat()
-    return {
-        "filename": path.name,
-        "size": stat.st_size,
-        "modified_at": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
-    }
-
-
-async def _backup_dir(create: bool = True) -> Path:
-    rows = await get_settings()
-    raw_path = (rows.get("backup_dir") or str(DEFAULT_BACKUP_DIR)).strip()
-    path = Path(raw_path).expanduser()
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parent / path
-    path = path.resolve()
-    if path.exists() and not path.is_dir():
-        raise HTTPException(status_code=400, detail="备份路径不是目录")
-    if create:
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise HTTPException(status_code=400, detail=f"无法创建备份目录：{exc}") from exc
-    return path
 
 
 async def _export_backup_payload() -> dict:
@@ -477,21 +444,6 @@ async def _restore_backup_payload(data: dict) -> dict:
     return {"customers_restored": len(customers), "settings_restored": len(safe_settings)}
 
 
-async def _backup_file_path(filename: str) -> Path:
-    if filename != os.path.basename(filename) or not BACKUP_FILENAME_RE.match(filename):
-        raise HTTPException(status_code=400, detail="备份文件名不合法")
-    path = (await _backup_dir(create=False)) / filename
-    try:
-        resolved_path = path.resolve()
-        resolved_dir = (await _backup_dir(create=False)).resolve()
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"备份路径错误：{exc}") from exc
-    if resolved_dir not in resolved_path.parents:
-        raise HTTPException(status_code=400, detail="备份路径越界")
-    if not resolved_path.exists() or not resolved_path.is_file():
-        raise HTTPException(status_code=404, detail="备份文件不存在")
-    return resolved_path
-
 @app.get("/api/export")
 async def export_all():
     data = await _export_backup_payload()
@@ -512,53 +464,6 @@ async def import_backup(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="文件格式错误")
     restored = await _restore_backup_payload(data)
     return {"ok": True, **restored}
-
-
-@app.post("/api/backups", status_code=201)
-async def create_backup_file():
-    backup_dir = await _backup_dir(create=True)
-    data = await _export_backup_payload()
-    filename = f"giffgaff_backup_{_backup_timestamp()}.json"
-    path = backup_dir / filename
-    try:
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"写入备份失败：{exc}") from exc
-    return {
-        "ok": True,
-        "backup_dir": str(backup_dir),
-        **_backup_file_info(path),
-        "customers": len(data["customers"]),
-    }
-
-
-@app.get("/api/backups")
-async def list_backup_files():
-    backup_dir = await _backup_dir(create=True)
-    backups = [
-        _backup_file_info(path)
-        for path in backup_dir.glob("*.json")
-        if BACKUP_FILENAME_RE.match(path.name)
-    ]
-    backups.sort(key=lambda item: item["modified_at"], reverse=True)
-    return {"backup_dir": str(backup_dir), "backups": backups}
-
-
-@app.get("/api/backups/{filename}")
-async def download_backup_file(filename: str):
-    path = await _backup_file_path(filename)
-    return FileResponse(path, media_type="application/json", filename=path.name)
-
-
-@app.post("/api/backups/{filename}/restore")
-async def restore_backup_file(filename: str):
-    path = await _backup_file_path(filename)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="备份文件格式错误") from None
-    restored = await _restore_backup_payload(data)
-    return {"ok": True, "filename": filename, **restored}
 
 
 # ── 前端静态页面 ──

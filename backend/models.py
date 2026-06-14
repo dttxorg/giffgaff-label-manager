@@ -43,7 +43,6 @@ class SystemSettings(BaseModel):
     moemail_url: Optional[str] = None
     moemail_api_key: Optional[str] = None
     giffgaff_download_url: Optional[str] = None
-    backup_dir: Optional[str] = None
 
 
 class AuthLoginRequest(BaseModel):

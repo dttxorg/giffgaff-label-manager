@@ -171,20 +171,6 @@
     .setting-item { display: flex; flex-direction: column; gap: 6px; }
     .setting-item.wide { grid-column: 1 / -1; }
     .setting-hint { font-size: 11px; color: #999; }
-    .backup-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 14px;
-    }
-    .backup-dir-text {
-      color: var(--muted);
-      font-size: 12px;
-      word-break: break-all;
-    }
-    .backup-table-wrap { overflow-x: auto; }
 
     .modal {
       display: none;
@@ -562,43 +548,9 @@
             <input type="url" id="s-giffgaff-url" placeholder="https://www.giffgaff.com/mobile-app">
             <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
           </div>
-          <div class="setting-item wide">
-            <label>飞牛备份目录</label>
-            <input type="text" id="s-backup-dir" placeholder="/vol1/1000/backups/giffgaff-label-manager">
-            <span class="setting-hint">填飞牛 NAS 映射到应用所在机器的目录；留空使用 backend/backups</span>
-          </div>
         </div>
         <div class="save-btn-wrap" style="margin-top:16px;">
           <button type="button" onclick="saveSettings()">保存设置</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span>飞牛备份</span>
-        <span class="muted" id="backup-count"></span>
-      </div>
-      <div class="card-body">
-        <div class="backup-toolbar">
-          <div class="backup-dir-text" id="backup-dir-current"></div>
-          <div class="button-row">
-            <button type="button" class="green" id="backup-now-btn" onclick="createBackup()">立即备份</button>
-            <button type="button" class="ghost" onclick="loadBackups()">刷新列表</button>
-          </div>
-        </div>
-        <div class="backup-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>文件名</th>
-                <th>时间</th>
-                <th>大小</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="backup-table"></tbody>
-          </table>
         </div>
       </div>
     </div>
@@ -992,7 +944,6 @@ async function loadSettings() {
     document.getElementById('s-moemail-url').value = s.moemail_url || '';
     document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
     document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-    document.getElementById('s-backup-dir').value = s.backup_dir || '';
   } catch(e) {
     toast('加载设置失败', 'error');
   }
@@ -1003,7 +954,6 @@ async function saveSettings() {
     moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
     moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
     giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
-    backup_dir: document.getElementById('s-backup-dir').value.trim(),
   };
   try {
     const res = await fetch(API + '/settings', {
@@ -1014,7 +964,6 @@ async function saveSettings() {
     if (!res.ok) throw new Error('保存失败');
     labelConfig.giffgaff_download_url = payload.giffgaff_download_url;
     await saveLabelConfig(false);
-    await loadBackups();
     toast('设置已保存', 'success');
   } catch(err) {
     toast(err.message, 'error');
@@ -1024,92 +973,6 @@ async function saveSettings() {
 function openSettings() {
   switchTab('settings', document.querySelectorAll('.tab')[2]);
   loadSettings();
-  loadBackups();
-}
-
-function formatFileSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatBackupDate(value) {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-async function loadBackups() {
-  const table = document.getElementById('backup-table');
-  if (!table) return;
-  table.innerHTML = '<tr><td colspan="4" class="empty-state">加载中...</td></tr>';
-  try {
-    const res = await fetch(API + '/backups');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '加载备份失败');
-    document.getElementById('backup-dir-current').textContent = data.backup_dir ? `目录：${data.backup_dir}` : '';
-    document.getElementById('backup-count').textContent = `${(data.backups || []).length} 个文件`;
-    renderBackups(data.backups || []);
-  } catch (err) {
-    document.getElementById('backup-count').textContent = '';
-    table.innerHTML = `<tr><td colspan="4" class="empty-state">${escapeHtml(err.message)}</td></tr>`;
-  }
-}
-
-function renderBackups(list) {
-  const table = document.getElementById('backup-table');
-  if (!list.length) {
-    table.innerHTML = '<tr><td colspan="4" class="empty-state">暂无备份</td></tr>';
-    return;
-  }
-  table.innerHTML = list.map(item => `
-    <tr>
-      <td class="mono">${escapeHtml(item.filename)}</td>
-      <td>${escapeHtml(formatBackupDate(item.modified_at))}</td>
-      <td>${escapeHtml(formatFileSize(item.size || 0))}</td>
-      <td>
-        <div class="actions">
-          <button type="button" class="small ghost" onclick="downloadBackup('${item.filename}')">下载</button>
-          <button type="button" class="small danger" onclick="restoreBackup('${item.filename}')">恢复</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-}
-
-async function createBackup() {
-  const btn = document.getElementById('backup-now-btn');
-  btn.disabled = true;
-  btn.textContent = '备份中...';
-  try {
-    const res = await fetch(API + '/backups', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '备份失败');
-    toast(`已备份 ${data.customers} 位客户`, 'success');
-    await loadBackups();
-  } catch (err) {
-    toast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '立即备份';
-  }
-}
-
-function downloadBackup(filename) {
-  window.location.href = API + '/backups/' + encodeURIComponent(filename);
-}
-
-async function restoreBackup(filename) {
-  if (!confirm(`确认恢复备份 ${filename}？当前客户数据会被替换。`)) return;
-  try {
-    const res = await fetch(API + '/backups/' + encodeURIComponent(filename) + '/restore', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '恢复失败');
-    toast(`恢复成功：${data.customers_restored} 位客户`, 'success');
-    await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig(), loadBackups()]);
-  } catch (err) {
-    toast(err.message, 'error');
-  }
 }
 
 async function loadLabelConfig() {
@@ -1482,7 +1345,7 @@ async function importData(input) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '导入失败');
     toast(`导入成功：${data.customers_restored} 位客户`, 'success');
-    await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig(), loadBackups()]);
+    await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig()]);
   } catch(err) {
     toast(err.message, 'error');
   }
@@ -1505,7 +1368,7 @@ document.getElementById('label-canvas').onclick = e => {
 async function initApp() {
   if (appStarted) return;
   appStarted = true;
-  await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig(), loadBackups()]);
+  await Promise.all([loadCustomers(), loadSettings(), loadLabelConfig()]);
 }
 
 async function boot() {
