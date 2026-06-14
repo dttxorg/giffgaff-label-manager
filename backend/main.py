@@ -21,7 +21,7 @@ from crud import (
     get_all_customers, get_customer, create_customer,
     update_customer, delete_customer,
     update_customer_moemail,
-    get_settings, set_setting, fetch_one
+    get_settings, set_setting, fetch_one, normalize_optional_text
 )
 
 app = FastAPI(title="giffgaff-label-manager API")
@@ -215,14 +215,16 @@ async def get_customer_detail(customer_id: int):
 
 @app.post("/api/customers", status_code=201)
 async def add_customer(data: CustomerCreate):
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        existing = await fetch_one(
-            db,
-            "SELECT id FROM customers WHERE phone_number = ?", (data.phone_number,)
-        )
-        if existing:
-            raise HTTPException(status_code=409, detail="该手机号已录入")
+    phone_number = normalize_optional_text(data.phone_number)
+    if phone_number:
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            existing = await fetch_one(
+                db,
+                "SELECT id FROM customers WHERE phone_number = ?", (phone_number,)
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail="该手机号已录入")
 
     try:
         customer_id = await create_customer(data)
@@ -245,7 +247,21 @@ async def edit_customer(customer_id: int, data: CustomerUpdate):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    await update_customer(customer_id, data)
+    phone_number = normalize_optional_text(data.phone_number)
+    if phone_number:
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            existing = await fetch_one(
+                db,
+                "SELECT id FROM customers WHERE phone_number = ? AND id != ?",
+                (phone_number, customer_id),
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail="该手机号已录入")
+    try:
+        await update_customer(customer_id, data)
+    except aiosqlite.IntegrityError:
+        raise HTTPException(status_code=409, detail="该手机号已录入") from None
     return {"ok": True}
 
 
@@ -427,7 +443,7 @@ async def _restore_backup_payload(data: dict) -> dict:
                        (id, phone_number, email, activation_date, moemail_id, moemail_address,
                         share_link, is_moemail_auto, created_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (c["id"], c["phone_number"], c["email"], c["activation_date"],
+                    (c["id"], normalize_optional_text(c.get("phone_number")), c["email"], c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
                      c.get("share_link"), c.get("is_moemail_auto", 0), c["created_at"]),
                 )

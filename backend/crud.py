@@ -1,6 +1,14 @@
 import aiosqlite
 from models import CustomerCreate, CustomerUpdate
 from database import DATABASE_PATH
+from typing import Optional
+
+
+def normalize_optional_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
 
 
 async def fetch_one(db: aiosqlite.Connection, query: str, params=()):
@@ -28,11 +36,12 @@ async def get_customer(customer_id: int):
 
 
 async def create_customer(data: CustomerCreate):
+    phone_number = normalize_optional_text(data.phone_number)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO customers (phone_number, email, activation_date)
                VALUES (?, ?, ?)""",
-            (data.phone_number, data.email, data.activation_date.isoformat()),
+            (phone_number, data.email, data.activation_date.isoformat()),
         )
         await db.commit()
         return cursor.lastrowid
@@ -41,7 +50,7 @@ async def create_customer(data: CustomerCreate):
 async def update_customer(customer_id: int, data: CustomerUpdate):
     fields, values = [], []
     if data.phone_number is not None:
-        fields.append("phone_number = ?"); values.append(data.phone_number)
+        fields.append("phone_number = ?"); values.append(normalize_optional_text(data.phone_number))
     if data.email is not None:
         fields.append("email = ?"); values.append(data.email)
     if data.activation_date is not None:

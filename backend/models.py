@@ -4,8 +4,8 @@ from typing import Any, Optional
 
 
 class CustomerCreate(BaseModel):
-    phone_number: str
-    email: str
+    phone_number: Optional[str] = None
+    email: str = ""
     activation_date: date
 
 
@@ -17,7 +17,7 @@ class CustomerUpdate(BaseModel):
 
 class CustomerOut(BaseModel):
     id: int
-    phone_number: str
+    phone_number: Optional[str]
     email: str
     activation_date: date
     moemail_id: Optional[str]
@@ -29,7 +29,7 @@ class CustomerOut(BaseModel):
 
 class CustomerDetail(BaseModel):
     id: int
-    phone_number: str
+    phone_number: Optional[str]
     email: str
     activation_date: date
     created_at: str

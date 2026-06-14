@@ -9,7 +9,7 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                phone_number TEXT NOT NULL UNIQUE,
+                phone_number TEXT UNIQUE,
                 email TEXT NOT NULL,
                 activation_date TEXT NOT NULL,
                 moemail_id TEXT,
@@ -23,6 +23,7 @@ async def init_db():
         await _ensure_column(db, "customers", "moemail_address", "TEXT")
         await _ensure_column(db, "customers", "share_link", "TEXT")
         await _ensure_column(db, "customers", "is_moemail_auto", "INTEGER NOT NULL DEFAULT 0")
+        await _ensure_nullable_phone_number(db)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -37,3 +38,34 @@ async def _ensure_column(db: aiosqlite.Connection, table: str, column: str, defi
     existing_columns = {row[1] for row in rows}
     if column not in existing_columns:
         await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
+    rows = await db.execute_fetchall("PRAGMA table_info(customers)")
+    phone_column = next((row for row in rows if row[1] == "phone_number"), None)
+    if not phone_column or phone_column[3] == 0:
+        return
+
+    await db.execute("ALTER TABLE customers RENAME TO customers_old")
+    await db.execute("""
+        CREATE TABLE customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT UNIQUE,
+            email TEXT NOT NULL,
+            activation_date TEXT NOT NULL,
+            moemail_id TEXT,
+            moemail_address TEXT,
+            share_link TEXT,
+            is_moemail_auto INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    await db.execute("""
+        INSERT INTO customers
+            (id, phone_number, email, activation_date, moemail_id, moemail_address,
+             share_link, is_moemail_auto, created_at)
+        SELECT id, phone_number, email, activation_date, moemail_id, moemail_address,
+               share_link, is_moemail_auto, created_at
+        FROM customers_old
+    """)
+    await db.execute("DROP TABLE customers_old")

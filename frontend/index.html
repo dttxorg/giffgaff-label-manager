@@ -129,6 +129,12 @@
     button.blue { background: var(--blue); }
     button.green { background: var(--green); }
     .button-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .inline-form {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
@@ -382,7 +388,7 @@
     .auth-card button { width: 100%; margin-top: 12px; }
 
     @media (max-width: 1000px) {
-      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls {
+      .form-grid, .settings-grid, .label-topbar, .label-editor, .print-controls, .inline-form {
         grid-template-columns: 1fr;
       }
       .detail-info { grid-template-columns: 1fr; }
@@ -427,13 +433,13 @@
     <div class="card">
       <div class="card-header">
         <span>添加新客户</span>
-        <span class="muted">邮箱可以手填；需要临时邮箱时，在客户行点击生成 MoEmail</span>
+        <span class="muted">先选开通日期即可添加；手机号注册后再补充</span>
       </div>
       <div class="card-body">
         <form class="form-grid" id="add-form">
           <div>
             <label>手机号</label>
-            <input type="text" id="phone" placeholder="447400123456" required>
+            <input type="text" id="phone" placeholder="拿到号码后再补充">
           </div>
           <div>
             <label>邮箱</label>
@@ -612,6 +618,13 @@
     </div>
     <div class="detail-body">
       <div class="info-box" id="d-moemail-box"></div>
+      <form class="inline-form" id="phone-update-form">
+        <div>
+          <label>补充 / 更新手机号</label>
+          <input type="text" id="d-phone-input" placeholder="447400123456">
+        </div>
+        <button type="submit">保存手机号</button>
+      </form>
       <div class="button-row">
         <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
         <button type="button" class="green" onclick="openPrintPanelForActive()">打印标签</button>
@@ -788,7 +801,8 @@ function buildCustomerRow(c, index) {
 
   const phoneCell = document.createElement('td');
   const strong = document.createElement('strong');
-  strong.textContent = c.phone_number;
+  strong.textContent = c.phone_number || '待补充';
+  if (!c.phone_number) strong.className = 'muted';
   phoneCell.appendChild(strong);
   row.appendChild(phoneCell);
 
@@ -809,10 +823,10 @@ function buildCustomerRow(c, index) {
   const actions = document.createElement('td');
   actions.className = 'actions';
   actions.append(
-    makeButton('详情', () => viewCustomer(c.id)),
+    makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id)),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
-    makeButton('删除', () => deleteCustomer(c.id, c.phone_number), 'small danger'),
+    makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
   );
   row.appendChild(actions);
   return row;
@@ -830,7 +844,8 @@ async function getCustomer(id) {
 async function viewCustomer(id) {
   try {
     activeCustomer = await getCustomer(id);
-    document.getElementById('d-phone').textContent = activeCustomer.phone_number;
+    document.getElementById('d-phone').textContent = activeCustomer.phone_number || '待补充';
+    document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     document.getElementById('d-email').textContent = activeCustomer.email || '—';
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
     renderMoemailBox(activeCustomer);
@@ -928,6 +943,34 @@ document.getElementById('add-form').onsubmit = async (e) => {
   } finally {
     btn.disabled = false;
     btn.textContent = '添加客户';
+  }
+};
+
+document.getElementById('phone-update-form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!activeCustomer) return;
+  const phone = document.getElementById('d-phone-input').value.trim();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const res = await fetch(API + '/customers/' + activeCustomer.id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone_number: phone }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '保存失败');
+    activeCustomer = await getCustomer(activeCustomer.id);
+    document.getElementById('d-phone').textContent = activeCustomer.phone_number || '待补充';
+    document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
+    toast(phone ? '手机号已保存' : '手机号已清空', 'success');
+    await loadCustomers();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存手机号';
   }
 };
 
