@@ -8,6 +8,8 @@ import datetime
 import aiosqlite
 import hmac
 import hashlib
+import html
+import re
 from copy import deepcopy
 from typing import Optional
 
@@ -15,7 +17,7 @@ from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
-    DomainInfo, LabelConfig
+    VerificationCodeOut, DomainInfo, LabelConfig
 )
 from crud import (
     get_all_customers, get_customer, create_customer,
@@ -163,6 +165,76 @@ def _normalize_shipping_status(value: Optional[str]) -> str:
 
 def _masked_setting(rows: dict, key: str) -> str:
     return "***" if rows.get(key) else ""
+
+
+def _first_text(data: dict, *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _message_list(payload) -> list[dict]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("messages", "data", "items", "results"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    email = payload.get("email")
+    if isinstance(email, dict) and isinstance(email.get("messages"), list):
+        return [item for item in email["messages"] if isinstance(item, dict)]
+    return []
+
+
+def _message_id(message: dict) -> str:
+    return _first_text(message, "id", "messageId", "message_id")
+
+
+def _message_received_at(message: dict) -> str:
+    return _first_text(message, "receivedAt", "received_at", "createdAt", "created_at", "date")
+
+
+def _message_detail_payload(payload) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("message", "data", "item"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
+
+
+def _plain_text_from_html(value: str) -> str:
+    text = html.unescape(value or "")
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", text)
+    text = re.sub(r"(?s)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?s)</p\s*>", "\n", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return re.sub(r"[ \t]+", " ", text)
+
+
+def _extract_verification_code(message: dict) -> Optional[str]:
+    subject = _first_text(message, "subject")
+    content = _first_text(message, "content", "text", "body", "plainText", "plain_text")
+    html_content = _plain_text_from_html(_first_text(message, "html", "htmlContent", "html_content"))
+    text = "\n".join(part for part in (subject, content, html_content) if part)
+    if not text:
+        return None
+    patterns = (
+        r"(?is)verification\s+code\s*(?:is)?\s*[:：]?\s*(\d{6})",
+        r"(?is)code\s*(?:is)?\s*[:：]?\s*(\d{6})",
+        r"(?is)验证码\s*(?:是|为)?\s*[:：]?\s*(\d{6})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    match = re.search(r"(?<!\d)\d{6}(?!\d)", text)
+    return match.group(0) if match else None
 
 
 def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
@@ -446,6 +518,66 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"MoEmail 调用失败：{e}") from e
+
+
+@app.get("/api/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
+async def get_customer_verification_code(customer_id: int):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    moemail_id = (c.get("moemail_id") or "").strip()
+    if not moemail_id:
+        raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱，手填邮箱无法自动接码")
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
+
+    from moemail import MoEmailClient
+    client = MoEmailClient(moemail_url, moemail_key)
+    email_address = c.get("moemail_address") or c.get("email") or ""
+    try:
+        mailbox = client.get_email_messages(moemail_id)
+        messages = _message_list(mailbox)
+        messages.sort(key=_message_received_at, reverse=True)
+        checked_count = 0
+        latest_meta = {}
+
+        for summary in messages[:10]:
+            message_id = _message_id(summary)
+            detail = {}
+            if message_id:
+                detail = _message_detail_payload(client.get_message(moemail_id, message_id))
+            message = {**summary, **detail}
+            checked_count += 1
+            if not latest_meta:
+                latest_meta = message
+            code = _extract_verification_code(message)
+            if code:
+                return VerificationCodeOut(
+                    found=True,
+                    code=code,
+                    email=email_address,
+                    message_id=_message_id(message) or message_id or None,
+                    subject=_first_text(message, "subject") or None,
+                    from_address=_first_text(message, "fromAddress", "from_address", "from") or None,
+                    received_at=_message_received_at(message) or None,
+                    checked_count=checked_count,
+                    detail="已提取最新验证码",
+                )
+
+        return VerificationCodeOut(
+            found=False,
+            email=email_address,
+            message_id=_message_id(latest_meta) or None,
+            subject=_first_text(latest_meta, "subject") or None,
+            from_address=_first_text(latest_meta, "fromAddress", "from_address", "from") or None,
+            received_at=_message_received_at(latest_meta) or None,
+            checked_count=checked_count,
+            detail="没有找到可提取的 6 位验证码",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"MoEmail 接码失败：{e}") from e
 
 
 # ── MoEmail 域名列表 ──

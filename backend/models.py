@@ -101,6 +101,18 @@ class CainiaoWaybillRequest(BaseModel):
     dry_run: bool = False
 
 
+class VerificationCodeOut(BaseModel):
+    found: bool
+    code: Optional[str] = None
+    email: str = ""
+    message_id: Optional[str] = None
+    subject: Optional[str] = None
+    from_address: Optional[str] = None
+    received_at: Optional[str] = None
+    checked_count: int = 0
+    detail: str = ""
+
+
 class DomainInfo(BaseModel):
     domains: list[str]
 

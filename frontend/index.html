@@ -258,6 +258,37 @@
       line-height: 1.7;
     }
     .info-box a { color: var(--blue); word-break: break-all; }
+    .code-box {
+      padding: 14px;
+      border: 1.5px solid #a5d6a7;
+      background: #f1f8e9;
+      border-radius: 8px;
+      display: grid;
+      gap: 8px;
+    }
+    .code-box-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .code-box-head strong { color: var(--green); font-size: 14px; }
+    .code-value {
+      font-family: "Courier New", monospace;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--green);
+      word-break: break-all;
+    }
+    .code-value.placeholder {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+    .code-meta { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
     .label-topbar {
       display: grid;
@@ -705,6 +736,14 @@
     </div>
     <div class="detail-body">
       <div class="info-box" id="d-moemail-box"></div>
+      <div class="code-box" id="d-code-box">
+        <div class="code-box-head">
+          <strong>验证码</strong>
+          <button type="button" class="small blue" id="d-code-refresh" onclick="refreshVerificationCodeForActive()">刷新</button>
+        </div>
+        <div class="code-value placeholder" id="d-code-value">打开客户后刷新</div>
+        <div class="code-meta" id="d-code-meta"></div>
+      </div>
       <form class="inline-form" id="phone-update-form">
         <div>
           <label>补充 / 更新手机号</label>
@@ -934,11 +973,12 @@ function appendTextCell(row, value) {
   return cell;
 }
 
-function makeButton(label, onClick, className='small') {
+function makeButton(label, onClick, className='small', disabled=false) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = className;
   button.textContent = label;
+  button.disabled = disabled;
   button.addEventListener('click', onClick);
   return button;
 }
@@ -1003,6 +1043,7 @@ function buildCustomerRow(c, index) {
     makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id, c.phone_number ? '' : 'phone')),
     makeButton(hasAddress ? '地址/状态' : '录地址', () => viewCustomer(c.id, hasAddress ? 'status' : 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
+    makeButton('接码', () => openCodeForCustomer(c.id), 'small ghost', !c.moemail_id),
     makeButton('菜鸟取号', () => createCainiaoWaybill(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
     makeButton('快递单', () => openPrintPanel(c.id, COURIER_TEMPLATE_ID), 'small green'),
@@ -1030,6 +1071,7 @@ async function viewCustomer(id, focusTarget='') {
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
     renderShippingDetail(activeCustomer);
     renderMoemailBox(activeCustomer);
+    renderVerificationCodeBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
     if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
     if (focusTarget === 'address') setTimeout(() => document.getElementById('d-address-input').focus(), 0);
@@ -1071,6 +1113,73 @@ function renderMoemailBox(c) {
   }
 }
 
+function renderVerificationCodeBox(c) {
+  const button = document.getElementById('d-code-refresh');
+  const value = document.getElementById('d-code-value');
+  const meta = document.getElementById('d-code-meta');
+  button.disabled = !c.moemail_id;
+  button.textContent = '刷新';
+  value.className = 'code-value placeholder';
+  if (!c.moemail_id) {
+    value.textContent = '该客户没有 MoEmail 邮箱';
+    meta.textContent = '手填邮箱无法自动读取邮件。';
+    return;
+  }
+  value.textContent = '等待刷新';
+  meta.textContent = c.moemail_address || c.email || '';
+}
+
+function renderVerificationCodeResult(data) {
+  const value = document.getElementById('d-code-value');
+  const meta = document.getElementById('d-code-meta');
+  if (data.found && data.code) {
+    value.className = 'code-value';
+    value.textContent = data.code;
+  } else {
+    value.className = 'code-value placeholder';
+    value.textContent = data.detail || '没有找到验证码';
+  }
+  const metaParts = [];
+  if (data.subject) metaParts.push(`主题：${data.subject}`);
+  if (data.from_address) metaParts.push(`发件人：${data.from_address}`);
+  if (data.received_at) metaParts.push(`时间：${data.received_at}`);
+  if (data.checked_count) metaParts.push(`已检查 ${data.checked_count} 封邮件`);
+  meta.textContent = metaParts.join('｜') || data.email || '';
+}
+
+async function openCodeForCustomer(id) {
+  await viewCustomer(id);
+  if (activeCustomer && activeCustomer.id === id && activeCustomer.moemail_id) {
+    await refreshVerificationCodeForActive();
+  }
+}
+
+async function refreshVerificationCodeForActive() {
+  if (!activeCustomer) return;
+  const button = document.getElementById('d-code-refresh');
+  const value = document.getElementById('d-code-value');
+  const meta = document.getElementById('d-code-meta');
+  button.disabled = true;
+  button.textContent = '刷新中...';
+  value.className = 'code-value placeholder';
+  value.textContent = '正在读取最新邮件';
+  meta.textContent = activeCustomer.email || '';
+  try {
+    const res = await fetch(`${API}/customers/${activeCustomer.id}/verification-code`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '接码失败');
+    renderVerificationCodeResult(data);
+    toast(data.found && data.code ? `验证码：${data.code}` : (data.detail || '没有找到验证码'), data.found ? 'success' : '');
+  } catch (err) {
+    value.textContent = err.message;
+    meta.textContent = '';
+    toast(err.message, 'error');
+  } finally {
+    button.disabled = !activeCustomer?.moemail_id;
+    button.textContent = '刷新';
+  }
+}
+
 function closeDetail() {
   document.getElementById('detail-panel').classList.remove('open');
 }
@@ -1081,6 +1190,7 @@ async function generateMoemailForActive() {
   activeCustomer = await getCustomer(activeCustomer.id);
   document.getElementById('d-email').textContent = activeCustomer.email || '—';
   renderMoemailBox(activeCustomer);
+  renderVerificationCodeBox(activeCustomer);
 }
 
 async function generateMoemail(id) {

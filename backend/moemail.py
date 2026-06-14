@@ -98,3 +98,23 @@ class MoEmailClient:
         config = self.get_config()
         domains_str = config.get("emailDomains", "")
         return [d.strip() for d in domains_str.split(",") if d.strip()]
+
+    def get_email_messages(self, email_id: str) -> dict:
+        """获取指定邮箱的邮件列表"""
+        r = httpx.get(
+            f"{self.base_url}/api/emails/{email_id}",
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def get_message(self, email_id: str, message_id: str) -> dict:
+        """获取指定邮件详情"""
+        r = httpx.get(
+            f"{self.base_url}/api/emails/{email_id}/messages/{message_id}",
+            headers=self._headers(),
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
