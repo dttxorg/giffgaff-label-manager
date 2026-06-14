@@ -111,10 +111,17 @@ class MoEmailClient:
 
     def get_message(self, email_id: str, message_id: str) -> dict:
         """获取指定邮件详情"""
-        r = httpx.get(
+        urls = (
+            f"{self.base_url}/api/emails/{email_id}/{message_id}",
             f"{self.base_url}/api/emails/{email_id}/messages/{message_id}",
-            headers=self._headers(),
-            timeout=15,
         )
-        r.raise_for_status()
-        return r.json()
+        last_response = None
+        for url in urls:
+            r = httpx.get(url, headers=self._headers(), timeout=15)
+            if r.status_code != 404:
+                r.raise_for_status()
+                return r.json()
+            last_response = r
+        if last_response is not None:
+            last_response.raise_for_status()
+        return {}

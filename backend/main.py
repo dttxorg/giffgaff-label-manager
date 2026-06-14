@@ -6,6 +6,7 @@ import os
 import json
 import datetime
 import aiosqlite
+import httpx
 import hmac
 import hashlib
 import html
@@ -724,13 +725,19 @@ async def get_customer_verification_code(customer_id: int):
         messages = _message_list(mailbox)
         messages.sort(key=_message_received_at, reverse=True)
         checked_count = 0
+        detail_miss_count = 0
         latest_meta = {}
 
         for summary in messages[:10]:
             message_id = _message_id(summary)
             detail = {}
             if message_id:
-                detail = _message_detail_payload(client.get_message(moemail_id, message_id))
+                try:
+                    detail = _message_detail_payload(client.get_message(moemail_id, message_id))
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 404:
+                        raise
+                    detail_miss_count += 1
             message = {**summary, **detail}
             checked_count += 1
             if not latest_meta:
@@ -757,7 +764,11 @@ async def get_customer_verification_code(customer_id: int):
             from_address=_first_text(latest_meta, "fromAddress", "from_address", "from") or None,
             received_at=_message_received_at(latest_meta) or None,
             checked_count=checked_count,
-            detail="没有找到可提取的 6 位验证码",
+            detail=(
+                f"没有找到可提取的 6 位验证码；{detail_miss_count} 封邮件详情已不存在或接口未返回"
+                if detail_miss_count
+                else "没有找到可提取的 6 位验证码"
+            ),
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"MoEmail 接码失败：{e}") from e
