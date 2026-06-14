@@ -11,6 +11,7 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 phone_number TEXT UNIQUE,
                 email TEXT NOT NULL,
+                shipping_address TEXT,
                 activation_date TEXT NOT NULL,
                 moemail_id TEXT,
                 moemail_address TEXT,
@@ -23,6 +24,7 @@ async def init_db():
         await _ensure_column(db, "customers", "moemail_address", "TEXT")
         await _ensure_column(db, "customers", "share_link", "TEXT")
         await _ensure_column(db, "customers", "is_moemail_auto", "INTEGER NOT NULL DEFAULT 0")
+        await _ensure_column(db, "customers", "shipping_address", "TEXT")
         await _ensure_nullable_phone_number(db)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -52,6 +54,7 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             phone_number TEXT UNIQUE,
             email TEXT NOT NULL,
+            shipping_address TEXT,
             activation_date TEXT NOT NULL,
             moemail_id TEXT,
             moemail_address TEXT,
@@ -62,9 +65,9 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
     """)
     await db.execute("""
         INSERT INTO customers
-            (id, phone_number, email, activation_date, moemail_id, moemail_address,
+            (id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
              share_link, is_moemail_auto, created_at)
-        SELECT id, phone_number, email, activation_date, moemail_id, moemail_address,
+        SELECT id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
                share_link, is_moemail_auto, created_at
         FROM customers_old
     """)

@@ -6,12 +6,14 @@ from typing import Any, Optional
 class CustomerCreate(BaseModel):
     phone_number: Optional[str] = None
     email: str = ""
+    shipping_address: Optional[str] = None
     activation_date: date
 
 
 class CustomerUpdate(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
+    shipping_address: Optional[str] = None
     activation_date: Optional[date] = None
 
 
@@ -19,6 +21,7 @@ class CustomerOut(BaseModel):
     id: int
     phone_number: Optional[str]
     email: str
+    shipping_address: Optional[str]
     activation_date: date
     moemail_id: Optional[str]
     moemail_address: Optional[str]
@@ -31,6 +34,7 @@ class CustomerDetail(BaseModel):
     id: int
     phone_number: Optional[str]
     email: str
+    shipping_address: Optional[str]
     activation_date: date
     created_at: str
     moemail_id: Optional[str]

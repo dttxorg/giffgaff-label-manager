@@ -88,7 +88,7 @@
     .muted { color: var(--muted); font-size: 12px; }
     .form-grid {
       display: grid;
-      grid-template-columns: 1fr 1.1fr 0.8fr auto;
+      grid-template-columns: 1fr 1.1fr 0.8fr 1.4fr auto;
       gap: 12px;
       align-items: end;
     }
@@ -164,6 +164,16 @@
     }
     .badge-auto { background: #e3f2fd; color: #1565c0; }
     .badge-manual { background: #f3e5f5; color: #7b1fa2; }
+    .badge-sold { background: #e8f5e9; color: #2e7d32; }
+    .badge-unsold { background: #fff3e0; color: #e65100; }
+    .address-preview {
+      margin-top: 6px;
+      max-width: 260px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
     .empty-state { text-align: center; padding: 42px; color: #999; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -435,6 +445,10 @@
             <label>开通日期</label>
             <input type="date" id="act-date" required>
           </div>
+          <div>
+            <label>收货地址</label>
+            <input type="text" id="shipping-address" placeholder="成交后可补充">
+          </div>
           <button type="submit">添加客户</button>
         </form>
       </div>
@@ -453,6 +467,7 @@
               <th>邮箱</th>
               <th>邮箱来源</th>
               <th>开通日期</th>
+              <th>销售/地址</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -577,6 +592,13 @@
         </div>
         <button type="submit">保存手机号</button>
       </form>
+      <form class="inline-form" id="address-update-form">
+        <div>
+          <label>收货地址</label>
+          <textarea id="d-address-input" rows="3" placeholder="成交后录入客户收货地址"></textarea>
+        </div>
+        <button type="submit">保存地址</button>
+      </form>
       <div class="button-row">
         <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
         <button type="button" class="green" onclick="openPrintPanelForActive()">打印标签</button>
@@ -620,6 +642,7 @@ const DEMO_CUSTOMER = {
   share_link: 'https://moemail.example/shared/demo',
   moemail_address: 'sample@giffgaff.example',
   is_moemail_auto: true,
+  shipping_address: '',
 };
 const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
@@ -721,7 +744,7 @@ function renderCustomers() {
   if (!customers.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 6;
+    cell.colSpan = 7;
     cell.className = 'empty-state';
     cell.textContent = '暂无客户';
     row.appendChild(cell);
@@ -772,10 +795,23 @@ function buildCustomerRow(c, index) {
 
   appendTextCell(row, c.activation_date);
 
+  const addressCell = document.createElement('td');
+  const soldBadge = document.createElement('span');
+  const hasAddress = !!(c.shipping_address || '').trim();
+  soldBadge.className = `badge ${hasAddress ? 'badge-sold' : 'badge-unsold'}`;
+  soldBadge.textContent = hasAddress ? '已售' : '未售';
+  addressCell.appendChild(soldBadge);
+  const addressPreview = document.createElement('div');
+  addressPreview.className = 'address-preview';
+  addressPreview.textContent = hasAddress ? c.shipping_address : '未录入地址';
+  addressCell.appendChild(addressPreview);
+  row.appendChild(addressCell);
+
   const actions = document.createElement('td');
   actions.className = 'actions';
   actions.append(
-    makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id)),
+    makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id, c.phone_number ? '' : 'phone')),
+    makeButton(hasAddress ? '改地址' : '录地址', () => viewCustomer(c.id, 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
     makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
@@ -793,15 +829,18 @@ async function getCustomer(id) {
   return await res.json();
 }
 
-async function viewCustomer(id) {
+async function viewCustomer(id, focusTarget='') {
   try {
     activeCustomer = await getCustomer(id);
     document.getElementById('d-phone').textContent = activeCustomer.phone_number || '待补充';
     document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     document.getElementById('d-email').textContent = activeCustomer.email || '—';
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
+    document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
     renderMoemailBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
+    if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
+    if (focusTarget === 'address') setTimeout(() => document.getElementById('d-address-input').focus(), 0);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -875,6 +914,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
   e.preventDefault();
   const phone = document.getElementById('phone').value.trim();
   const email = document.getElementById('email').value.trim();
+  const shippingAddress = document.getElementById('shipping-address').value.trim();
   const actDate = document.getElementById('act-date').value;
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
@@ -883,7 +923,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
     const res = await fetch(API + '/customers', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ phone_number: phone, email, activation_date: actDate }),
+      body: JSON.stringify({ phone_number: phone, email, shipping_address: shippingAddress, activation_date: actDate }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '添加失败');
@@ -923,6 +963,33 @@ document.getElementById('phone-update-form').onsubmit = async (e) => {
   } finally {
     btn.disabled = false;
     btn.textContent = '保存手机号';
+  }
+};
+
+document.getElementById('address-update-form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!activeCustomer) return;
+  const shippingAddress = document.getElementById('d-address-input').value.trim();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const res = await fetch(API + '/customers/' + activeCustomer.id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ shipping_address: shippingAddress }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '保存失败');
+    activeCustomer = await getCustomer(activeCustomer.id);
+    document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
+    toast(shippingAddress ? '地址已保存，状态已标记为已售' : '地址已清空，状态已标记为未售', 'success');
+    await loadCustomers();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存地址';
   }
 };
 

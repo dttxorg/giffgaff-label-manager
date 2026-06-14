@@ -196,6 +196,7 @@ async def list_customers():
         id=r["id"],
         phone_number=r["phone_number"],
         email=r["email"],
+        shipping_address=r.get("shipping_address"),
         activation_date=r["activation_date"],
         moemail_id=r.get("moemail_id"),
         moemail_address=r.get("moemail_address"),
@@ -214,6 +215,7 @@ async def get_customer_detail(customer_id: int):
         id=c["id"],
         phone_number=c["phone_number"],
         email=c["email"],
+        shipping_address=c.get("shipping_address"),
         activation_date=c["activation_date"],
         created_at=c["created_at"],
         moemail_id=c.get("moemail_id"),
@@ -424,10 +426,11 @@ async def _restore_backup_payload(data: dict) -> dict:
             for c in customers:
                 await db.execute(
                     """INSERT INTO customers
-                       (id, phone_number, email, activation_date, moemail_id, moemail_address,
+                       (id, phone_number, email, shipping_address, activation_date, moemail_id, moemail_address,
                         share_link, is_moemail_auto, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (c["id"], normalize_optional_text(c.get("phone_number")), c["email"], c["activation_date"],
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
+                     normalize_optional_text(c.get("shipping_address")), c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
                      _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
                 )
