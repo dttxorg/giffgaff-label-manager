@@ -14,7 +14,8 @@ from typing import Optional
 from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
-    SystemSettings, AuthLoginRequest, MoEmailCreateRequest, DomainInfo, LabelConfig
+    SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
+    DomainInfo, LabelConfig
 )
 from crud import (
     get_all_customers, get_customer, create_customer,
@@ -30,6 +31,27 @@ AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_SHIPPING_STATUS = "未发货"
 SHIPPING_STATUSES = {"未发货", "已发货", "已收货"}
+DEFAULT_CAINIAO_ENDPOINT = "https://eco.taobao.com/router/rest"
+CAINIAO_PLAIN_SETTINGS = (
+    "cainiao_endpoint",
+    "cainiao_app_key",
+    "cainiao_cp_code",
+    "cainiao_cp_name",
+    "cainiao_template_url",
+    "cainiao_user_id",
+    "cainiao_order_channel",
+    "cainiao_goods_name",
+    "cainiao_weight_grams",
+    "sender_name",
+    "sender_mobile",
+    "sender_phone",
+    "sender_province",
+    "sender_city",
+    "sender_district",
+    "sender_town",
+    "sender_detail",
+)
+CAINIAO_SECRET_SETTINGS = ("cainiao_app_secret", "cainiao_session")
 DEFAULT_LABEL_TEMPLATES = [
     {
         "id": "basic-50x30",
@@ -139,6 +161,10 @@ def _normalize_shipping_status(value: Optional[str]) -> str:
     return value if value in SHIPPING_STATUSES else DEFAULT_SHIPPING_STATUS
 
 
+def _masked_setting(rows: dict, key: str) -> str:
+    return "***" if rows.get(key) else ""
+
+
 def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
     merged = deepcopy(templates)
     existing_ids = {tpl.get("id") for tpl in merged if isinstance(tpl, dict)}
@@ -206,6 +232,25 @@ async def get_sys_settings():
         moemail_url=rows.get("moemail_url", ""),
         moemail_api_key="***" if rows.get("moemail_api_key") else "",
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+        cainiao_endpoint=rows.get("cainiao_endpoint", DEFAULT_CAINIAO_ENDPOINT),
+        cainiao_app_key=rows.get("cainiao_app_key", ""),
+        cainiao_app_secret=_masked_setting(rows, "cainiao_app_secret"),
+        cainiao_session=_masked_setting(rows, "cainiao_session"),
+        cainiao_cp_code=rows.get("cainiao_cp_code", ""),
+        cainiao_cp_name=rows.get("cainiao_cp_name", ""),
+        cainiao_template_url=rows.get("cainiao_template_url", ""),
+        cainiao_user_id=rows.get("cainiao_user_id", ""),
+        cainiao_order_channel=rows.get("cainiao_order_channel", "OTHERS"),
+        cainiao_goods_name=rows.get("cainiao_goods_name", "giffgaff SIM"),
+        cainiao_weight_grams=rows.get("cainiao_weight_grams", "100"),
+        sender_name=rows.get("sender_name", ""),
+        sender_mobile=rows.get("sender_mobile", ""),
+        sender_phone=rows.get("sender_phone", ""),
+        sender_province=rows.get("sender_province", ""),
+        sender_city=rows.get("sender_city", ""),
+        sender_district=rows.get("sender_district", ""),
+        sender_town=rows.get("sender_town", ""),
+        sender_detail=rows.get("sender_detail", ""),
     )
 
 
@@ -217,6 +262,14 @@ async def update_settings(data: SystemSettings):
         await set_setting("moemail_api_key", data.moemail_api_key)
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
+    for key in CAINIAO_PLAIN_SETTINGS:
+        value = getattr(data, key)
+        if value is not None:
+            await set_setting(key, value.strip())
+    for key in CAINIAO_SECRET_SETTINGS:
+        value = getattr(data, key)
+        if value not in (None, "***", ""):
+            await set_setting(key, value.strip())
     return {"ok": True}
 
 
@@ -233,6 +286,7 @@ async def list_customers():
         shipping_status=_normalize_shipping_status(r.get("shipping_status")),
         courier_company=r.get("courier_company"),
         tracking_number=r.get("tracking_number"),
+        courier_order_code=r.get("courier_order_code"),
         activation_date=r["activation_date"],
         moemail_id=r.get("moemail_id"),
         moemail_address=r.get("moemail_address"),
@@ -255,6 +309,7 @@ async def get_customer_detail(customer_id: int):
         shipping_status=_normalize_shipping_status(c.get("shipping_status")),
         courier_company=c.get("courier_company"),
         tracking_number=c.get("tracking_number"),
+        courier_order_code=c.get("courier_order_code"),
         activation_date=c["activation_date"],
         created_at=c["created_at"],
         moemail_id=c.get("moemail_id"),
@@ -314,6 +369,39 @@ async def edit_customer(customer_id: int, data: CustomerUpdate):
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="该手机号已录入") from None
     return {"ok": True}
+
+
+@app.post("/api/customers/{customer_id}/cainiao-waybill", status_code=200)
+async def create_cainiao_waybill(customer_id: int, data: CainiaoWaybillRequest):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    rows = await get_settings()
+    from cainiao import CainiaoConfigError, create_waybill
+    try:
+        result = await create_waybill(rows, c, dry_run=data.dry_run)
+    except CainiaoConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"菜鸟接口调用失败：{exc}") from exc
+
+    if not data.dry_run:
+        courier_company = rows.get("cainiao_cp_name") or rows.get("cainiao_cp_code") or c.get("courier_company")
+        await update_customer(customer_id, CustomerUpdate(
+            courier_company=courier_company,
+            tracking_number=result.get("tracking_number", ""),
+            courier_order_code=result.get("order_code", ""),
+            courier_print_data=result.get("courier_print_data", ""),
+        ))
+    return {
+        "ok": True,
+        "dry_run": data.dry_run,
+        "order_code": result.get("order_code", ""),
+        "tracking_number": result.get("tracking_number", ""),
+        "courier_company": rows.get("cainiao_cp_name") or rows.get("cainiao_cp_code", ""),
+        "has_print_data": bool(result.get("courier_print_data")),
+        "request": result.get("request") if data.dry_run else None,
+    }
 
 
 @app.delete("/api/customers/{customer_id}", status_code=200)
@@ -423,6 +511,7 @@ async def _export_backup_payload() -> dict:
             "moemail_url": _normalize_base_url(rows.get("moemail_url", "")),
             "giffgaff_download_url": rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
+            **{key: rows.get(key, "") for key in CAINIAO_PLAIN_SETTINGS},
         },
     }
 
@@ -452,6 +541,9 @@ async def _restore_backup_payload(data: dict) -> dict:
         safe_settings["moemail_url"] = _normalize_base_url(settings["moemail_url"])
     if isinstance(settings.get("giffgaff_download_url"), str):
         safe_settings["giffgaff_download_url"] = settings["giffgaff_download_url"]
+    for key in CAINIAO_PLAIN_SETTINGS:
+        if isinstance(settings.get(key), str):
+            safe_settings[key] = settings[key]
     if "label_templates" in settings:
         label_templates = settings["label_templates"]
         if not isinstance(label_templates, list):
@@ -466,14 +558,16 @@ async def _restore_backup_payload(data: dict) -> dict:
                 await db.execute(
                     """INSERT INTO customers
                        (id, phone_number, email, shipping_address, shipping_status, courier_company,
-                        tracking_number, activation_date, moemail_id, moemail_address, share_link,
-                        is_moemail_auto, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        tracking_number, courier_order_code, courier_print_data, activation_date,
+                        moemail_id, moemail_address, share_link, is_moemail_auto, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
                      normalize_optional_text(c.get("shipping_address")),
                      _normalize_shipping_status(c.get("shipping_status")),
                      normalize_optional_text(c.get("courier_company")),
-                     normalize_optional_text(c.get("tracking_number")), c["activation_date"],
+                     normalize_optional_text(c.get("tracking_number")),
+                     normalize_optional_text(c.get("courier_order_code")),
+                     normalize_optional_text(c.get("courier_print_data")), c["activation_date"],
                      c.get("moemail_id"), c.get("moemail_address"),
                      _normalize_share_link(c.get("share_link")), c.get("is_moemail_auto", 0), c["created_at"]),
                 )

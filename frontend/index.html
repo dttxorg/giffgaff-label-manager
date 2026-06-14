@@ -187,6 +187,14 @@
     .settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
     .setting-item { display: flex; flex-direction: column; gap: 6px; }
     .setting-item.wide { grid-column: 1 / -1; }
+    .settings-section-title {
+      grid-column: 1 / -1;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+      color: var(--purple-dark);
+      font-size: 14px;
+      font-weight: 800;
+    }
     .setting-hint { font-size: 11px; color: #999; }
 
     .modal {
@@ -574,10 +582,11 @@
     <div class="card">
       <div class="card-header">系统设置</div>
       <div class="card-body">
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label>MoEmail 部署地址</label>
-            <input type="url" id="s-moemail-url" placeholder="https://moemail.yourdomain.com">
+	        <div class="settings-grid">
+	          <div class="settings-section-title">基础设置</div>
+	          <div class="setting-item">
+	            <label>MoEmail 部署地址</label>
+	            <input type="url" id="s-moemail-url" placeholder="https://moemail.yourdomain.com">
             <span class="setting-hint">不带尾部斜杠</span>
           </div>
           <div class="setting-item">
@@ -587,10 +596,91 @@
           </div>
           <div class="setting-item">
             <label>Giffgaff 下载链接</label>
-            <input type="url" id="s-giffgaff-url" placeholder="https://www.giffgaff.com/mobile-app">
-            <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
-          </div>
-        </div>
+	            <input type="url" id="s-giffgaff-url" placeholder="https://www.giffgaff.com/mobile-app">
+	            <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
+	          </div>
+	          <div class="settings-section-title">菜鸟接口</div>
+	          <div class="setting-item">
+	            <label>API 地址</label>
+	            <input type="url" id="s-cainiao-endpoint" placeholder="https://eco.taobao.com/router/rest">
+	            <span class="setting-hint">淘宝开放平台 TOP 网关</span>
+	          </div>
+	          <div class="setting-item">
+	            <label>AppKey</label>
+	            <input type="text" id="s-cainiao-app-key" placeholder="菜鸟/淘宝开放平台 AppKey">
+	          </div>
+	          <div class="setting-item">
+	            <label>AppSecret</label>
+	            <input type="password" id="s-cainiao-app-secret" placeholder="留空则保持原值">
+	            <span class="setting-hint">保存后不会明文回显</span>
+	          </div>
+	          <div class="setting-item">
+	            <label>授权 Session</label>
+	            <input type="password" id="s-cainiao-session" placeholder="留空则保持原值">
+	            <span class="setting-hint">淘宝开放平台授权后的 session</span>
+	          </div>
+	          <div class="setting-item">
+	            <label>物流公司编码</label>
+	            <input type="text" id="s-cainiao-cp-code" placeholder="如 SF / ZTO">
+	          </div>
+	          <div class="setting-item">
+	            <label>物流公司名称</label>
+	            <input type="text" id="s-cainiao-cp-name" placeholder="如 顺丰速运">
+	          </div>
+	          <div class="setting-item wide">
+	            <label>云打印模板 URL</label>
+	            <input type="text" id="s-cainiao-template-url" placeholder="菜鸟电子面单模板 URL">
+	          </div>
+	          <div class="setting-item">
+	            <label>使用者 ID</label>
+	            <input type="text" id="s-cainiao-user-id" placeholder="菜鸟 user_id">
+	          </div>
+	          <div class="setting-item">
+	            <label>订单渠道编码</label>
+	            <input type="text" id="s-cainiao-order-channel" placeholder="OTHERS">
+	          </div>
+	          <div class="setting-item">
+	            <label>默认货品</label>
+	            <input type="text" id="s-cainiao-goods-name" placeholder="giffgaff SIM">
+	          </div>
+	          <div class="setting-item">
+	            <label>默认重量 g</label>
+	            <input type="number" id="s-cainiao-weight-grams" min="1" step="1" placeholder="100">
+	          </div>
+	          <div class="settings-section-title">固定发件地址</div>
+	          <div class="setting-item">
+	            <label>发件人</label>
+	            <input type="text" id="s-sender-name" placeholder="姓名">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件手机</label>
+	            <input type="text" id="s-sender-mobile" placeholder="手机号">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件固话</label>
+	            <input type="text" id="s-sender-phone" placeholder="可选">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件省份</label>
+	            <input type="text" id="s-sender-province" placeholder="如 广东省">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件城市</label>
+	            <input type="text" id="s-sender-city" placeholder="如 深圳市">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件区县</label>
+	            <input type="text" id="s-sender-district" placeholder="如 南山区">
+	          </div>
+	          <div class="setting-item">
+	            <label>发件街道</label>
+	            <input type="text" id="s-sender-town" placeholder="可选">
+	          </div>
+	          <div class="setting-item wide">
+	            <label>发件详细地址</label>
+	            <input type="text" id="s-sender-detail" placeholder="街道门牌号">
+	          </div>
+	        </div>
         <div class="save-btn-wrap" style="margin-top:16px;">
           <button type="button" onclick="saveSettings()">保存设置</button>
         </div>
@@ -647,6 +737,7 @@
       </form>
       <div class="button-row">
         <button type="button" class="blue" onclick="generateMoemailForActive()">生成 MoEmail</button>
+        <button type="button" class="blue" onclick="createCainiaoWaybillForActive()">菜鸟取号</button>
         <button type="button" class="green" onclick="openPrintPanelForActive()">打印标签</button>
         <button type="button" class="green" onclick="openPrintPanelForActive(COURIER_TEMPLATE_ID)">打印快递单</button>
         <button type="button" class="ghost" onclick="copyVoicemailTemplate()">复制关闭语音信箱模板</button>
@@ -698,6 +789,34 @@ const DEMO_CUSTOMER = {
 const SHIPPING_STATUSES = ['未发货', '已发货', '已收货'];
 const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '发货状态', '快递公司', '快递单号', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
+const CAINIAO_SETTINGS = [
+  'cainiao_endpoint', 'cainiao_app_key', 'cainiao_app_secret', 'cainiao_session',
+  'cainiao_cp_code', 'cainiao_cp_name', 'cainiao_template_url', 'cainiao_user_id',
+  'cainiao_order_channel', 'cainiao_goods_name', 'cainiao_weight_grams',
+  'sender_name', 'sender_mobile', 'sender_phone', 'sender_province', 'sender_city',
+  'sender_district', 'sender_town', 'sender_detail',
+];
+const SETTING_INPUT_IDS = {
+  cainiao_endpoint: 's-cainiao-endpoint',
+  cainiao_app_key: 's-cainiao-app-key',
+  cainiao_app_secret: 's-cainiao-app-secret',
+  cainiao_session: 's-cainiao-session',
+  cainiao_cp_code: 's-cainiao-cp-code',
+  cainiao_cp_name: 's-cainiao-cp-name',
+  cainiao_template_url: 's-cainiao-template-url',
+  cainiao_user_id: 's-cainiao-user-id',
+  cainiao_order_channel: 's-cainiao-order-channel',
+  cainiao_goods_name: 's-cainiao-goods-name',
+  cainiao_weight_grams: 's-cainiao-weight-grams',
+  sender_name: 's-sender-name',
+  sender_mobile: 's-sender-mobile',
+  sender_phone: 's-sender-phone',
+  sender_province: 's-sender-province',
+  sender_city: 's-sender-city',
+  sender_district: 's-sender-district',
+  sender_town: 's-sender-town',
+  sender_detail: 's-sender-detail',
+};
 
 let customers = [];
 let activeCustomer = null;
@@ -882,6 +1001,7 @@ function buildCustomerRow(c, index) {
     makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id, c.phone_number ? '' : 'phone')),
     makeButton(hasAddress ? '地址/状态' : '录地址', () => viewCustomer(c.id, hasAddress ? 'status' : 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
+    makeButton('菜鸟取号', () => createCainiaoWaybill(c.id), 'small blue'),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
     makeButton('快递单', () => openPrintPanel(c.id, COURIER_TEMPLATE_ID), 'small green'),
     makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
@@ -906,13 +1026,7 @@ async function viewCustomer(id, focusTarget='') {
     document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     document.getElementById('d-email').textContent = activeCustomer.email || '—';
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
-    document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
-    document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
-    document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
-    document.getElementById('d-courier-company').textContent = activeCustomer.courier_company || '未填写';
-    document.getElementById('d-courier-company-input').value = activeCustomer.courier_company || '';
-    document.getElementById('d-tracking-number').textContent = activeCustomer.tracking_number || '未填写';
-    document.getElementById('d-tracking-number-input').value = activeCustomer.tracking_number || '';
+    renderShippingDetail(activeCustomer);
     renderMoemailBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
     if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
@@ -921,6 +1035,16 @@ async function viewCustomer(id, focusTarget='') {
   } catch (err) {
     toast(err.message, 'error');
   }
+}
+
+function renderShippingDetail(customer) {
+  document.getElementById('d-address-input').value = customer.shipping_address || '';
+  document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(customer.shipping_status);
+  document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(customer.shipping_status);
+  document.getElementById('d-courier-company').textContent = customer.courier_company || '未填写';
+  document.getElementById('d-courier-company-input').value = customer.courier_company || '';
+  document.getElementById('d-tracking-number').textContent = customer.tracking_number || '未填写';
+  document.getElementById('d-tracking-number-input').value = customer.tracking_number || '';
 }
 
 function renderMoemailBox(c) {
@@ -970,6 +1094,37 @@ async function generateMoemail(id) {
     if (!res.ok) throw new Error(data.detail || '生成邮箱失败');
     toast(`已生成邮箱：${data.email}`, 'success');
     await loadCustomers();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function createCainiaoWaybillForActive() {
+  if (!activeCustomer) return;
+  await createCainiaoWaybill(activeCustomer.id);
+}
+
+async function createCainiaoWaybill(id) {
+  const c = customers.find(item => item.id === id) || await getCustomer(id);
+  if (!c.shipping_address) {
+    toast('请先录入客户收货地址', 'error');
+    return;
+  }
+  if (c.tracking_number && !confirm(`该客户已有快递单号「${c.tracking_number}」，继续向菜鸟重新取号吗？`)) return;
+  try {
+    const res = await fetch(`${API}/customers/${id}/cainiao-waybill`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ dry_run: false }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '菜鸟取号失败');
+    toast(`菜鸟取号成功：${data.tracking_number}`, 'success');
+    await loadCustomers();
+    if (activeCustomer && activeCustomer.id === id) {
+      activeCustomer = await getCustomer(id);
+      renderShippingDetail(activeCustomer);
+    }
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -1078,13 +1233,7 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
     activeCustomer = await getCustomer(activeCustomer.id);
-    document.getElementById('d-address-input').value = activeCustomer.shipping_address || '';
-    document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(activeCustomer.shipping_status);
-    document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(activeCustomer.shipping_status);
-    document.getElementById('d-courier-company').textContent = activeCustomer.courier_company || '未填写';
-    document.getElementById('d-courier-company-input').value = activeCustomer.courier_company || '';
-    document.getElementById('d-tracking-number').textContent = activeCustomer.tracking_number || '未填写';
-    document.getElementById('d-tracking-number-input').value = activeCustomer.tracking_number || '';
+    renderShippingDetail(activeCustomer);
     toast('地址和快递信息已保存', 'success');
     await loadCustomers();
   } catch (err) {
@@ -1110,20 +1259,30 @@ async function loadSettings() {
   try {
     const res = await fetch(API + '/settings');
     const s = await res.json();
-    document.getElementById('s-moemail-url').value = s.moemail_url || '';
-    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
-    document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-  } catch(e) {
+	    document.getElementById('s-moemail-url').value = s.moemail_url || '';
+	    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
+	    document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+	    for (const key of CAINIAO_SETTINGS) {
+	      const input = document.getElementById(SETTING_INPUT_IDS[key]);
+	      if (!input) continue;
+	      const value = s[key] || '';
+	      input.value = value === '***' ? '' : value;
+	    }
+	  } catch(e) {
     toast('加载设置失败', 'error');
   }
 }
 
 async function saveSettings() {
-  const payload = {
-    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
-    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
-    giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
-  };
+	  const payload = {
+	    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
+	    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
+	    giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
+	  };
+	  for (const key of CAINIAO_SETTINGS) {
+	    const input = document.getElementById(SETTING_INPUT_IDS[key]);
+	    if (input) payload[key] = input.value.trim();
+	  }
   try {
     const res = await fetch(API + '/settings', {
       method: 'PATCH',

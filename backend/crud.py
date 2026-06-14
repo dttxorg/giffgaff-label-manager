@@ -40,14 +40,16 @@ async def create_customer(data: CustomerCreate):
     shipping_address = normalize_optional_text(data.shipping_address)
     courier_company = normalize_optional_text(data.courier_company)
     tracking_number = normalize_optional_text(data.tracking_number)
+    courier_order_code = normalize_optional_text(data.courier_order_code)
+    courier_print_data = normalize_optional_text(data.courier_print_data)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO customers
                (phone_number, email, shipping_address, shipping_status, courier_company,
-                tracking_number, activation_date)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                tracking_number, courier_order_code, courier_print_data, activation_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (phone_number, data.email, shipping_address, data.shipping_status, courier_company, tracking_number,
-             data.activation_date.isoformat()),
+             courier_order_code, courier_print_data, data.activation_date.isoformat()),
         )
         await db.commit()
         return cursor.lastrowid
@@ -67,6 +69,10 @@ async def update_customer(customer_id: int, data: CustomerUpdate):
         fields.append("courier_company = ?"); values.append(normalize_optional_text(data.courier_company))
     if data.tracking_number is not None:
         fields.append("tracking_number = ?"); values.append(normalize_optional_text(data.tracking_number))
+    if data.courier_order_code is not None:
+        fields.append("courier_order_code = ?"); values.append(normalize_optional_text(data.courier_order_code))
+    if data.courier_print_data is not None:
+        fields.append("courier_print_data = ?"); values.append(normalize_optional_text(data.courier_print_data))
     if data.activation_date is not None:
         fields.append("activation_date = ?"); values.append(data.activation_date.isoformat())
     if not fields:

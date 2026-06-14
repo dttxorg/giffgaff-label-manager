@@ -15,6 +15,8 @@ async def init_db():
                 shipping_status TEXT NOT NULL DEFAULT '未发货',
                 courier_company TEXT,
                 tracking_number TEXT,
+                courier_order_code TEXT,
+                courier_print_data TEXT,
                 activation_date TEXT NOT NULL,
                 moemail_id TEXT,
                 moemail_address TEXT,
@@ -31,6 +33,8 @@ async def init_db():
         await _ensure_column(db, "customers", "shipping_status", "TEXT NOT NULL DEFAULT '未发货'")
         await _ensure_column(db, "customers", "courier_company", "TEXT")
         await _ensure_column(db, "customers", "tracking_number", "TEXT")
+        await _ensure_column(db, "customers", "courier_order_code", "TEXT")
+        await _ensure_column(db, "customers", "courier_print_data", "TEXT")
         await _ensure_shipping_status_values(db)
         await _ensure_nullable_phone_number(db)
         await db.execute("""
@@ -65,6 +69,8 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             shipping_status TEXT NOT NULL DEFAULT '未发货',
             courier_company TEXT,
             tracking_number TEXT,
+            courier_order_code TEXT,
+            courier_print_data TEXT,
             activation_date TEXT NOT NULL,
             moemail_id TEXT,
             moemail_address TEXT,
@@ -76,9 +82,11 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
     await db.execute("""
         INSERT INTO customers
             (id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
-             activation_date, moemail_id, moemail_address, share_link, is_moemail_auto, created_at)
+             courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
+             is_moemail_auto, created_at)
         SELECT id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
-               activation_date, moemail_id, moemail_address, share_link, is_moemail_auto, created_at
+               courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
+               is_moemail_auto, created_at
         FROM customers_old
     """)
     await db.execute("DROP TABLE customers_old")
