@@ -1084,6 +1084,15 @@
 	            <input type="url" id="s-giffgaff-url" placeholder="https://www.giffgaff.com/mobile-app">
 	            <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
 	          </div>
+	          <div class="setting-item wide">
+	            <label>桌面客户端 Agent Token</label>
+	            <input type="password" id="s-agent-token" placeholder="点击生成后复制到 Windows 客户端；留空保持原值">
+	            <span class="setting-hint" id="s-agent-token-source">未加载</span>
+	            <div class="button-row" style="margin-top:8px;">
+	              <button type="button" class="small blue" onclick="generateAgentToken()">生成/重置 Token</button>
+	              <button type="button" class="small ghost" onclick="copyAgentToken()">复制 Token</button>
+	            </div>
+	          </div>
 	          <div class="settings-section-title">菜鸟接口</div>
 	          <div class="setting-item">
 	            <label>API 地址</label>
@@ -1760,10 +1769,46 @@ function renderActivationDetail(customer) {
   const copyBtn = makeButton('复制', () => copyText(customer.initial_password || '', '初始密码已复制'), 'small ghost', !customer.initial_password);
   passwordLine.append(label, value, showBtn, copyBtn);
   box.appendChild(passwordLine);
+  const statusControl = document.createElement('div');
+  statusControl.className = 'button-row';
+  statusControl.style.marginTop = '10px';
+  const statusSelect = document.createElement('select');
+  statusSelect.className = 'table-select';
+  ACTIVATION_STATUSES.forEach(status => statusSelect.appendChild(new Option(status, status)));
+  statusSelect.value = ACTIVATION_STATUSES.includes(customer.activation_status) ? customer.activation_status : '未开始';
+  const saveStatusBtn = makeButton('保存激活状态', () => updateActivationStatusForActive(statusSelect.value), 'small blue');
+  const waitEsimBtn = makeButton('标记等待转 eSIM', () => updateActivationStatusForActive('等待转 eSIM'), 'small green');
+  const doneBtn = makeButton('标记已完成', () => updateActivationStatusForActive('已完成'), 'small green');
+  statusControl.append(statusSelect, saveStatusBtn, waitEsimBtn, doneBtn);
+  box.appendChild(statusControl);
   if (customer.activation_error) {
     const error = document.createElement('p');
     error.textContent = `最近错误：${customer.activation_error}`;
     box.appendChild(error);
+  }
+}
+
+async function updateActivationStatusForActive(status) {
+  if (!activeCustomer) return;
+  if (!confirm(`确认把客户 #${activeCustomer.id} 的激活状态改为「${status}」？`)) return;
+  try {
+    const res = await fetch(`${API}/customers/${activeCustomer.id}/activation-status`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        status,
+        step: 'admin',
+        message: `后台手动标记激活状态：${status}`,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '更新激活状态失败');
+    toast('激活状态已更新', 'success');
+    await loadCustomers();
+    activeCustomer = await getCustomer(activeCustomer.id);
+    renderActivationDetail(activeCustomer);
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
@@ -2089,6 +2134,8 @@ async function loadSettings() {
 	    document.getElementById('s-moemail-url').value = s.moemail_url || '';
 	    document.getElementById('s-moemail-key').value = s.moemail_api_key === '***' ? '' : (s.moemail_api_key || '');
 	    document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+	    document.getElementById('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
+	    document.getElementById('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
 	    for (const key of CAINIAO_SETTINGS) {
 	      const input = document.getElementById(SETTING_INPUT_IDS[key]);
 	      if (!input) continue;
@@ -2105,6 +2152,7 @@ async function saveSettings() {
 	    moemail_url: document.getElementById('s-moemail-url').value.trim() || null,
 	    moemail_api_key: document.getElementById('s-moemail-key').value.trim() || null,
 	    giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
+	    agent_api_token: document.getElementById('s-agent-token').value.trim() || null,
 	  };
 	  for (const key of CAINIAO_SETTINGS) {
 	    const input = document.getElementById(SETTING_INPUT_IDS[key]);
@@ -2123,6 +2171,29 @@ async function saveSettings() {
   } catch(err) {
     toast(err.message, 'error');
   }
+}
+
+async function generateAgentToken() {
+  if (!confirm('生成新 Token 后，旧的后台设置 Token 会失效；如果客户端正在使用旧 Token，需要重新复制。继续吗？')) return;
+  try {
+    const res = await fetch(API + '/settings/agent-token', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '生成 Token 失败');
+    document.getElementById('s-agent-token').value = data.token || '';
+    document.getElementById('s-agent-token-source').textContent = '已生成新 Token，请立即复制到 Windows 客户端。';
+    await copyText(data.token || '', 'Agent Token 已复制');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function copyAgentToken() {
+  const token = document.getElementById('s-agent-token').value.trim();
+  if (!token) {
+    toast('当前页面没有可复制的 Token；请点击生成/重置 Token', 'error');
+    return;
+  }
+  copyText(token, 'Agent Token 已复制');
 }
 
 function openSettings() {

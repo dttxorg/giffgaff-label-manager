@@ -10,16 +10,30 @@ class ApiError(RuntimeError):
 
 
 class AgentApi:
-    def __init__(self, server_url: str, token: str, timeout: float = 20.0):
+    def __init__(
+        self,
+        server_url: str,
+        token: str,
+        timeout: float = 20.0,
+        *,
+        cf_access_client_id: str = "",
+        cf_access_client_secret: str = "",
+    ):
         self.server_url = server_url.rstrip("/")
         self.token = token.strip()
         self.timeout = timeout
+        self.cf_access_client_id = cf_access_client_id.strip()
+        self.cf_access_client_secret = cf_access_client_secret.strip()
 
     def _url(self, path: str) -> str:
         return f"{self.server_url}{path}"
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token}"}
+        headers = {"Authorization": f"Bearer {self.token}"}
+        if self.cf_access_client_id and self.cf_access_client_secret:
+            headers["CF-Access-Client-Id"] = self.cf_access_client_id
+            headers["CF-Access-Client-Secret"] = self.cf_access_client_secret
+        return headers
 
     def _request(
         self,

@@ -152,20 +152,35 @@ def _is_authenticated(request: Request) -> bool:
     return hmac.compare_digest(cookie, _auth_token())
 
 
-def _is_agent_authenticated(request: Request) -> bool:
-    if not AGENT_API_TOKEN:
+async def _agent_api_tokens() -> list[str]:
+    tokens: list[str] = []
+    if AGENT_API_TOKEN:
+        tokens.append(AGENT_API_TOKEN)
+    try:
+        setting_token = (await _get_setting("agent_api_token")).strip()
+    except Exception:
+        setting_token = ""
+    if setting_token and setting_token not in tokens:
+        tokens.append(setting_token)
+    return tokens
+
+
+async def _is_agent_authenticated(request: Request) -> bool:
+    tokens = await _agent_api_tokens()
+    if not tokens:
         return False
     auth_header = request.headers.get("authorization", "")
     prefix = "Bearer "
     if not auth_header.startswith(prefix):
         return False
-    return hmac.compare_digest(auth_header[len(prefix):].strip(), AGENT_API_TOKEN)
+    incoming = auth_header[len(prefix):].strip()
+    return any(hmac.compare_digest(incoming, token) for token in tokens)
 
 
-def _require_agent_auth(request: Request):
-    if not AGENT_API_TOKEN:
-        raise HTTPException(status_code=503, detail="桌面客户端 API 未启用，请配置 AGENT_API_TOKEN")
-    if not _is_agent_authenticated(request):
+async def _require_agent_auth(request: Request):
+    if not await _agent_api_tokens():
+        raise HTTPException(status_code=503, detail="桌面客户端 API 未启用，请在系统设置生成桌面客户端 Token 或配置 AGENT_API_TOKEN")
+    if not await _is_agent_authenticated(request):
         raise HTTPException(status_code=401, detail="桌面客户端 Token 无效")
 
 
@@ -224,6 +239,18 @@ def _utc_now() -> str:
 
 def _masked_setting(rows: dict, key: str) -> str:
     return "***" if rows.get(key) else ""
+
+
+def _agent_token_source(rows: dict) -> str:
+    has_env = bool(AGENT_API_TOKEN)
+    has_setting = bool((rows.get("agent_api_token") or "").strip())
+    if has_env and has_setting:
+        return "环境变量 + 后台设置"
+    if has_env:
+        return "环境变量 AGENT_API_TOKEN"
+    if has_setting:
+        return "后台设置"
+    return "未配置"
 
 
 def _first_text(data: dict, *keys: str) -> str:
@@ -365,6 +392,8 @@ async def get_sys_settings():
         moemail_url=rows.get("moemail_url", ""),
         moemail_api_key="***" if rows.get("moemail_api_key") else "",
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+        agent_api_token="***" if rows.get("agent_api_token") else "",
+        agent_api_token_source=_agent_token_source(rows),
         cainiao_endpoint=rows.get("cainiao_endpoint", DEFAULT_CAINIAO_ENDPOINT),
         cainiao_app_key=rows.get("cainiao_app_key", ""),
         cainiao_app_secret=_masked_setting(rows, "cainiao_app_secret"),
@@ -395,6 +424,8 @@ async def update_settings(data: SystemSettings):
         await set_setting("moemail_api_key", data.moemail_api_key)
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
+    if data.agent_api_token not in (None, "***", ""):
+        await set_setting("agent_api_token", data.agent_api_token.strip())
     for key in CAINIAO_PLAIN_SETTINGS:
         value = getattr(data, key)
         if value is not None:
@@ -404,6 +435,13 @@ async def update_settings(data: SystemSettings):
         if value not in (None, "***", ""):
             await set_setting(key, value.strip())
     return {"ok": True}
+
+
+@app.post("/api/settings/agent-token", status_code=201)
+async def generate_agent_token():
+    token = "gg_agent_" + secrets.token_urlsafe(32)
+    await set_setting("agent_api_token", token)
+    return {"ok": True, "token": token}
 
 
 async def _get_setting(key: str) -> str:
@@ -664,6 +702,17 @@ async def edit_customer(customer_id: int, data: CustomerUpdate):
         await update_customer(customer_id, data)
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="该手机号已录入") from None
+    return {"ok": True}
+
+
+@app.patch("/api/customers/{customer_id}/activation-status", status_code=200)
+async def update_customer_activation_status(customer_id: int, data: ActivationStatusUpdate):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    await _apply_activation_status(customer_id, data.status, data.error)
+    message = data.message or f"后台手动标记激活状态：{data.status}"
+    await _insert_activation_log(customer_id, "info", data.step or "admin", message)
     return {"ok": True}
 
 
@@ -1028,7 +1077,7 @@ async def delete_sim_code(sim_code_id: int):
 
 @app.get("/api/agent/ping")
 async def agent_ping(request: Request):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     return {
         "ok": True,
         "server_time": _utc_now(),
@@ -1092,7 +1141,7 @@ async def _apply_activation_status(customer_id: int, status: str, error: Optiona
 
 @app.get("/api/agent/activation-tasks/next")
 async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute("BEGIN IMMEDIATE")
@@ -1103,8 +1152,10 @@ async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
                  AND sim_activation_code IS NOT NULL
                  AND sim_activation_code != ''
                  AND email != ''
+                 AND (phone_number IS NULL OR phone_number = '')
                  AND initial_password IS NOT NULL
                  AND initial_password != ''
+                 AND activated_at IS NULL
                ORDER BY created_at ASC, id ASC
                LIMIT 1""",
         )
@@ -1149,7 +1200,7 @@ async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
 
 @app.post("/api/agent/customers/{customer_id}/activation-log")
 async def add_agent_activation_log(customer_id: int, data: ActivationLogIn, request: Request):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -1159,7 +1210,7 @@ async def add_agent_activation_log(customer_id: int, data: ActivationLogIn, requ
 
 @app.patch("/api/agent/customers/{customer_id}/activation-status")
 async def update_agent_activation_status(customer_id: int, data: ActivationStatusUpdate, request: Request):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -1173,7 +1224,7 @@ async def update_agent_activation_status(customer_id: int, data: ActivationStatu
 
 @app.patch("/api/agent/customers/{customer_id}/activation-result")
 async def update_agent_activation_result(customer_id: int, data: ActivationResultUpdate, request: Request):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -1204,7 +1255,7 @@ async def update_agent_activation_result(customer_id: int, data: ActivationResul
 
 @app.get("/api/agent/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
 async def get_agent_customer_verification_code(customer_id: int, request: Request):
-    _require_agent_auth(request)
+    await _require_agent_auth(request)
     return await get_customer_verification_code(customer_id)
 
 

@@ -84,6 +84,8 @@ class SystemSettings(BaseModel):
     moemail_url: Optional[str] = None
     moemail_api_key: Optional[str] = None
     giffgaff_download_url: Optional[str] = None
+    agent_api_token: Optional[str] = None
+    agent_api_token_source: Optional[str] = None
     cainiao_endpoint: Optional[str] = None
     cainiao_app_key: Optional[str] = None
     cainiao_app_secret: Optional[str] = None

@@ -77,6 +77,12 @@ class PaymentCardConfig:
 
 
 @dataclass
+class CloudflareAccessConfig:
+    client_id: str = ""
+    client_secret: str = ""
+
+
+@dataclass
 class AppConfig:
     server_url: str = "http://127.0.0.1:8000"
     agent_token: str = ""
@@ -89,6 +95,7 @@ class AppConfig:
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
     activation_defaults: ActivationDefaults = field(default_factory=ActivationDefaults)
     payment_card: PaymentCardConfig = field(default_factory=PaymentCardConfig)
+    cloudflare_access: CloudflareAccessConfig = field(default_factory=CloudflareAccessConfig)
 
 
 def _merge_config(raw: dict[str, Any]) -> AppConfig:
@@ -102,12 +109,22 @@ def _merge_config(raw: dict[str, Any]) -> AppConfig:
     payment_card = PaymentCardConfig(**{
         k: v for k, v in card_raw.items() if k in PaymentCardConfig.__dataclass_fields__
     })
+    cf_raw = raw.get("cloudflare_access") if isinstance(raw.get("cloudflare_access"), dict) else {}
+    cloudflare_access = CloudflareAccessConfig(**{
+        k: v for k, v in cf_raw.items() if k in CloudflareAccessConfig.__dataclass_fields__
+    })
     values = {
         k: v
         for k, v in raw.items()
-        if k in AppConfig.__dataclass_fields__ and k not in {"proxy", "activation_defaults", "payment_card"}
+        if k in AppConfig.__dataclass_fields__ and k not in {"proxy", "activation_defaults", "payment_card", "cloudflare_access"}
     }
-    return AppConfig(**values, proxy=proxy, activation_defaults=activation_defaults, payment_card=payment_card)
+    return AppConfig(
+        **values,
+        proxy=proxy,
+        activation_defaults=activation_defaults,
+        payment_card=payment_card,
+        cloudflare_access=cloudflare_access,
+    )
 
 
 def load_config() -> AppConfig:

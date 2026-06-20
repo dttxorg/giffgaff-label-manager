@@ -26,7 +26,15 @@ from PySide6.QtWidgets import (
 
 from .api import AgentApi, ApiError
 from .automation import BrowserCommand, BrowserSession, test_browser_proxy
-from .config import AppConfig, ActivationDefaults, PaymentCardConfig, ProxyConfig, load_config, save_config
+from .config import (
+    AppConfig,
+    ActivationDefaults,
+    CloudflareAccessConfig,
+    PaymentCardConfig,
+    ProxyConfig,
+    load_config,
+    save_config,
+)
 
 
 class ApiWorker(QThread):
@@ -130,9 +138,14 @@ class MainWindow(QMainWindow):
         self.agent_token = QLineEdit()
         self.agent_token.setEchoMode(QLineEdit.Password)
         self.agent_id = QLineEdit()
+        self.cf_access_client_id = QLineEdit()
+        self.cf_access_client_secret = QLineEdit()
+        self.cf_access_client_secret.setEchoMode(QLineEdit.Password)
         form.addRow("后台地址", self.server_url)
         form.addRow("Agent Token", self.agent_token)
         form.addRow("客户端 ID", self.agent_id)
+        form.addRow("CF Access Client ID", self.cf_access_client_id)
+        form.addRow("CF Access Secret", self.cf_access_client_secret)
         row = QHBoxLayout()
         self.save_btn = QPushButton("保存设置")
         self.test_btn = QPushButton("测试连接")
@@ -307,6 +320,8 @@ class MainWindow(QMainWindow):
         self.server_url.setText(cfg.server_url)
         self.agent_token.setText(cfg.agent_token)
         self.agent_id.setText(cfg.agent_id)
+        self.cf_access_client_id.setText(cfg.cloudflare_access.client_id)
+        self.cf_access_client_secret.setText(cfg.cloudflare_access.client_secret)
         self.activation_url.setText(cfg.activation_url)
         self.browser_channel.setCurrentText(cfg.browser_channel)
         self.user_data_dir.setText(cfg.user_data_dir)
@@ -376,6 +391,10 @@ class MainWindow(QMainWindow):
                 expiry_date=self.card_expiry.text().strip(),
                 security_code=self.card_security_code.text().strip(),
             ),
+            cloudflare_access=CloudflareAccessConfig(
+                client_id=self.cf_access_client_id.text().strip(),
+                client_secret=self.cf_access_client_secret.text().strip(),
+            ),
         )
 
     def save_settings(self) -> None:
@@ -390,7 +409,12 @@ class MainWindow(QMainWindow):
 
     def api(self) -> AgentApi:
         cfg = self.collect_config()
-        return AgentApi(cfg.server_url, cfg.agent_token)
+        return AgentApi(
+            cfg.server_url,
+            cfg.agent_token,
+            cf_access_client_id=cfg.cloudflare_access.client_id,
+            cf_access_client_secret=cfg.cloudflare_access.client_secret,
+        )
 
     def start_api_worker(self, action: str, fn: Callable[[AgentApi], Any]) -> None:
         api = self.api()

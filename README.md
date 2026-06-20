@@ -81,11 +81,18 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 export AGENT_API_TOKEN="换成一串很长的随机密钥"
 ```
 
-本地自动化客户端请求 `/api/agent/*` 时需要带：
+也可以在后台「系统设置」里点击「生成/重置 Token」，复制到 Windows 客户端的 `Agent Token`。本地自动化客户端请求 `/api/agent/*` 时需要带：
 
 ```text
 Authorization: Bearer <AGENT_API_TOKEN>
 ```
+
+如果后台域名前面启用了 Cloudflare Access/Zero Trust 防护，`Authorization` Token 只有在请求先通过 Cloudflare 后端才会生效。此时有两种方式：
+
+- 在 Cloudflare 给 `/api/agent/*` 配置 bypass/service-auth 策略；或
+- 创建 Cloudflare Access Service Token，并在 Windows 客户端填写 `CF Access Client ID` 和 `CF Access Secret`。
+
+为了避免旧的手工客户被客户端重复领取，桌面客户端领取任务时会跳过已经填了手机号的客户。对于已手工完成但还显示「等待客户端领取」的客户，可在客户详情中手动标记为「等待转 eSIM」或「已完成」。
 
 ### 4. 配置 MoEmail
 
