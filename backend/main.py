@@ -20,7 +20,7 @@ from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
-    SimCodeImport, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
+    SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
     ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, DomainInfo, LabelConfig
 )
 from crud import (
@@ -43,6 +43,7 @@ ACTIVATION_STATUSES = {
     "等待人工支付", "等待转 eSIM", "已完成", "失败",
 }
 SIM_CODE_STATUSES = {"未分配", "已分配", "激活中", "已使用", "失败", "作废"}
+DETACHABLE_ACTIVATION_STATUSES = {"未开始", "已分配激活码", "等待客户端领取", "失败"}
 DEFAULT_CAINIAO_ENDPOINT = "https://eco.taobao.com/router/rest"
 CAINIAO_PLAIN_SETTINGS = (
     "cainiao_endpoint",
@@ -441,6 +442,41 @@ async def _has_available_sim_code() -> bool:
         return bool(row)
 
 
+async def _create_customer_without_activation(data: CustomerCreate, email_bundle: dict) -> int:
+    phone_number = normalize_optional_text(data.phone_number)
+    shipping_address = normalize_optional_text(data.shipping_address)
+    courier_company = normalize_optional_text(data.courier_company)
+    tracking_number = normalize_optional_text(data.tracking_number)
+    courier_order_code = normalize_optional_text(data.courier_order_code)
+    courier_print_data = normalize_optional_text(data.courier_print_data)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """INSERT INTO customers
+               (phone_number, email, shipping_address, shipping_status, courier_company,
+                tracking_number, courier_order_code, courier_print_data, activation_date,
+                moemail_id, moemail_address, share_link, is_moemail_auto, activation_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                phone_number,
+                email_bundle.get("email", ""),
+                shipping_address,
+                data.shipping_status,
+                courier_company,
+                tracking_number,
+                courier_order_code,
+                courier_print_data,
+                data.activation_date.isoformat(),
+                email_bundle.get("moemail_id"),
+                email_bundle.get("moemail_address"),
+                email_bundle.get("share_link"),
+                1 if email_bundle.get("is_moemail_auto") else 0,
+                "未开始",
+            ),
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
 async def _create_customer_with_activation(data: CustomerCreate, email_bundle: dict, initial_password: str) -> tuple[int, dict]:
     phone_number = normalize_optional_text(data.phone_number)
     shipping_address = normalize_optional_text(data.shipping_address)
@@ -572,8 +608,8 @@ async def add_customer(data: CustomerCreate):
             if existing:
                 raise HTTPException(status_code=409, detail="该手机号已录入")
 
-    if not await _has_available_sim_code():
-        raise HTTPException(status_code=400, detail="没有可用 SIM 激活码，请先导入激活码")
+    if data.use_sim_code and not await _has_available_sim_code():
+        raise HTTPException(status_code=400, detail="没有可用 SIM 激活码，请先导入激活码，或选择不使用激活码")
 
     try:
         email = (data.email or "").strip()
@@ -582,8 +618,16 @@ async def add_customer(data: CustomerCreate):
         else:
             email_bundle = await _generate_moemail_account()
             email_bundle["is_moemail_auto"] = True
-        initial_password = _generate_initial_password()
-        customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
+        if data.use_sim_code:
+            initial_password = _generate_initial_password()
+            customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
+            message = "客户已录入，已分配激活码并创建激活任务"
+            sim_activation_code = sim["code"]
+        else:
+            initial_password = None
+            customer_id = await _create_customer_without_activation(data, email_bundle)
+            message = "客户已录入，未使用激活码"
+            sim_activation_code = None
     except aiosqlite.IntegrityError:
         raise HTTPException(status_code=409, detail="该手机号已录入")
     except HTTPException:
@@ -593,9 +637,9 @@ async def add_customer(data: CustomerCreate):
 
     return {
         "customer_id": customer_id,
-        "message": "客户已录入，已分配激活码并创建激活任务",
+        "message": message,
         "email": email_bundle.get("email", ""),
-        "sim_activation_code": sim["code"],
+        "sim_activation_code": sim_activation_code,
         "initial_password": initial_password,
     }
 
@@ -808,23 +852,50 @@ def _parse_sim_codes(data: SimCodeImport) -> list[str]:
     return codes
 
 
+def _sim_code_out(row) -> SimCodeOut:
+    return SimCodeOut(
+        id=row["id"],
+        code=row["code"],
+        status=_normalize_sim_code_status(row["status"]),
+        customer_id=row["customer_id"],
+        notes=row["notes"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+async def _detach_sim_code_from_customer(
+    db: aiosqlite.Connection,
+    customer_id: int,
+    sim_code: str,
+    reason: str,
+) -> None:
+    await db.execute(
+        """UPDATE customers
+           SET sim_code_id = NULL,
+               sim_activation_code = NULL,
+               initial_password = NULL,
+               activation_status = '未开始',
+               activation_error = NULL,
+               activated_at = NULL,
+               automation_lock_owner = NULL,
+               automation_locked_at = NULL
+           WHERE id = ?""",
+        (customer_id,),
+    )
+    await db.execute(
+        """INSERT INTO activation_logs (customer_id, level, step, message)
+           VALUES (?, 'info', 'sim-code', ?)""",
+        (customer_id, f"已取消使用 SIM 激活码 {sim_code}（{reason}）"),
+    )
+
+
 @app.get("/api/sim-codes", response_model=list[SimCodeOut])
 async def list_sim_codes():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall("SELECT * FROM sim_codes ORDER BY id DESC LIMIT 1000")
-    return [
-        SimCodeOut(
-            id=row["id"],
-            code=row["code"],
-            status=_normalize_sim_code_status(row["status"]),
-            customer_id=row["customer_id"],
-            notes=row["notes"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
+    return [_sim_code_out(row) for row in rows]
 
 
 @app.post("/api/sim-codes/import", status_code=201)
@@ -847,6 +918,110 @@ async def import_sim_codes(data: SimCodeImport):
         "duplicates": len(codes) - imported,
         "total": len(codes),
     }
+
+
+@app.patch("/api/sim-codes/{sim_code_id}", response_model=SimCodeOut)
+async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
+    status = _normalize_sim_code_status(data.status)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            row = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
+            if not row:
+                raise HTTPException(status_code=404, detail="激活码不存在")
+
+            customer_id = row["customer_id"]
+            if customer_id:
+                customer = await fetch_one(
+                    db,
+                    "SELECT id, activation_status FROM customers WHERE id = ?",
+                    (customer_id,),
+                )
+                if not customer:
+                    customer_id = None
+                elif status in {"未分配", "作废"}:
+                    activation_status = _normalize_activation_status(customer["activation_status"])
+                    if activation_status not in DETACHABLE_ACTIVATION_STATUSES:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                f"该激活码已关联客户 {customer_id}，当前激活状态为「{activation_status}」，"
+                                "不能直接改为未分配或作废"
+                            ),
+                        )
+                    await _detach_sim_code_from_customer(
+                        db,
+                        customer_id,
+                        row["code"],
+                        "标记为可用" if status == "未分配" else "标记为不用",
+                    )
+                    customer_id = None
+
+            if status in {"未分配", "作废"}:
+                customer_id = None
+
+            await db.execute(
+                """UPDATE sim_codes
+                   SET status = ?, customer_id = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (status, customer_id, sim_code_id),
+            )
+            updated = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
+            await db.commit()
+            return _sim_code_out(updated)
+        except HTTPException:
+            await db.rollback()
+            raise
+        except Exception:
+            await db.rollback()
+            raise
+
+
+@app.delete("/api/sim-codes/{sim_code_id}", status_code=200)
+async def delete_sim_code(sim_code_id: int):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            row = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
+            if not row:
+                raise HTTPException(status_code=404, detail="激活码不存在")
+
+            customer_id = row["customer_id"]
+            if customer_id:
+                customer = await fetch_one(
+                    db,
+                    "SELECT id, activation_status FROM customers WHERE id = ?",
+                    (customer_id,),
+                )
+                if customer:
+                    activation_status = _normalize_activation_status(customer["activation_status"])
+                    if activation_status in DETACHABLE_ACTIVATION_STATUSES:
+                        await _detach_sim_code_from_customer(db, customer_id, row["code"], "删除激活码")
+                    else:
+                        await db.execute(
+                            "UPDATE customers SET sim_code_id = NULL WHERE id = ?",
+                            (customer_id,),
+                        )
+                        await db.execute(
+                            """INSERT INTO activation_logs (customer_id, level, step, message)
+                               VALUES (?, 'info', 'sim-code', ?)""",
+                            (
+                                customer_id,
+                                f"已从激活码库删除 SIM 激活码记录 {row['code']}，客户当前激活信息保留",
+                            ),
+                        )
+
+            await db.execute("DELETE FROM sim_codes WHERE id = ?", (sim_code_id,))
+            await db.commit()
+            return {"ok": True}
+        except HTTPException:
+            await db.rollback()
+            raise
+        except Exception:
+            await db.rollback()
+            raise
 
 
 # ── 桌面客户端 API ──

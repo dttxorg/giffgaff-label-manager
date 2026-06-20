@@ -308,7 +308,7 @@
       align-items: end;
     }
     /* 收货地址字段拉宽到 2 列；按钮放该行末 */
-    .form-grid > div:nth-child(4) { grid-column: span 2; }
+    .form-grid > .wide-field { grid-column: span 2; }
     .form-grid > button[type="submit"] {
       justify-self: end;
       padding: 10px 28px;
@@ -377,6 +377,12 @@
       font-family: "SFMono-Regular", "Menlo", "Courier New", monospace;
       font-size: var(--fs-sm);
       word-break: break-all;
+    }
+    .table-select {
+      min-width: 140px;
+      min-height: 30px;
+      padding: 6px 28px 6px 10px;
+      font-size: var(--fs-xs);
     }
     .address-preview {
       margin-top: 6px;
@@ -823,7 +829,7 @@
       header { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px var(--container-pad); }
       .header-actions { width: 100%; justify-content: flex-start; }
       .form-grid { grid-template-columns: 1fr; }
-      .form-grid > div:nth-child(4) { grid-column: auto; }
+      .form-grid > .wide-field { grid-column: auto; }
       .form-grid > button[type="submit"] { justify-self: start; grid-column: 1 / -1; }
       .inline-form,
       .inline-form.three-col,
@@ -882,7 +888,7 @@
     <div class="card">
       <div class="card-header">
         <span>添加新客户</span>
-        <span class="muted">先选开通日期即可添加；手机号注册后再补充</span>
+        <span class="muted">先选开通日期即可添加；可选择是否使用激活码</span>
       </div>
       <div class="card-body">
         <form class="form-grid" id="add-form">
@@ -899,6 +905,13 @@
             <input type="date" id="act-date" required>
           </div>
           <div>
+            <label>激活码</label>
+            <select id="use-sim-code">
+              <option value="true">使用激活码</option>
+              <option value="false">不使用激活码</option>
+            </select>
+          </div>
+          <div class="wide-field">
             <label>收货地址</label>
             <input type="text" id="shipping-address" placeholder="成交后可补充">
           </div>
@@ -971,6 +984,7 @@
               <th>状态</th>
               <th>客户 ID</th>
               <th>更新时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="sim-code-table"></tbody>
@@ -1273,6 +1287,15 @@ const DEMO_CUSTOMER = {
 	};
 	const SHIPPING_STATUSES = ['未发货', '已发货', '已收货'];
 const ACTIVATION_STATUSES = ['未开始', '已分配激活码', '等待客户端领取', '激活中', '等待人工支付', '等待转 eSIM', '已完成', '失败'];
+const SIM_CODE_STATUSES = ['未分配', '作废', '已分配', '激活中', '已使用', '失败'];
+const SIM_CODE_STATUS_LABELS = {
+  '未分配': '使用（可分配）',
+  '作废': '不用',
+  '已分配': '已分配',
+  '激活中': '激活中',
+  '已使用': '已使用',
+  '失败': '失败',
+};
 	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '发货状态', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
 const CAINIAO_SETTINGS = [
@@ -1437,7 +1460,7 @@ function renderSimCodes() {
   if (!simCodes.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 5;
+    cell.colSpan = 6;
     cell.className = 'empty-state';
     cell.textContent = '暂无激活码';
     row.appendChild(cell);
@@ -1450,15 +1473,90 @@ function renderSimCodes() {
     const codeCell = appendTextCell(row, item.code);
     codeCell.className = 'mono';
     const statusCell = document.createElement('td');
-    const badge = document.createElement('span');
-    badge.className = `badge ${activationBadgeClass(item.status)}`;
-    badge.textContent = item.status;
-    statusCell.appendChild(badge);
+    statusCell.appendChild(buildSimCodeStatusSelect(item));
     row.appendChild(statusCell);
     appendTextCell(row, item.customer_id ? String(item.customer_id) : '—');
     appendTextCell(row, item.updated_at);
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions-cell';
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.appendChild(makeButton('删除', () => deleteSimCode(item.id, item.code), 'small danger'));
+    actionsCell.appendChild(actions);
+    row.appendChild(actionsCell);
     return row;
   }));
+}
+
+function buildSimCodeStatusSelect(item) {
+  const select = document.createElement('select');
+  select.className = 'table-select';
+  SIM_CODE_STATUSES.forEach(status => {
+    select.appendChild(new Option(SIM_CODE_STATUS_LABELS[status] || status, status));
+  });
+  select.value = SIM_CODE_STATUSES.includes(item.status) ? item.status : '未分配';
+  select.addEventListener('change', () => updateSimCodeStatus(item.id, select.value, select));
+  return select;
+}
+
+async function refreshAfterSimCodeChange(affectedCustomerId=null) {
+  await Promise.all([loadSimCodes(), loadCustomers()]);
+  const detailCustomerId = affectedCustomerId || activeCustomer?.id;
+  if (activeCustomer && detailCustomerId === activeCustomer.id) {
+    try {
+      activeCustomer = await getCustomer(activeCustomer.id);
+      renderActivationDetail(activeCustomer);
+    } catch (_) {
+      activeCustomer = null;
+      closeDetail();
+    }
+  }
+}
+
+async function updateSimCodeStatus(id, status, selectEl) {
+  const item = simCodes.find(code => code.id === id);
+  const oldStatus = item?.status || '未分配';
+  if (item?.customer_id && ['未分配', '作废'].includes(status)) {
+    const actionText = status === '未分配' ? '重新设为可分配' : '标记为不用';
+    if (!confirm(`激活码「${item.code}」已分配给客户 ${item.customer_id}。\n${actionText} 会在激活尚未开始时取消该客户的激活任务，继续吗？`)) {
+      selectEl.value = oldStatus;
+      return;
+    }
+  }
+  selectEl.disabled = true;
+  try {
+    const res = await fetch(`${API}/sim-codes/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '更新激活码状态失败');
+    toast(`激活码状态已更新为：${SIM_CODE_STATUS_LABELS[status] || status}`, 'success');
+    await refreshAfterSimCodeChange(item?.customer_id || null);
+  } catch (err) {
+    selectEl.value = oldStatus;
+    toast(err.message, 'error');
+  } finally {
+    selectEl.disabled = false;
+  }
+}
+
+async function deleteSimCode(id, code) {
+  const item = simCodes.find(sim => sim.id === id);
+  const relatedHint = item?.customer_id
+    ? `\n该激活码已关联客户 ${item.customer_id}。如果客户激活尚未开始，会同时取消该客户的激活任务；如果已开始或已完成，只删除码库记录并保留客户激活信息。`
+    : '';
+  if (!confirm(`确认删除激活码「${code}」？${relatedHint}`)) return;
+  try {
+    const res = await fetch(`${API}/sim-codes/${id}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '删除激活码失败');
+    toast('激活码已删除', 'success');
+    await refreshAfterSimCodeChange(item?.customer_id || null);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 function appendTextCell(row, value) {
@@ -1839,6 +1937,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const courierCompany = document.getElementById('courier-company').value.trim();
   const trackingNumber = document.getElementById('tracking-number').value.trim();
   const actDate = document.getElementById('act-date').value;
+  const useSimCode = document.getElementById('use-sim-code').value === 'true';
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '处理中...';
@@ -1854,6 +1953,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
         courier_company: courierCompany,
         tracking_number: trackingNumber,
         activation_date: actDate,
+        use_sim_code: useSimCode,
       }),
     });
 	    const data = await res.json();

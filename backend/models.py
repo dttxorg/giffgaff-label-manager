@@ -18,6 +18,7 @@ class CustomerCreate(BaseModel):
     courier_order_code: Optional[str] = None
     courier_print_data: Optional[str] = None
     activation_date: date
+    use_sim_code: bool = True
 
 
 class CustomerUpdate(BaseModel):
@@ -119,6 +120,10 @@ class CainiaoWaybillRequest(BaseModel):
 class SimCodeImport(BaseModel):
     codes: Optional[list[str]] = None
     text: Optional[str] = None
+
+
+class SimCodeUpdate(BaseModel):
+    status: SimCodeStatus
 
 
 class SimCodeOut(BaseModel):
