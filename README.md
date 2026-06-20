@@ -131,7 +131,9 @@ GET   /api/agent/customers/{id}/verification-code
 - 显示并复制邮箱、初始密码、SIM 激活码和收货地址
 - 支持不使用代理、系统代理、自定义 HTTP/HTTPS/SOCKS5 代理
 - 可测试浏览器出口 IP
-- 打开本机 Edge/Chrome/Chromium 并尝试预填 giffgaff 激活页面
+- 打开本机 Edge/Chrome/Chromium 并按实测流程预填 giffgaff 激活页面
+- 固定选择 Pay as you go、£10 top-up，自动填写本机预设英国地址和支付卡
+- 支付完成后自动打开支付方式页面并移除保存的信用卡
 - 刷新 MoEmail 验证码，复制或填入正在运行的浏览器页面
 - 手动标记等待人工支付、等待转 eSIM、已完成或失败
 

@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from .api import AgentApi, ApiError
 from .automation import BrowserCommand, BrowserSession, test_browser_proxy
-from .config import AppConfig, ProxyConfig, load_config, save_config
+from .config import AppConfig, ActivationDefaults, PaymentCardConfig, ProxyConfig, load_config, save_config
 
 
 class ApiWorker(QThread):
@@ -115,6 +115,7 @@ class MainWindow(QMainWindow):
         left.addWidget(self._build_connection_group())
         left.addWidget(self._build_proxy_group())
         left.addWidget(self._build_browser_group())
+        left.addWidget(self._build_activation_defaults_group())
         left.addStretch(1)
 
         right.addWidget(self._build_task_group())
@@ -185,6 +186,40 @@ class MainWindow(QMainWindow):
         form.addRow(self.headless)
         return group
 
+    def _build_activation_defaults_group(self) -> QGroupBox:
+        group = QGroupBox("激活自动化预设")
+        form = QFormLayout(group)
+        self.default_first_name = QLineEdit()
+        self.default_last_name = QLineEdit()
+        self.default_postcode = QLineEdit()
+        self.default_address_line1 = QLineEdit()
+        self.default_address_line2 = QLineEdit()
+        self.default_town = QLineEdit()
+        self.default_address_choice_index = QLineEdit()
+        self.default_topup_amount = QLineEdit()
+        self.card_number = QLineEdit()
+        self.card_number.setEchoMode(QLineEdit.Password)
+        self.card_name = QLineEdit()
+        self.card_expiry = QLineEdit()
+        self.card_expiry.setPlaceholderText("MM/YY")
+        self.card_security_code = QLineEdit()
+        self.card_security_code.setEchoMode(QLineEdit.Password)
+        self.auto_remove_saved_card = QCheckBox("支付后自动解绑银行卡")
+        form.addRow("First name", self.default_first_name)
+        form.addRow("Last name", self.default_last_name)
+        form.addRow("UK Postcode", self.default_postcode)
+        form.addRow("Address line 1", self.default_address_line1)
+        form.addRow("Address line 2", self.default_address_line2)
+        form.addRow("Town", self.default_town)
+        form.addRow("地址候选序号", self.default_address_choice_index)
+        form.addRow("充值金额 £", self.default_topup_amount)
+        form.addRow("Card number", self.card_number)
+        form.addRow("Name on card", self.card_name)
+        form.addRow("Expiry date", self.card_expiry)
+        form.addRow("Security code", self.card_security_code)
+        form.addRow(self.auto_remove_saved_card)
+        return group
+
     def _build_task_group(self) -> QGroupBox:
         group = QGroupBox("当前任务")
         layout = QGridLayout(group)
@@ -223,14 +258,17 @@ class MainWindow(QMainWindow):
         self.stop_browser_btn = QPushButton("停止浏览器")
         self.refresh_code_btn = QPushButton("刷新验证码")
         self.fill_code_btn = QPushButton("填入验证码")
+        self.remove_card_btn = QPushButton("自动解绑银行卡")
         self.start_browser_btn.clicked.connect(self.start_browser)
         self.stop_browser_btn.clicked.connect(self.stop_browser)
         self.refresh_code_btn.clicked.connect(self.refresh_code)
         self.fill_code_btn.clicked.connect(self.fill_code)
+        self.remove_card_btn.clicked.connect(self.remove_saved_card)
         row1.addWidget(self.start_browser_btn)
         row1.addWidget(self.stop_browser_btn)
         row1.addWidget(self.refresh_code_btn)
         row1.addWidget(self.fill_code_btn)
+        row1.addWidget(self.remove_card_btn)
         layout.addLayout(row1)
 
         result_row = QHBoxLayout()
@@ -280,6 +318,19 @@ class MainWindow(QMainWindow):
         self.proxy_port.setText(cfg.proxy.port)
         self.proxy_username.setText(cfg.proxy.username)
         self.proxy_password.setText(cfg.proxy.password)
+        self.default_first_name.setText(cfg.activation_defaults.first_name)
+        self.default_last_name.setText(cfg.activation_defaults.last_name)
+        self.default_postcode.setText(cfg.activation_defaults.postcode)
+        self.default_address_line1.setText(cfg.activation_defaults.address_line1)
+        self.default_address_line2.setText(cfg.activation_defaults.address_line2)
+        self.default_town.setText(cfg.activation_defaults.town)
+        self.default_address_choice_index.setText(str(cfg.activation_defaults.address_choice_index))
+        self.default_topup_amount.setText(cfg.activation_defaults.topup_amount)
+        self.auto_remove_saved_card.setChecked(cfg.activation_defaults.auto_remove_saved_card)
+        self.card_number.setText(cfg.payment_card.card_number)
+        self.card_name.setText(cfg.payment_card.name_on_card)
+        self.card_expiry.setText(cfg.payment_card.expiry_date)
+        self.card_security_code.setText(cfg.payment_card.security_code)
         self.update_proxy_fields()
 
     def collect_config(self) -> AppConfig:
@@ -287,6 +338,10 @@ class MainWindow(QMainWindow):
             slow_mo = int(self.slow_mo_ms.text().strip() or "0")
         except ValueError:
             slow_mo = 0
+        try:
+            address_choice_index = int(self.default_address_choice_index.text().strip() or "1")
+        except ValueError:
+            address_choice_index = 1
         return AppConfig(
             server_url=self.server_url.text().strip(),
             agent_token=self.agent_token.text().strip(),
@@ -303,6 +358,23 @@ class MainWindow(QMainWindow):
                 port=self.proxy_port.text().strip(),
                 username=self.proxy_username.text().strip(),
                 password=self.proxy_password.text(),
+            ),
+            activation_defaults=ActivationDefaults(
+                first_name=self.default_first_name.text().strip(),
+                last_name=self.default_last_name.text().strip(),
+                postcode=self.default_postcode.text().strip(),
+                address_line1=self.default_address_line1.text().strip(),
+                address_line2=self.default_address_line2.text().strip(),
+                town=self.default_town.text().strip(),
+                address_choice_index=max(1, address_choice_index),
+                topup_amount=self.default_topup_amount.text().strip() or "10",
+                auto_remove_saved_card=self.auto_remove_saved_card.isChecked(),
+            ),
+            payment_card=PaymentCardConfig(
+                card_number=self.card_number.text().strip(),
+                name_on_card=self.card_name.text().strip(),
+                expiry_date=self.card_expiry.text().strip(),
+                security_code=self.card_security_code.text().strip(),
             ),
         )
 
@@ -424,6 +496,13 @@ class MainWindow(QMainWindow):
         else:
             self.copy_text(self.last_code)
             self.log("浏览器自动化未运行，验证码已复制到剪贴板")
+
+    def remove_saved_card(self) -> None:
+        if self.browser_worker and self.browser_worker.isRunning():
+            self.browser_worker.enqueue(BrowserCommand("remove_card"))
+            self.log("已发送自动解绑银行卡指令")
+        else:
+            QMessageBox.information(self, "浏览器未运行", "请先打开并预填，保持浏览器登录状态后再自动解绑银行卡")
 
     def on_api_success(self, action: str, data: object) -> None:
         if action == "ping":
