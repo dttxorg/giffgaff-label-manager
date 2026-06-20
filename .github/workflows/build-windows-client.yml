@@ -23,6 +23,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Create venv with selected Python
+        shell: pwsh
+        run: python -m venv .venv
+
       - name: Build Windows executable
         shell: pwsh
         run: .\build_windows.ps1
