@@ -1356,6 +1356,19 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function todayDateValue() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function resetAddFormDefaults() {
+  const dateInput = document.getElementById('act-date');
+  const useSimCodeInput = document.getElementById('use-sim-code');
+  if (dateInput) dateInput.value = todayDateValue();
+  if (useSimCodeInput) useSimCodeInput.value = 'true';
+}
+
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
@@ -1960,6 +1973,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
 	    if (!res.ok) throw new Error(data.detail || '添加失败');
 	    toast(data.message || '添加成功', 'success');
 	    e.target.reset();
+	    resetAddFormDefaults();
 	    await Promise.all([loadCustomers(), loadSimCodes()]);
 	  } catch(err) {
 	    toast(err.message, 'error');
@@ -2574,6 +2588,7 @@ document.getElementById('label-canvas').onclick = e => {
 async function initApp() {
   if (appStarted) return;
   appStarted = true;
+  resetAddFormDefaults();
   await Promise.all([loadCustomers(), loadSimCodes(), loadSettings(), loadLabelConfig()]);
 }
 
