@@ -92,6 +92,8 @@ class AppConfig:
     user_data_dir: str = field(default_factory=default_user_data_dir)
     headless: bool = False
     slow_mo_ms: int = 120
+    page_timeout_ms: int = 120000
+    step_timeout_ms: int = 15000
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
     activation_defaults: ActivationDefaults = field(default_factory=ActivationDefaults)
     payment_card: PaymentCardConfig = field(default_factory=PaymentCardConfig)

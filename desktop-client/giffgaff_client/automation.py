@@ -81,15 +81,29 @@ class BrowserSession:
             if command.name == "stop":
                 self.stop_requested = True
                 break
-            if command.name == "fill_code":
-                self._fill_verification_code(page, command.value)
-            if command.name == "remove_card":
-                self._remove_saved_card(page)
+            try:
+                if command.name == "fill_code":
+                    self._fill_verification_code(page, command.value)
+                elif command.name == "continue":
+                    self._continue_from_current_page(page)
+                elif command.name == "remove_card":
+                    self._remove_saved_card(page)
+            except Exception as exc:
+                self.log(f"执行 {command.name} 指令失败：{exc}；浏览器会保持打开，可等待页面稳定后再点“继续当前页面”")
 
     def _open_and_prefill(self, page: Page) -> None:
         url = self.config.activation_url.strip() or "https://www.giffgaff.com/activate"
         self.log(f"打开激活页面：{url}")
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        navigation_timed_out = False
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=self._page_timeout())
+        except PlaywrightTimeoutError:
+            navigation_timed_out = True
+            self.log("打开激活页面超时，但浏览器会保持打开；页面加载完成后可点击“继续当前页面”")
+        if navigation_timed_out:
+            self._wait_short(page, 1)
+        else:
+            self._wait_ready(page)
         self._maybe_accept_cookies(page)
 
         sim_code = str(self.task.get("sim_activation_code") or "")
@@ -162,6 +176,76 @@ class BrowserSession:
             password = str(self.task.get("initial_password") or "")
             if password:
                 self._continue_after_password_if_visible(page, password)
+
+    def _continue_from_current_page(self, page: Page) -> None:
+        self.log("开始从当前页面继续自动化...")
+        self._wait_ready(page)
+        self._maybe_accept_cookies(page)
+        sim_code = str(self.task.get("sim_activation_code") or "")
+        email = str(self.task.get("email") or "")
+        password = str(self.task.get("initial_password") or "")
+
+        if sim_code and self._page_has_text(page, [r"Let's activate your SIM", r"activation code"]):
+            filled = self._try_fill_any_frame(
+                page,
+                sim_code,
+                labels=[r"activation code", r"SIM code", r"code"],
+                placeholders=[r"activation", r"code"],
+                selectors=[
+                    "input[name*='activation' i]",
+                    "input[id*='activation' i]",
+                    "input[name*='code' i]",
+                    "input[id*='code' i]",
+                ],
+            )
+            if filled and self._try_click_button(page, [r"activate your SIM", r"continue", r"activate", r"next"]):
+                self.log("已从激活码页继续")
+                self._wait_ready(page)
+
+        if email and self._page_has_text(page, [r"What.?s your email address", r"Your email"]):
+            filled = self._try_fill_any_frame(
+                page,
+                email,
+                labels=[r"email", r"e-mail"],
+                placeholders=[r"email", r"e-mail"],
+                selectors=["input[type='email']", "input[name*='email' i]", "input[id*='email' i]"],
+            )
+            if filled and self._try_click_button(page, [r"next"]):
+                self.log("已从邮箱页继续，等待验证码页")
+                self._wait_ready(page)
+
+        if self._page_has_text(page, [r"Confirm your email", r"Enter verification code"]):
+            existing_code = self._first_input_value(
+                page,
+                [
+                    "input[name*='verification' i]",
+                    "input[id*='verification' i]",
+                    "input[name*='code' i]",
+                    "input[id*='code' i]",
+                    "input[inputmode='numeric']",
+                    "input[type='tel']",
+                ],
+            )
+            if re.search(r"\d{6}", existing_code or ""):
+                if self._try_click_button(page, [r"confirm", r"continue", r"next"]):
+                    self.log("检测到验证码已填写，已提交并继续")
+                    self._wait_ready(page)
+            else:
+                self.log("当前在邮箱验证码页：请先刷新/填入验证码，再点“继续当前页面”或“填入验证码”")
+                return
+
+        if password:
+            self._continue_after_password_if_visible(page, password)
+
+        self._continue_registration_preferences(page)
+        self._continue_activation_checkout(page)
+
+        if self._page_has_text(page, [r"Payment", r"Card details"]):
+            self._fill_payment_details(page)
+            return
+
+        self._auto_remove_saved_card_if_ready(page)
+        self.log("继续当前页面执行完毕；如页面仍未完成，请等待加载后再次点击“继续当前页面”。")
 
     def _continue_after_password_if_visible(self, page: Page, password: str) -> None:
         if not self._page_has_text(page, [r"Create a password", r"Your password"]):
@@ -239,10 +323,36 @@ class BrowserSession:
             self._wait_ready(page)
 
     def _select_address_suggestion(self, page: Page, choice_index: int) -> None:
-        time.sleep(1.5)
+        choice_index = max(1, choice_index)
+        deadline = time.monotonic() + self._step_timeout() / 1000
+        self._wait_short(page, 1)
+        # Prefer clicking a visible Loqate/listbox option. Slow connections can delay this list.
+        while time.monotonic() < deadline:
+            timeout = self._remaining_timeout(deadline, cap=1200)
+            if not timeout:
+                break
+            try:
+                option = page.get_by_role("option").nth(choice_index - 1)
+                option.click(timeout=timeout)
+                time.sleep(1)
+                self.log(f"已点击第 {choice_index} 个地址候选")
+                return
+            except (PlaywrightError, PlaywrightTimeoutError):
+                pass
+            try:
+                locator = page.locator(
+                    "text=/^(?!I cannot find my address)(?!Address line)(?!Postcode).*(,[ ]*)?[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}$/i"
+                ).nth(choice_index - 1)
+                locator.click(timeout=timeout)
+                time.sleep(1)
+                self.log(f"已点击第 {choice_index} 个地址候选")
+                return
+            except (PlaywrightError, PlaywrightTimeoutError):
+                pass
+            self._wait_short(page)
         # Loqate suggestions are usually keyboard-selectable while focus remains in the postcode field.
         try:
-            for _ in range(max(1, choice_index)):
+            for _ in range(choice_index):
                 page.keyboard.press("ArrowDown")
                 time.sleep(0.1)
             page.keyboard.press("Enter")
@@ -251,16 +361,7 @@ class BrowserSession:
             return
         except PlaywrightError:
             pass
-        # Fallback: click the first visible suggestion-like row, skipping the manual entry link.
-        try:
-            locator = page.locator(
-                "text=/^(?!I cannot find my address)(?!Address line)(?!Postcode).*(,[ ]*)?[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}$/i"
-            ).first
-            locator.click(timeout=1500)
-            time.sleep(1)
-            self.log("已点击第一个地址候选")
-        except (PlaywrightError, PlaywrightTimeoutError):
-            self.log("未能自动选择地址候选，将尝试手动地址字段回填")
+        self.log("未能自动选择地址候选，将尝试手动地址字段回填")
 
     def _fill_manual_address_fallback(self, page: Page) -> None:
         defaults = self.config.activation_defaults
@@ -329,8 +430,20 @@ class BrowserSession:
 
     def _remove_saved_card(self, page: Page) -> None:
         self.log("开始自动解绑银行卡...")
-        page.goto("https://www.giffgaff.com/profile/payment-details", wait_until="domcontentloaded", timeout=60000)
-        self._wait_ready(page)
+        navigation_timed_out = False
+        try:
+            page.goto(
+                "https://www.giffgaff.com/profile/payment-details",
+                wait_until="domcontentloaded",
+                timeout=self._page_timeout(),
+            )
+        except PlaywrightTimeoutError:
+            navigation_timed_out = True
+            self.log("打开支付方式页面超时，将在当前页面继续尝试解绑银行卡")
+        if navigation_timed_out:
+            self._wait_short(page, 1)
+        else:
+            self._wait_ready(page)
         if not self._try_click_link_or_button(page, [r"Remove this credit/debit card", r"Remove.*card"]):
             if not self._page_has_text(page, [r"Your credit/debit card", r"XXXX"]):
                 self.log("未检测到已保存信用卡，可能已经解绑")
@@ -350,7 +463,47 @@ class BrowserSession:
         self.saved_card_removed = True
 
     def _maybe_accept_cookies(self, page: Page) -> None:
-        self._try_click_button(page, [r"accept all", r"accept", r"agree"], timeout=1200)
+        self._try_click_button(page, [r"accept all", r"accept", r"agree"], timeout=min(3000, self._step_timeout()))
+
+    def _page_timeout(self) -> int:
+        try:
+            value = int(getattr(self.config, "page_timeout_ms", 120000) or 120000)
+        except (TypeError, ValueError):
+            value = 120000
+        return max(30000, value)
+
+    def _step_timeout(self) -> int:
+        try:
+            value = int(getattr(self.config, "step_timeout_ms", 15000) or 15000)
+        except (TypeError, ValueError):
+            value = 15000
+        return max(3000, value)
+
+    def _field_timeout(self) -> int:
+        return max(700, min(3000, self._step_timeout()))
+
+    def _action_timeout(self, timeout: int | None = None) -> int:
+        if timeout is None:
+            return self._step_timeout()
+        try:
+            value = int(timeout)
+        except (TypeError, ValueError):
+            value = self._step_timeout()
+        return max(500, value)
+
+    def _remaining_timeout(self, deadline: float, *, cap: int | None = None) -> int:
+        remaining = int((deadline - time.monotonic()) * 1000)
+        if remaining <= 0:
+            return 0
+        if cap is not None:
+            remaining = min(remaining, cap)
+        return max(100, remaining)
+
+    def _wait_short(self, page: Page, seconds: float = 0.25) -> None:
+        try:
+            page.wait_for_timeout(int(seconds * 1000))
+        except PlaywrightError:
+            time.sleep(seconds)
 
     def _frames_and_page(self, page: Page) -> Iterable:
         yield page
@@ -367,92 +520,175 @@ class BrowserSession:
         placeholders: list[str],
         selectors: list[str],
     ) -> bool:
-        for target in self._frames_and_page(page):
-            for pattern in labels:
-                try:
-                    locator = target.get_by_label(re.compile(pattern, re.I)).first
-                    locator.fill(value, timeout=1500)
-                    return True
-                except (PlaywrightError, PlaywrightTimeoutError):
-                    pass
-            for pattern in placeholders:
-                try:
-                    locator = target.get_by_placeholder(re.compile(pattern, re.I)).first
-                    locator.fill(value, timeout=1500)
-                    return True
-                except (PlaywrightError, PlaywrightTimeoutError):
-                    pass
-            for selector in selectors:
-                try:
-                    locator = target.locator(selector).first
-                    locator.fill(value, timeout=1500)
-                    return True
-                except (PlaywrightError, PlaywrightTimeoutError):
-                    pass
+        deadline = time.monotonic() + self._step_timeout() / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for pattern in labels:
+                    timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not timeout:
+                        return False
+                    try:
+                        locator = target.get_by_label(re.compile(pattern, re.I)).first
+                        locator.fill(value, timeout=timeout)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+                for pattern in placeholders:
+                    timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not timeout:
+                        return False
+                    try:
+                        locator = target.get_by_placeholder(re.compile(pattern, re.I)).first
+                        locator.fill(value, timeout=timeout)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+                for selector in selectors:
+                    timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not timeout:
+                        return False
+                    try:
+                        locator = target.locator(selector).first
+                        locator.fill(value, timeout=timeout)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+            self._wait_short(page)
         return False
 
-    def _try_click_button(self, page: Page, names: list[str], timeout: int = 1800) -> bool:
-        for pattern in names:
-            try:
-                page.get_by_role("button", name=re.compile(pattern, re.I)).first.click(timeout=timeout)
-                time.sleep(1)
-                return True
-            except (PlaywrightError, PlaywrightTimeoutError):
-                pass
+    def _try_click_button(self, page: Page, names: list[str], timeout: int | None = None) -> bool:
+        deadline = time.monotonic() + self._action_timeout(timeout) / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for pattern in names:
+                    action_timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not action_timeout:
+                        return False
+                    try:
+                        target.get_by_role("button", name=re.compile(pattern, re.I)).first.click(timeout=action_timeout)
+                        time.sleep(1)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+            self._wait_short(page)
         return False
 
-    def _try_click_link_or_button(self, page: Page, names: list[str], timeout: int = 2500) -> bool:
-        for pattern in names:
-            regex = re.compile(pattern, re.I)
-            for role in ("link", "button"):
-                try:
-                    page.get_by_role(role, name=regex).first.click(timeout=timeout)
-                    time.sleep(1)
-                    return True
-                except (PlaywrightError, PlaywrightTimeoutError):
-                    pass
-        return self._try_click_text(page, names, timeout=timeout)
+    def _try_click_link_or_button(self, page: Page, names: list[str], timeout: int | None = None) -> bool:
+        deadline = time.monotonic() + self._action_timeout(timeout) / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for pattern in names:
+                    regex = re.compile(pattern, re.I)
+                    for role in ("link", "button"):
+                        action_timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                        if not action_timeout:
+                            return False
+                        try:
+                            target.get_by_role(role, name=regex).first.click(timeout=action_timeout)
+                            time.sleep(1)
+                            return True
+                        except (PlaywrightError, PlaywrightTimeoutError):
+                            pass
+            self._wait_short(page)
+        return self._try_click_text(page, names, timeout=500)
 
-    def _try_click_text(self, page: Page, patterns: list[str], timeout: int = 1800) -> bool:
-        for pattern in patterns:
-            try:
-                locator = page.get_by_text(re.compile(pattern, re.I)).first
-                locator.scroll_into_view_if_needed(timeout=timeout)
-                locator.click(timeout=timeout)
-                time.sleep(1)
-                return True
-            except (PlaywrightError, PlaywrightTimeoutError):
-                pass
+    def _try_click_text(self, page: Page, patterns: list[str], timeout: int | None = None) -> bool:
+        deadline = time.monotonic() + self._action_timeout(timeout) / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for pattern in patterns:
+                    action_timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not action_timeout:
+                        return False
+                    try:
+                        locator = target.get_by_text(re.compile(pattern, re.I)).first
+                        locator.scroll_into_view_if_needed(timeout=action_timeout)
+                        locator.click(timeout=action_timeout)
+                        time.sleep(1)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+            self._wait_short(page)
         return False
 
     def _try_check(self, page: Page, labels: list[str]) -> bool:
-        for pattern in labels:
-            try:
-                checkbox = page.get_by_label(re.compile(pattern, re.I)).first
-                if not checkbox.is_checked(timeout=1000):
-                    checkbox.check(timeout=1500)
-                return True
-            except (PlaywrightError, PlaywrightTimeoutError):
-                pass
+        deadline = time.monotonic() + self._step_timeout() / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for pattern in labels:
+                    timeout = self._remaining_timeout(deadline, cap=self._field_timeout())
+                    if not timeout:
+                        return False
+                    try:
+                        checkbox = target.get_by_label(re.compile(pattern, re.I)).first
+                        if not checkbox.is_checked(timeout=timeout):
+                            checkbox.check(timeout=timeout)
+                        return True
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        pass
+            self._wait_short(page)
         return False
 
     def _page_has_text(self, page: Page, patterns: list[str]) -> bool:
-        try:
-            text = page.locator("body").inner_text(timeout=2500)
-        except (PlaywrightError, PlaywrightTimeoutError):
-            return False
-        return any(re.search(pattern, text, re.I) for pattern in patterns)
+        deadline = time.monotonic() + self._step_timeout() / 1000
+        while time.monotonic() < deadline:
+            saw_text = False
+            for target in self._frames_and_page(page):
+                timeout = self._remaining_timeout(deadline, cap=1200)
+                if not timeout:
+                    return False
+                try:
+                    text = target.locator("body").inner_text(timeout=timeout)
+                except (PlaywrightError, PlaywrightTimeoutError):
+                    continue
+                if text.strip():
+                    saw_text = True
+                if any(re.search(pattern, text, re.I) for pattern in patterns):
+                    return True
+            if saw_text:
+                return False
+            self._wait_short(page)
+        return False
+
+    def _first_input_value(self, page: Page, selectors: list[str]) -> str:
+        deadline = time.monotonic() + self._step_timeout() / 1000
+        while time.monotonic() < deadline:
+            for target in self._frames_and_page(page):
+                for selector in selectors:
+                    try:
+                        locator = target.locator(selector)
+                        count = min(locator.count(), 12)
+                    except (PlaywrightError, PlaywrightTimeoutError):
+                        continue
+                    values: list[str] = []
+                    for index in range(count):
+                        timeout = self._remaining_timeout(deadline, cap=800)
+                        if not timeout:
+                            break
+                        try:
+                            value = locator.nth(index).input_value(timeout=timeout).strip()
+                        except (PlaywrightError, PlaywrightTimeoutError):
+                            continue
+                        if value:
+                            values.append(value)
+                    if values:
+                        digits = "".join(re.sub(r"\D", "", value) for value in values)
+                        if len(digits) >= 6:
+                            return digits
+                        return values[0]
+            self._wait_short(page)
+        return ""
 
     def _wait_ready(self, page: Page) -> None:
         try:
-            page.wait_for_load_state("domcontentloaded", timeout=15000)
+            page.wait_for_load_state("domcontentloaded", timeout=self._page_timeout())
         except (PlaywrightError, PlaywrightTimeoutError):
             pass
         try:
-            page.wait_for_load_state("networkidle", timeout=6000)
+            page.wait_for_load_state("networkidle", timeout=min(30000, self._step_timeout()))
         except (PlaywrightError, PlaywrightTimeoutError):
             pass
-        time.sleep(0.8)
+        time.sleep(1)
 
 
 def test_browser_proxy(config: AppConfig, log: LogCallback) -> str:

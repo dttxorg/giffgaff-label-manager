@@ -192,10 +192,14 @@ class MainWindow(QMainWindow):
         self.user_data_dir = QLineEdit()
         self.headless = QCheckBox("无头模式")
         self.slow_mo_ms = QLineEdit()
+        self.page_timeout_ms = QLineEdit()
+        self.step_timeout_ms = QLineEdit()
         form.addRow("激活页面", self.activation_url)
         form.addRow("浏览器", self.browser_channel)
         form.addRow("用户数据目录", self.user_data_dir)
         form.addRow("慢动作 ms", self.slow_mo_ms)
+        form.addRow("页面超时 ms", self.page_timeout_ms)
+        form.addRow("单步等待 ms", self.step_timeout_ms)
         form.addRow(self.headless)
         return group
 
@@ -271,16 +275,19 @@ class MainWindow(QMainWindow):
         self.stop_browser_btn = QPushButton("停止浏览器")
         self.refresh_code_btn = QPushButton("刷新验证码")
         self.fill_code_btn = QPushButton("填入验证码")
+        self.continue_browser_btn = QPushButton("继续当前页面")
         self.remove_card_btn = QPushButton("自动解绑银行卡")
         self.start_browser_btn.clicked.connect(self.start_browser)
         self.stop_browser_btn.clicked.connect(self.stop_browser)
         self.refresh_code_btn.clicked.connect(self.refresh_code)
         self.fill_code_btn.clicked.connect(self.fill_code)
+        self.continue_browser_btn.clicked.connect(self.continue_browser)
         self.remove_card_btn.clicked.connect(self.remove_saved_card)
         row1.addWidget(self.start_browser_btn)
         row1.addWidget(self.stop_browser_btn)
         row1.addWidget(self.refresh_code_btn)
         row1.addWidget(self.fill_code_btn)
+        row1.addWidget(self.continue_browser_btn)
         row1.addWidget(self.remove_card_btn)
         layout.addLayout(row1)
 
@@ -327,6 +334,8 @@ class MainWindow(QMainWindow):
         self.user_data_dir.setText(cfg.user_data_dir)
         self.headless.setChecked(cfg.headless)
         self.slow_mo_ms.setText(str(cfg.slow_mo_ms))
+        self.page_timeout_ms.setText(str(cfg.page_timeout_ms))
+        self.step_timeout_ms.setText(str(cfg.step_timeout_ms))
         self.proxy_mode.setCurrentText(cfg.proxy.mode)
         self.proxy_type.setCurrentText(cfg.proxy.proxy_type)
         self.proxy_host.setText(cfg.proxy.host)
@@ -354,6 +363,14 @@ class MainWindow(QMainWindow):
         except ValueError:
             slow_mo = 0
         try:
+            page_timeout = int(self.page_timeout_ms.text().strip() or "120000")
+        except ValueError:
+            page_timeout = 120000
+        try:
+            step_timeout = int(self.step_timeout_ms.text().strip() or "15000")
+        except ValueError:
+            step_timeout = 15000
+        try:
             address_choice_index = int(self.default_address_choice_index.text().strip() or "1")
         except ValueError:
             address_choice_index = 1
@@ -366,6 +383,8 @@ class MainWindow(QMainWindow):
             user_data_dir=self.user_data_dir.text().strip(),
             headless=self.headless.isChecked(),
             slow_mo_ms=slow_mo,
+            page_timeout_ms=max(30000, page_timeout),
+            step_timeout_ms=max(3000, step_timeout),
             proxy=ProxyConfig(
                 mode=self.proxy_mode.currentText(),
                 proxy_type=self.proxy_type.currentText(),
@@ -520,6 +539,13 @@ class MainWindow(QMainWindow):
         else:
             self.copy_text(self.last_code)
             self.log("浏览器自动化未运行，验证码已复制到剪贴板")
+
+    def continue_browser(self) -> None:
+        if self.browser_worker and self.browser_worker.isRunning():
+            self.browser_worker.enqueue(BrowserCommand("continue"))
+            self.log("已发送继续当前页面指令")
+        else:
+            QMessageBox.information(self, "浏览器未运行", "请先点击“打开并预填”，保持浏览器打开后再继续当前页面")
 
     def remove_saved_card(self) -> None:
         if self.browser_worker and self.browser_worker.isRunning():
