@@ -82,6 +82,24 @@ class AgentApi:
         task = data.get("task")
         return task if isinstance(task, dict) else None
 
+    def list_activation_tasks(self, limit: int = 200) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/api/agent/activation-tasks",
+            params={"limit": limit},
+        )
+        tasks = data.get("tasks")
+        return tasks if isinstance(tasks, list) else []
+
+    def claim_task(self, customer_id: int, agent_id: str) -> dict[str, Any] | None:
+        data = self._request(
+            "POST",
+            f"/api/agent/activation-tasks/{customer_id}/claim",
+            params={"agent_id": agent_id or "desktop"},
+        )
+        task = data.get("task")
+        return task if isinstance(task, dict) else None
+
     def add_log(self, customer_id: int, message: str, *, step: str = "", level: str = "info") -> dict[str, Any]:
         return self._request(
             "POST",

@@ -44,6 +44,7 @@ ACTIVATION_STATUSES = {
 }
 SIM_CODE_STATUSES = {"未分配", "已分配", "激活中", "已使用", "失败", "作废"}
 DETACHABLE_ACTIVATION_STATUSES = {"未开始", "已分配激活码", "等待客户端领取", "失败"}
+SELECTABLE_AGENT_TASK_STATUSES = ("等待客户端领取", "激活中", "等待人工支付", "失败", "已分配激活码")
 DEFAULT_CAINIAO_ENDPOINT = "https://eco.taobao.com/router/rest"
 CAINIAO_PLAIN_SETTINGS = (
     "cainiao_endpoint",
@@ -1098,6 +1099,53 @@ def _sim_status_for_activation(status: str) -> str:
     return "已分配"
 
 
+def _activation_task_out(row, *, status_override: Optional[str] = None) -> ActivationTaskOut:
+    task = dict(row)
+    if status_override is not None:
+        task["activation_status"] = status_override
+    return ActivationTaskOut(
+        customer_id=task["id"],
+        phone_number=task.get("phone_number"),
+        email=task["email"],
+        initial_password=task["initial_password"],
+        sim_activation_code=task["sim_activation_code"],
+        activation_status=_normalize_activation_status(task.get("activation_status")),
+        activation_date=task["activation_date"],
+        moemail_id=task.get("moemail_id"),
+        moemail_address=task.get("moemail_address"),
+        share_link=_normalize_share_link(task.get("share_link")),
+        shipping_address=task.get("shipping_address"),
+    )
+
+
+async def _claim_activation_task_row(db: aiosqlite.Connection, row, agent_id: str, *, manual: bool = False) -> ActivationTaskOut:
+    customer_id = row["id"]
+    now = _utc_now()
+    await db.execute(
+        """UPDATE customers
+           SET activation_status = '激活中',
+               automation_lock_owner = ?,
+               automation_locked_at = ?
+           WHERE id = ?""",
+        (agent_id, now, customer_id),
+    )
+    await db.execute(
+        "UPDATE sim_codes SET status = '激活中', updated_at = datetime('now') WHERE customer_id = ?",
+        (customer_id,),
+    )
+    message = (
+        f"桌面客户端 {agent_id} 手动选择任务"
+        if manual
+        else f"桌面客户端 {agent_id} 已领取任务"
+    )
+    await db.execute(
+        """INSERT INTO activation_logs (customer_id, level, step, message)
+           VALUES (?, 'info', 'claimed', ?)""",
+        (customer_id, message),
+    )
+    return _activation_task_out(row, status_override="激活中")
+
+
 async def _insert_activation_log(customer_id: int, level: str, step: Optional[str], message: str):
     if not message:
         return
@@ -1139,6 +1187,40 @@ async def _apply_activation_status(customer_id: int, status: str, error: Optiona
         await db.commit()
 
 
+@app.get("/api/agent/activation-tasks")
+async def list_agent_activation_tasks(request: Request, limit: int = 200):
+    await _require_agent_auth(request)
+    limit = min(max(1, limit), 1000)
+    placeholders = ", ".join("?" for _ in SELECTABLE_AGENT_TASK_STATUSES)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall(
+            f"""SELECT * FROM customers
+                WHERE activation_status IN ({placeholders})
+                  AND sim_activation_code IS NOT NULL
+                  AND sim_activation_code != ''
+                  AND email != ''
+                  AND (phone_number IS NULL OR phone_number = '')
+                  AND initial_password IS NOT NULL
+                  AND initial_password != ''
+                  AND activated_at IS NULL
+                ORDER BY
+                  CASE activation_status
+                    WHEN '等待客户端领取' THEN 0
+                    WHEN '激活中' THEN 1
+                    WHEN '等待人工支付' THEN 2
+                    WHEN '失败' THEN 3
+                    WHEN '已分配激活码' THEN 4
+                    ELSE 9
+                  END,
+                  created_at ASC,
+                  id ASC
+                LIMIT ?""",
+            (*SELECTABLE_AGENT_TASK_STATUSES, limit),
+        )
+    return {"tasks": [_activation_task_out(row).dict() for row in rows]}
+
+
 @app.get("/api/agent/activation-tasks/next")
 async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
     await _require_agent_auth(request)
@@ -1162,40 +1244,51 @@ async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
         if not row:
             await db.commit()
             return {"task": None}
-        await db.execute(
-            """UPDATE customers
-               SET activation_status = '激活中',
-                   automation_lock_owner = ?,
-                   automation_locked_at = ?
-               WHERE id = ?""",
-            (agent_id, _utc_now(), row["id"]),
-        )
-        await db.execute(
-            "UPDATE sim_codes SET status = '激活中', updated_at = datetime('now') WHERE customer_id = ?",
-            (row["id"],),
-        )
-        await db.execute(
-            """INSERT INTO activation_logs (customer_id, level, step, message)
-               VALUES (?, 'info', 'claimed', ?)""",
-            (row["id"], f"桌面客户端 {agent_id} 已领取任务"),
-        )
+        task_out = await _claim_activation_task_row(db, row, agent_id)
         await db.commit()
-        task = dict(row)
-        task["activation_status"] = "激活中"
-    task_out = ActivationTaskOut(
-        customer_id=task["id"],
-        phone_number=task.get("phone_number"),
-        email=task["email"],
-        initial_password=task["initial_password"],
-        sim_activation_code=task["sim_activation_code"],
-        activation_status=_normalize_activation_status(task.get("activation_status")),
-        activation_date=task["activation_date"],
-        moemail_id=task.get("moemail_id"),
-        moemail_address=task.get("moemail_address"),
-        share_link=_normalize_share_link(task.get("share_link")),
-        shipping_address=task.get("shipping_address"),
-    )
     return {"task": task_out.dict()}
+
+
+@app.post("/api/agent/activation-tasks/{customer_id}/claim")
+async def claim_activation_task_by_id(customer_id: int, request: Request, agent_id: str = "desktop"):
+    await _require_agent_auth(request)
+    placeholders = ", ".join("?" for _ in SELECTABLE_AGENT_TASK_STATUSES)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            row = await fetch_one(
+                db,
+                f"""SELECT * FROM customers
+                    WHERE id = ?
+                      AND activation_status IN ({placeholders})
+                      AND sim_activation_code IS NOT NULL
+                      AND sim_activation_code != ''
+                      AND email != ''
+                      AND (phone_number IS NULL OR phone_number = '')
+                      AND initial_password IS NOT NULL
+                      AND initial_password != ''
+                      AND activated_at IS NULL""",
+                (customer_id, *SELECTABLE_AGENT_TASK_STATUSES),
+            )
+            if not row:
+                existing = await fetch_one(
+                    db,
+                    "SELECT id, activation_status, phone_number, activated_at FROM customers WHERE id = ?",
+                    (customer_id,),
+                )
+                if not existing:
+                    raise HTTPException(status_code=404, detail="激活任务不存在")
+                raise HTTPException(status_code=409, detail="该客户当前状态不允许桌面客户端选择，可能已完成、已有手机号或没有激活码")
+            task_out = await _claim_activation_task_row(db, row, agent_id, manual=True)
+            await db.commit()
+            return {"task": task_out.dict()}
+        except HTTPException:
+            await db.rollback()
+            raise
+        except Exception:
+            await db.rollback()
+            raise
 
 
 @app.post("/api/agent/customers/{customer_id}/activation-log")
