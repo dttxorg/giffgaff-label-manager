@@ -68,6 +68,9 @@ class BrowserSession:
             page = context.pages[0] if context.pages else context.new_page()
             try:
                 self._open_and_prefill(page)
+                if self.config.full_auto:
+                    self.log("已进入全自动模式，无需手动点击；可用「停止自动化」按钮随时中断。")
+                    self._auto_run_until_payment(page)
                 self.log("浏览器已保持打开。你可以手动接管页面，或在客户端里继续刷新/填入验证码。")
                 self._command_loop(page)
             finally:
