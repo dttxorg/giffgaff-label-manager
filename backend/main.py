@@ -1241,6 +1241,66 @@ async def _claim_activation_task_row(db: aiosqlite.Connection, row, agent_id: st
     return _activation_task_out(row, status_override="激活中")
 
 
+async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) -> ActivationTaskOut:
+    email_bundle = await _generate_moemail_account()
+    initial_password = _generate_initial_password()
+    activation_date = datetime.date.today().isoformat()
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            sim = await fetch_one(
+                db,
+                """SELECT id, code FROM sim_codes
+                   WHERE id = ?
+                     AND status = '未分配'
+                     AND customer_id IS NULL""",
+                (sim_code_id,),
+            )
+            if not sim:
+                raise HTTPException(status_code=409, detail="该 SIM 激活码当前不可分配，可能已被使用、作废或分配给其他客户")
+            cursor = await db.execute(
+                """INSERT INTO customers
+                   (phone_number, email, shipping_address, shipping_status, activation_date,
+                    moemail_id, moemail_address, share_link, is_moemail_auto,
+                    sim_code_id, sim_activation_code, initial_password, activation_status)
+                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    email_bundle.get("email", ""),
+                    DEFAULT_SHIPPING_STATUS,
+                    activation_date,
+                    email_bundle.get("moemail_id"),
+                    email_bundle.get("moemail_address"),
+                    email_bundle.get("share_link"),
+                    1 if email_bundle.get("is_moemail_auto", True) else 0,
+                    sim["id"],
+                    sim["code"],
+                    initial_password,
+                    "等待客户端领取",
+                ),
+            )
+            customer_id = cursor.lastrowid
+            await db.execute(
+                "UPDATE sim_codes SET status = '已分配', customer_id = ?, updated_at = datetime('now') WHERE id = ?",
+                (customer_id, sim["id"]),
+            )
+            await db.execute(
+                """INSERT INTO activation_logs (customer_id, level, step, message)
+                   VALUES (?, 'info', 'created', ?)""",
+                (customer_id, f"桌面客户端从可用激活码 {sim['code']} 创建测试任务"),
+            )
+            row = await fetch_one(db, "SELECT * FROM customers WHERE id = ?", (customer_id,))
+            task_out = await _claim_activation_task_row(db, row, agent_id, manual=True)
+            await db.commit()
+            return task_out
+        except HTTPException:
+            await db.rollback()
+            raise
+        except Exception:
+            await db.rollback()
+            raise
+
+
 async def _insert_activation_log(customer_id: int, level: str, step: Optional[str], message: str):
     if not message:
         return
@@ -1280,6 +1340,35 @@ async def _apply_activation_status(customer_id: int, status: str, error: Optiona
             (sim_status, customer_id),
         )
         await db.commit()
+
+
+@app.get("/api/agent/sim-codes/available")
+async def list_agent_available_sim_codes(request: Request, limit: int = 200):
+    await _require_agent_auth(request)
+    limit = min(max(1, limit), 1000)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall(
+            """SELECT * FROM sim_codes
+               WHERE status = '未分配'
+                 AND customer_id IS NULL
+               ORDER BY id ASC
+               LIMIT ?""",
+            (limit,),
+        )
+    return {"sim_codes": [_sim_code_out(row).dict() for row in rows]}
+
+
+@app.post("/api/agent/sim-codes/{sim_code_id}/activation-task")
+async def create_agent_activation_task_from_sim_code(sim_code_id: int, request: Request, agent_id: str = "desktop"):
+    await _require_agent_auth(request)
+    try:
+        task_out = await _create_and_claim_task_from_sim_code(sim_code_id, agent_id)
+        return {"task": task_out.dict()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"从 SIM 激活码创建任务失败：{exc}") from exc
 
 
 @app.get("/api/agent/activation-tasks")

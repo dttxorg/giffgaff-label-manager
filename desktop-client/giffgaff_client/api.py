@@ -100,6 +100,24 @@ class AgentApi:
         task = data.get("task")
         return task if isinstance(task, dict) else None
 
+    def list_available_sim_codes(self, limit: int = 200) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/api/agent/sim-codes/available",
+            params={"limit": limit},
+        )
+        sim_codes = data.get("sim_codes")
+        return sim_codes if isinstance(sim_codes, list) else []
+
+    def create_task_from_sim_code(self, sim_code_id: int, agent_id: str) -> dict[str, Any] | None:
+        data = self._request(
+            "POST",
+            f"/api/agent/sim-codes/{sim_code_id}/activation-task",
+            params={"agent_id": agent_id or "desktop"},
+        )
+        task = data.get("task")
+        return task if isinstance(task, dict) else None
+
     def add_log(self, customer_id: int, message: str, *, step: str = "", level: str = "info") -> dict[str, Any]:
         return self._request(
             "POST",

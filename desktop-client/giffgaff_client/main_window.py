@@ -460,8 +460,14 @@ class MainWindow(QMainWindow):
 
     def select_task(self) -> None:
         self.save_settings()
-        self.log("加载可选择的激活码任务...")
-        self.start_api_worker("list_tasks", lambda api: api.list_activation_tasks())
+        self.log("加载可选择的激活码任务和可分配 SIM 激活码...")
+        self.start_api_worker(
+            "list_tasks",
+            lambda api: {
+                "tasks": api.list_activation_tasks(),
+                "sim_codes": api.list_available_sim_codes(),
+            },
+        )
 
     def refresh_code(self) -> None:
         if not self.require_task():
@@ -575,7 +581,7 @@ class MainWindow(QMainWindow):
                 self.log("当前没有待领取任务")
             return
         if action == "list_tasks":
-            self.show_task_picker(data if isinstance(data, list) else [])
+            self.show_task_picker(data)
             return
         if action.startswith("claim_specific:"):
             if isinstance(data, dict):
@@ -583,6 +589,13 @@ class MainWindow(QMainWindow):
                 self.log(f"已选择客户 #{data.get('customer_id')} 的激活码任务")
             else:
                 self.log("选择任务失败：接口没有返回任务")
+            return
+        if action.startswith("claim_sim_code:"):
+            if isinstance(data, dict):
+                self._set_task(data)
+                self.log(f"已从可分配 SIM 激活码创建并领取客户 #{data.get('customer_id')} 的任务")
+            else:
+                self.log("从 SIM 激活码创建任务失败：接口没有返回任务")
             return
         if action == "code":
             if isinstance(data, dict) and data.get("found") and data.get("code"):
@@ -621,21 +634,32 @@ class MainWindow(QMainWindow):
     def on_browser_stopped(self) -> None:
         self.log("浏览器自动化已停止")
 
-    def show_task_picker(self, tasks: list[dict[str, Any]]) -> None:
-        if not tasks:
-            QMessageBox.information(self, "没有可选任务", "当前没有可选择的激活码任务")
-            self.log("当前没有可选择的激活码任务")
-            return
-        labels: list[str] = []
-        task_by_label: dict[str, dict[str, Any]] = {}
+    def show_task_picker(self, payload: object) -> None:
+        if isinstance(payload, dict):
+            tasks = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
+            sim_codes = payload.get("sim_codes") if isinstance(payload.get("sim_codes"), list) else []
+        elif isinstance(payload, list):
+            tasks = payload
+            sim_codes = []
+        else:
+            tasks = []
+            sim_codes = []
+        entries: list[dict[str, Any]] = []
         for task in tasks:
-            label = self.format_task_option(task)
-            labels.append(label)
-            task_by_label[label] = task
+            entries.append({"kind": "task", "label": self.format_task_option(task), "data": task})
+        for sim_code in sim_codes:
+            entries.append({"kind": "sim_code", "label": self.format_sim_code_option(sim_code), "data": sim_code})
+
+        if not entries:
+            QMessageBox.information(self, "没有可选任务", "当前没有可选择的激活码任务")
+            self.log("当前没有可选择的客户任务，也没有可分配 SIM 激活码")
+            return
+        labels = [entry["label"] for entry in entries]
+        entry_by_label = {entry["label"]: entry for entry in entries}
         choice, ok = QInputDialog.getItem(
             self,
             "选择激活码任务",
-            "选择要测试/继续的激活码任务：",
+            "选择要测试/继续的客户任务，或选择一个可分配 SIM 激活码创建新任务：",
             labels,
             0,
             False,
@@ -643,13 +667,35 @@ class MainWindow(QMainWindow):
         if not ok or not choice:
             self.log("已取消选择激活码任务")
             return
-        task = task_by_label[choice]
-        customer_id = int(task["customer_id"])
         agent_id = self.collect_config().agent_id
-        self.log(f"领取指定任务：客户 #{customer_id}，激活码 {task.get('sim_activation_code')}")
+        entry = entry_by_label[choice]
+        if entry["kind"] == "task":
+            task = entry["data"]
+            customer_id = int(task["customer_id"])
+            self.log(f"领取指定任务：客户 #{customer_id}，激活码 {task.get('sim_activation_code')}")
+            self.start_api_worker(
+                f"claim_specific:{customer_id}",
+                lambda api, cid=customer_id, aid=agent_id: api.claim_task(cid, aid),
+            )
+            return
+
+        sim_code = entry["data"]
+        sim_code_id = int(sim_code["id"])
+        code = sim_code.get("code") or ""
+        reply = QMessageBox.question(
+            self,
+            "从 SIM 激活码创建任务",
+            f"将使用可分配激活码「{code}」自动创建一个 MoEmail 客户任务并立即领取，继续吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            self.log("已取消从 SIM 激活码创建任务")
+            return
+        self.log(f"从可分配 SIM 激活码创建任务：{code}")
         self.start_api_worker(
-            f"claim_specific:{customer_id}",
-            lambda api, cid=customer_id, aid=agent_id: api.claim_task(cid, aid),
+            f"claim_sim_code:{sim_code_id}",
+            lambda api, sid=sim_code_id, aid=agent_id: api.create_task_from_sim_code(sid, aid),
         )
 
     def format_task_option(self, task: dict[str, Any]) -> str:
@@ -658,7 +704,13 @@ class MainWindow(QMainWindow):
         status = task.get("activation_status") or ""
         email = task.get("email") or ""
         activation_date = task.get("activation_date") or ""
-        return f"#{customer_id} | {code} | {status} | {email} | {activation_date}"
+        return f"客户任务 #{customer_id} | {code} | {status} | {email} | {activation_date}"
+
+    def format_sim_code_option(self, sim_code: dict[str, Any]) -> str:
+        sim_code_id = sim_code.get("id") or ""
+        code = sim_code.get("code") or ""
+        updated_at = sim_code.get("updated_at") or ""
+        return f"可分配 SIM #{sim_code_id} | {code} | 将自动创建客户任务 | {updated_at}"
 
     def _set_task(self, task: dict[str, Any] | None) -> None:
         self.current_task = task

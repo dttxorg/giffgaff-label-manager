@@ -93,7 +93,7 @@ Authorization: Bearer <AGENT_API_TOKEN>
 - 创建 Cloudflare Access Service Token，并在 Windows 客户端填写 `CF Access Client ID` 和 `CF Access Secret`。
 
 为了避免旧的手工客户被客户端重复领取，桌面客户端领取任务时会跳过已经填了手机号的客户。对于已手工完成但还显示「等待客户端领取」的客户，可在客户详情中手动标记为「等待转 eSIM」或「已完成」。
-需要测试或容错时，Windows 客户端也可以打开可选激活任务列表，手动选择尚未完成且没有手机号的客户/SIM 激活码；`激活中`、`等待人工支付`、`失败` 的任务可重复选择继续跑流程。
+需要测试或容错时，Windows 客户端也可以打开可选激活任务列表，手动选择尚未完成且没有手机号的客户任务；如果只有 SIM 激活码页面里的「使用（可分配）」激活码，客户端也可以直接选择该激活码，后台会自动创建 MoEmail 客户任务并立即领取。
 
 ### 4. 配置 MoEmail
 
@@ -121,6 +121,8 @@ Authorization: Bearer <AGENT_API_TOKEN>
 
 ```text
 GET   /api/agent/ping
+GET   /api/agent/sim-codes/available
+POST  /api/agent/sim-codes/{id}/activation-task
 GET   /api/agent/activation-tasks
 GET   /api/agent/activation-tasks/next
 POST  /api/agent/activation-tasks/{id}/claim
@@ -140,7 +142,7 @@ GET   /api/agent/customers/{id}/payment-info-emails
 
 - 配置后台地址、`AGENT_API_TOKEN` 和客户端 ID
 - 领取下一个激活任务，不会要求提前填写手机号
-- 从列表中选择指定客户/SIM 激活码任务，方便重复测试或继续中断流程
+- 从列表中选择指定客户任务，或选择“使用（可分配）”SIM 激活码自动创建测试任务
 - 显示并复制邮箱、初始密码、SIM 激活码和收货地址
 - 支持不使用代理、系统代理、自定义 HTTP/HTTPS/SOCKS5 代理
 - 可测试浏览器出口 IP
