@@ -734,6 +734,24 @@ class BrowserSession:
             except (ApiError, ValueError, TypeError):
                 pass
 
+    def _wait_and_extract_phone_number(
+        self, page: Page, *, timeout_seconds: int = 180
+    ) -> str:
+        """Poll page body text for a UK mobile number. Returns 11-digit string, or "" on timeout/stop."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if self.stop_requested:
+                return ""
+            text = self._page_text(page)
+            if text:
+                match = PHONE_NUMBER_PATTERN.search(text)
+                if match:
+                    digits = re.sub(r"\D", "", match.group(0))
+                    if digits.startswith("07") and len(digits) >= 11:
+                        return digits[:11]
+            time.sleep(1)
+        return ""
+
     def _page_text(self, page: Page) -> str:
         """Return the visible text of <body>, or empty string on timeout."""
         try:
