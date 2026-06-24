@@ -720,6 +720,13 @@ class BrowserSession:
             self._wait_short(page)
         return False
 
+    def _page_text(self, page: Page) -> str:
+        """Return the visible text of <body>, or empty string on timeout."""
+        try:
+            return page.locator("body").inner_text(timeout=2000)
+        except PlaywrightError:
+            return ""
+
     def _page_has_text(self, page: Page, patterns: list[str]) -> bool:
         deadline = time.monotonic() + self._step_timeout() / 1000
         while time.monotonic() < deadline:
