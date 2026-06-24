@@ -151,3 +151,10 @@ class AgentApi:
 
     def verification_code(self, customer_id: int) -> dict[str, Any]:
         return self._request("GET", f"/api/agent/customers/{customer_id}/verification-code")
+
+    def payment_info_emails(self, customer_id: int, limit: int = 50) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/api/agent/customers/{customer_id}/payment-info-emails",
+            params={"limit": limit},
+        )

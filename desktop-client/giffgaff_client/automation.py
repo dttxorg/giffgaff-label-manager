@@ -11,6 +11,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from .api import AgentApi, ApiError
 from .config import AppConfig
 
 
@@ -430,6 +431,13 @@ class BrowserSession:
 
     def _remove_saved_card(self, page: Page) -> None:
         self.log("开始自动解绑银行卡...")
+        payment_email_baseline = self._payment_info_email_snapshot(log_summary=True)
+        baseline_changed_count = None
+        if payment_email_baseline is not None:
+            try:
+                baseline_changed_count = int(payment_email_baseline.get("changed_count") or 0)
+            except (TypeError, ValueError):
+                baseline_changed_count = None
         navigation_timed_out = False
         try:
             page.goto(
@@ -447,6 +455,7 @@ class BrowserSession:
         if not self._try_click_link_or_button(page, [r"Remove this credit/debit card", r"Remove.*card"]):
             if not self._page_has_text(page, [r"Your credit/debit card", r"XXXX"]):
                 self.log("未检测到已保存信用卡，可能已经解绑")
+                self._wait_for_payment_info_changed_email(baseline_changed_count=baseline_changed_count, timeout_seconds=20)
                 return
             raise RuntimeError("未找到解绑银行卡入口")
         self._wait_ready(page)
@@ -460,7 +469,89 @@ class BrowserSession:
             self.log("已点击解绑银行卡确认，请在页面检查是否完成")
         else:
             self.log("信用卡已自动解绑")
+        self._wait_for_payment_info_changed_email(baseline_changed_count=baseline_changed_count)
         self.saved_card_removed = True
+
+    def _agent_api(self) -> AgentApi | None:
+        if not self.config.server_url.strip() or not self.config.agent_token.strip():
+            return None
+        return AgentApi(
+            self.config.server_url,
+            self.config.agent_token,
+            timeout=25.0,
+            cf_access_client_id=self.config.cloudflare_access.client_id,
+            cf_access_client_secret=self.config.cloudflare_access.client_secret,
+        )
+
+    def _payment_info_email_snapshot(self, *, log_summary: bool = False) -> dict | None:
+        customer_id = self.task.get("customer_id")
+        if not customer_id:
+            return None
+        api = self._agent_api()
+        if not api:
+            if log_summary:
+                self.log("未配置后台 Token，跳过支付信息邮件检查")
+            return None
+        try:
+            data = api.payment_info_emails(int(customer_id), limit=50)
+        except (ApiError, ValueError, TypeError) as exc:
+            if log_summary:
+                self.log(f"支付信息邮件检查不可用：{exc}")
+            return None
+        if log_summary:
+            updated_count = data.get("updated_count") or 0
+            changed_count = data.get("changed_count") or 0
+            if data.get("updated_found"):
+                self.log(f"已检测到绑卡/支付信息更新邮件 {updated_count} 封")
+            if data.get("changed_found"):
+                self.log(f"历史上已检测到取消/变更支付信息邮件 {changed_count} 封，将等待新的取消邮件")
+            if not data.get("updated_found") and not data.get("changed_found"):
+                self.log("暂未检测到 giffgaff 支付信息邮件")
+        return data
+
+    def _wait_for_payment_info_changed_email(
+        self,
+        *,
+        baseline_changed_count: int | None = None,
+        timeout_seconds: int = 90,
+    ) -> bool:
+        customer_id = self.task.get("customer_id")
+        if not customer_id:
+            return False
+        if baseline_changed_count is None:
+            baseline_changed_count = -1
+        deadline = time.monotonic() + timeout_seconds
+        logged_wait = False
+        while time.monotonic() < deadline:
+            data = self._payment_info_email_snapshot()
+            if data is None:
+                return False
+            try:
+                changed_count = int(data.get("changed_count") or 0)
+            except (TypeError, ValueError):
+                changed_count = 0
+            if data.get("changed_found") and changed_count > baseline_changed_count:
+                subject = data.get("latest_changed_subject") or "your payment info has changed"
+                received_at = data.get("latest_changed_received_at") or ""
+                suffix = f"（{received_at}）" if received_at else ""
+                self.log(f"已收到 giffgaff 取消/变更支付信息确认邮件：{subject}{suffix}")
+                try:
+                    api = self._agent_api()
+                    if api:
+                        api.add_log(
+                            int(customer_id),
+                            f"已收到 giffgaff 取消/变更支付信息确认邮件：{subject}{suffix}",
+                            step="payment-email",
+                        )
+                except (ApiError, ValueError, TypeError):
+                    pass
+                return True
+            if data.get("updated_found") and not logged_wait:
+                self.log("已看到绑卡/支付信息更新邮件，继续等待取消绑定确认邮件（payment info has changed）")
+                logged_wait = True
+            time.sleep(8)
+        self.log("暂未收到 giffgaff 取消绑定确认邮件（payment info has changed），请稍后在 MoEmail 或客户端日志里复查")
+        return False
 
     def _maybe_accept_cookies(self, page: Page) -> None:
         self._try_click_button(page, [r"accept all", r"accept", r"agree"], timeout=min(3000, self._step_timeout()))

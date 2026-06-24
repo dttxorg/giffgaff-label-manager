@@ -128,9 +128,11 @@ POST  /api/agent/customers/{id}/activation-log
 PATCH /api/agent/customers/{id}/activation-status
 PATCH /api/agent/customers/{id}/activation-result
 GET   /api/agent/customers/{id}/verification-code
+GET   /api/agent/customers/{id}/payment-info-emails
 ```
 
 客户端领取任务后会拿到客户 ID、邮箱、初始密码、SIM 激活码和收货地址；完成网页流程后回传手机号，并把状态推进到「等待转 eSIM」或「已完成」。
+支付卡解绑后，客户端会检查 MoEmail 中的 giffgaff 邮件：`your payment info has been updated` 代表支付信息更新/绑卡，`your payment info has changed` 作为取消绑定确认。
 
 ### 6. Windows 本地客户端
 
@@ -144,7 +146,7 @@ GET   /api/agent/customers/{id}/verification-code
 - 可测试浏览器出口 IP
 - 打开本机 Edge/Chrome/Chromium 并按实测流程预填 giffgaff 激活页面
 - 固定选择 Pay as you go、£10 top-up，自动填写本机预设英国地址和支付卡
-- 支付完成后自动打开支付方式页面并移除保存的信用卡
+- 支付完成后自动打开支付方式页面并移除保存的信用卡，并用 MoEmail 支付信息变更邮件确认解绑
 - 刷新 MoEmail 验证码，复制或填入正在运行的浏览器页面
 - 手动标记等待人工支付、等待转 eSIM、已完成或失败
 

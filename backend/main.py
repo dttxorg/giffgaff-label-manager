@@ -21,7 +21,8 @@ from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
     SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
-    ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, DomainInfo, LabelConfig
+    ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
+    DomainInfo, LabelConfig
 )
 from crud import (
     get_all_customers, get_customer,
@@ -322,6 +323,22 @@ def _extract_verification_code(message: dict) -> Optional[str]:
             return match.group(1)
     match = re.search(r"(?<!\d)\d{6}(?!\d)", text)
     return match.group(0) if match else None
+
+
+def _message_search_text(message: dict) -> str:
+    subject = _first_text(message, "subject")
+    content = _first_text(message, "content", "text", "body", "plainText", "plain_text")
+    html_content = _plain_text_from_html(_first_text(message, "html", "htmlContent", "html_content"))
+    return "\n".join(part for part in (subject, content, html_content) if part)
+
+
+def _payment_info_email_kind(message: dict) -> Optional[str]:
+    text = _message_search_text(message)
+    if re.search(r"payment\s+info\s+has\s+changed", text, re.I):
+        return "changed"
+    if re.search(r"payment\s+info\s+has\s+been\s+updated", text, re.I):
+        return "updated"
+    return None
 
 
 def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
@@ -868,6 +885,84 @@ async def get_customer_verification_code(customer_id: int):
         raise HTTPException(status_code=502, detail=f"MoEmail 接码失败：{e}") from e
 
 
+@app.get("/api/customers/{customer_id}/payment-info-emails", response_model=PaymentInfoEmailOut)
+async def get_customer_payment_info_emails(customer_id: int, limit: int = 50):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    moemail_id = (c.get("moemail_id") or "").strip()
+    if not moemail_id:
+        raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱，无法自动检查支付信息邮件")
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
+
+    from moemail import MoEmailClient
+    client = MoEmailClient(moemail_url, moemail_key)
+    email_address = c.get("moemail_address") or c.get("email") or ""
+    limit = min(max(1, limit), 100)
+    try:
+        mailbox = client.get_email_messages(moemail_id)
+        messages = _message_list(mailbox)
+        messages.sort(key=_message_received_at, reverse=True)
+
+        checked_count = 0
+        detail_miss_count = 0
+        updated_count = 0
+        changed_count = 0
+        latest_updated = {}
+        latest_changed = {}
+
+        for summary in messages[:limit]:
+            message_id = _message_id(summary)
+            detail = {}
+            if message_id:
+                try:
+                    detail = _message_detail_payload(client.get_message(moemail_id, message_id))
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 404:
+                        raise
+                    detail_miss_count += 1
+            message = {**summary, **detail}
+            checked_count += 1
+            kind = _payment_info_email_kind(message)
+            if kind == "updated":
+                updated_count += 1
+                if not latest_updated:
+                    latest_updated = message
+            elif kind == "changed":
+                changed_count += 1
+                if not latest_changed:
+                    latest_changed = message
+
+        detail = (
+            f"检测到支付信息更新邮件 {updated_count} 封，取消/变更邮件 {changed_count} 封"
+            if updated_count or changed_count
+            else "没有检测到支付信息变更邮件"
+        )
+        if detail_miss_count:
+            detail += f"；{detail_miss_count} 封邮件详情已不存在或接口未返回"
+        return PaymentInfoEmailOut(
+            found=changed_count > 0,
+            updated_found=updated_count > 0,
+            changed_found=changed_count > 0,
+            updated_count=updated_count,
+            changed_count=changed_count,
+            email=email_address,
+            checked_count=checked_count,
+            latest_updated_message_id=_message_id(latest_updated) or None,
+            latest_updated_subject=_first_text(latest_updated, "subject") or None,
+            latest_updated_received_at=_message_received_at(latest_updated) or None,
+            latest_changed_message_id=_message_id(latest_changed) or None,
+            latest_changed_subject=_first_text(latest_changed, "subject") or None,
+            latest_changed_received_at=_message_received_at(latest_changed) or None,
+            detail=detail,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"MoEmail 支付信息邮件检查失败：{e}") from e
+
+
 # ── MoEmail 域名列表 ──
 
 @app.get("/api/moemail/domains", response_model=DomainInfo)
@@ -1350,6 +1445,12 @@ async def update_agent_activation_result(customer_id: int, data: ActivationResul
 async def get_agent_customer_verification_code(customer_id: int, request: Request):
     await _require_agent_auth(request)
     return await get_customer_verification_code(customer_id)
+
+
+@app.get("/api/agent/customers/{customer_id}/payment-info-emails", response_model=PaymentInfoEmailOut)
+async def get_agent_customer_payment_info_emails(customer_id: int, request: Request, limit: int = 50):
+    await _require_agent_auth(request)
+    return await get_customer_payment_info_emails(customer_id, limit=limit)
 
 
 # ── 标签模板 ──

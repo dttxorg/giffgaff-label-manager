@@ -185,6 +185,23 @@ class VerificationCodeOut(BaseModel):
     detail: str = ""
 
 
+class PaymentInfoEmailOut(BaseModel):
+    found: bool = False
+    updated_found: bool = False
+    changed_found: bool = False
+    updated_count: int = 0
+    changed_count: int = 0
+    email: str = ""
+    checked_count: int = 0
+    latest_updated_message_id: Optional[str] = None
+    latest_updated_subject: Optional[str] = None
+    latest_updated_received_at: Optional[str] = None
+    latest_changed_message_id: Optional[str] = None
+    latest_changed_subject: Optional[str] = None
+    latest_changed_received_at: Optional[str] = None
+    detail: str = ""
+
+
 class DomainInfo(BaseModel):
     domains: list[str]
 
