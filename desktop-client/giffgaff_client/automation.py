@@ -755,6 +755,35 @@ class BrowserSession:
             except (ApiError, ValueError, TypeError):
                 pass
 
+    def _try_poll_and_fill_verification_code(
+        self, page: Page, *, timeout_seconds: int = 90
+    ) -> bool:
+        """Poll MoEmail until a verification code arrives, then fill it. Returns True on success."""
+        api = self._agent_api
+        if not api:
+            self._log_stuck("邮箱验证码", "未配置后台 Token")
+            return False
+        customer_id = (self.task or {}).get("customer_id")
+        if not customer_id:
+            self._log_stuck("邮箱验证码", "缺少 customer_id")
+            return False
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if self.stop_requested:
+                return False
+            try:
+                resp = api.verification_code(int(customer_id))
+                code = (resp or {}).get("code") or ""
+            except ApiError as exc:
+                self.log(f"拉取验证码失败：{exc}")
+                time.sleep(2)
+                continue
+            if code:
+                self._fill_verification_code(page, code)
+                return True
+            time.sleep(2)
+        return False
+
     def _wait_and_extract_phone_number(
         self, page: Page, *, timeout_seconds: int = 180
     ) -> str:
