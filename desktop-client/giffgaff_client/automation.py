@@ -728,6 +728,59 @@ class BrowserSession:
             self._wait_short(page)
         return False
 
+    def _wait_short(self, page: Page, seconds: float) -> None:
+        """Brief wait for page transitions."""
+        time.sleep(seconds)
+
+    def _auto_run_until_payment(self, page: Page) -> None:
+        """Drive activation flow until payment page. Stops on payment, stuck, or stop_requested."""
+        while not self.stop_requested:
+            if self._page_has_text(page, [r"Payment", r"Card details"]):
+                self.log("已到达付款页，停止自动化。请人工填写信用卡信息并完成支付。")
+                self.payment_page_seen = True
+                return
+
+            if self._page_has_text(page, [r"Confirm your email", r"Enter verification code"]):
+                if not self._try_poll_and_fill_verification_code(page):
+                    self._log_stuck("邮箱验证码", "拉取 90s 未拿到")
+                    return
+                continue
+
+            if self._page_has_text(page, [r"Create a password", r"Your password"]):
+                password = str((self.task or {}).get("initial_password") or "")
+                if not password:
+                    self._log_stuck("密码页", "客户档案缺少 initial_password")
+                    return
+                self._continue_after_password_if_visible(page, password)
+                continue
+
+            if self._page_has_text(page, [r"Let's stay in touch", r"Yes, please", r"No, thanks"]):
+                self._continue_registration_preferences(page)
+                continue
+
+            if self._page_has_text(page, [r"Choose a monthly plan", r"Other options", r"Pay as you go"]):
+                if not self._choose_pay_as_you_go(page):
+                    self._log_stuck("选套餐", "Pay as you go 选择 3 次均失败")
+                    return
+                continue
+
+            if self._page_has_text(page, [r"Add credit", r"How much credit"]):
+                self._choose_topup_amount(page)
+                continue
+
+            if self._page_has_text(page, [r"Your details", r"First name", r"Postcode"]):
+                self._fill_details_and_continue(page)
+                continue
+
+            url = page.url or ""
+            if "/dashboard" in url:
+                self.log("已到达 dashboard，等待跳转下一步...")
+                self._wait_short(page, 2)
+                continue
+
+            self._log_stuck("未知页面", f"URL={url}")
+            return
+
     def _report_phone_number_to_backend(
         self, phone: str, *, status: str = "等待转 eSIM"
     ) -> None:
