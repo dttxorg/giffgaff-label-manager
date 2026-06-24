@@ -72,6 +72,46 @@ desktop-client\dist\GiffgaffActivationClient\GiffgaffActivationClient.exe
 
 完整页面记录见 [`GIFFGAFF_FLOW.md`](GIFFGAFF_FLOW.md)。
 
+## 全自动模式（v1.2+）
+
+默认开启（`config.json` 中 `full_auto: true`）。点击「打开并预填」后，客户端会自动驱动以下步骤，无需手动干预：
+
+1. 填写 SIM 激活码 + 邮箱 + 初始密码
+2. 轮询 MoEmail 邮箱，拉取 6 位验证码后自动填入
+3. 处理 stay_in_touch 页面（点 "No, thanks" + Continue）
+4. 选择 Pay as you go / No monthly plan（最多重试 3 次）
+5. 选择 £10 充值
+6. 填写详细地址
+7. 到达付款页后**停下**
+
+中途可点 **「停止浏览器」** 按钮中断。停止后其他按钮恢复可点。
+
+### 卡住行为
+
+每种「卡住」会在 UI 日志里输出具体 step 名，例如：
+
+> 【卡住】选套餐 — Pay as you go 选择 3 次均失败。请人工处理后点「继续当前页面」恢复。
+
+后台任务不会被自动标为失败 — 由人工决定继续 / 失败 / 重试。
+
+### 付款完成后
+
+客户端会在 `_command_loop` 里持续轮询 giffgaff 页面，寻找类似 `Here's your giffgaff number: 07732 212776` 的手机号。抓到后会：
+
+- 自动回传到后台，状态置为「等待转 eSIM」
+- 客户端自动退出，浏览器关闭
+
+### 关闭全自动
+
+在 `config.json` 中将 `full_auto` 设为 `false` 即可退回半自动模式（沿用旧的手动点按钮流程）：
+
+```json
+{
+  ...
+  "full_auto": false
+}
+```
+
 ## 代理说明
 
 代理只作用于 Playwright 打开的浏览器，不影响客户端请求 VPS 后台。建议使用稳定、可信、低频的出口，不建议频繁轮换代理。
