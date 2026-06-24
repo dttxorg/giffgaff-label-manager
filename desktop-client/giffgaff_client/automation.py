@@ -281,13 +281,19 @@ class BrowserSession:
         self._fill_details_and_continue(page)
         self._fill_payment_details(page)
 
-    def _choose_pay_as_you_go(self, page: Page) -> None:
+    def _choose_pay_as_you_go(self, page: Page) -> bool:
         if not self._page_has_text(page, [r"Choose a monthly plan", r"Other options", r"Pay as you go"]):
-            return
-        self._try_click_text(page, [r"No monthly plan", r"Pay as you go"])
-        self.log("已选择 Pay as you go / No monthly plan")
-        if self._try_click_button(page, [r"continue"]):
-            self._wait_ready(page)
+            return False
+        for attempt in range(3):
+            if self.stop_requested:
+                return False
+            if self._try_click_text(page, [r"No monthly plan", r"Pay as you go"]):
+                self.log(f"已选择 Pay as you go（第 {attempt + 1} 次）")
+                if self._try_click_button(page, [r"continue"]):
+                    self._wait_ready(page)
+                    return True
+            time.sleep(1)
+        return False
 
     def _choose_topup_amount(self, page: Page) -> None:
         if not self._page_has_text(page, [r"Add credit", r"How much credit"]):
