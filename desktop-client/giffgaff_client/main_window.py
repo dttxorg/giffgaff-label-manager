@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._load_config_into_ui()
         self._set_task(None)
+        self._apply_auto_running_ui()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -649,8 +650,9 @@ class MainWindow(QMainWindow):
         self.remove_card_btn.setEnabled(not running)
         # start_browser_btn is replaced by stop_browser_btn during auto
         self.start_browser_btn.setEnabled(not running)
-        # stop_browser_btn is always available while running
-        self.stop_browser_btn.setEnabled(running or (self.browser_worker is not None and self.browser_worker.isRunning()))
+        # stop_browser_btn is enabled only while browser is actually running
+        is_actually_running = self.browser_worker is not None and self.browser_worker.isRunning()
+        self.stop_browser_btn.setEnabled(running and is_actually_running)
 
     def show_task_picker(self, payload: object) -> None:
         if isinstance(payload, dict):
