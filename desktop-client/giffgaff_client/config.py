@@ -98,6 +98,7 @@ class AppConfig:
     activation_defaults: ActivationDefaults = field(default_factory=ActivationDefaults)
     payment_card: PaymentCardConfig = field(default_factory=PaymentCardConfig)
     cloudflare_access: CloudflareAccessConfig = field(default_factory=CloudflareAccessConfig)
+    full_auto: bool = True
 
 
 def _merge_config(raw: dict[str, Any]) -> AppConfig:
