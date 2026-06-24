@@ -60,7 +60,7 @@ def make_session():
             "initial_password": "Secret#1",
             "sim_activation_code": "ABC123",
         }
-        session._agent_api = agent_api if agent_api is not None else MagicMock(spec=AgentApi)
+        session._agent_api = agent_api  # may be None; tests assert behavior explicitly
         session.stop_requested = False
         session.payment_page_seen = False
         import queue as _queue

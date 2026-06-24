@@ -722,6 +722,21 @@ class BrowserSession:
             self._wait_short(page)
         return False
 
+    def _report_phone_number_to_backend(
+        self, phone: str, *, status: str = "等待转 eSIM"
+    ) -> None:
+        """Push captured phone number to backend and set status."""
+        customer_id = (self.task or {}).get("customer_id")
+        api = self._agent_api
+        if not api or not customer_id:
+            self.log(f"未配置后台，仅本地记录手机号：{phone}")
+            return
+        try:
+            api.update_result(int(customer_id), phone_number=phone, status=status)
+            self.log(f"已回传手机号 {phone} 到后台，状态：{status}")
+        except ApiError as exc:
+            self.log(f"回传手机号失败：{exc}")
+
     def _log_stuck(self, step: str, reason: str) -> None:
         """Log a structured 'stuck' event. Does NOT mark backend task as failed."""
         message = f"【卡住】{step} — {reason}。请人工处理后点「继续当前页面」恢复。"
