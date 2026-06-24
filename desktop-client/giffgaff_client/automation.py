@@ -720,6 +720,18 @@ class BrowserSession:
             self._wait_short(page)
         return False
 
+    def _log_stuck(self, step: str, reason: str) -> None:
+        """Log a structured 'stuck' event. Does NOT mark backend task as failed."""
+        message = f"【卡住】{step} — {reason}。请人工处理后点「继续当前页面」恢复。"
+        self.log(message)
+        api = self._agent_api
+        customer_id = (self.task or {}).get("customer_id")
+        if api and customer_id:
+            try:
+                api.add_log(int(customer_id), message, step="auto_stuck")
+            except (ApiError, ValueError, TypeError):
+                pass
+
     def _page_text(self, page: Page) -> str:
         """Return the visible text of <body>, or empty string on timeout."""
         try:
