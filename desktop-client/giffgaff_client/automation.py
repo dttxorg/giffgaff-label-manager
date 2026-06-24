@@ -78,10 +78,18 @@ class BrowserSession:
                 context.close()
 
     def _command_loop(self, page: Page) -> None:
+        phone_reported = False
         while not self.stop_requested:
             try:
                 command = self.commands.get(timeout=0.25)
             except queue.Empty:
+                if self.payment_page_seen and not phone_reported:
+                    phone = self._wait_and_extract_phone_number(page, timeout_seconds=3)
+                    if phone:
+                        self._report_phone_number_to_backend(phone)
+                        phone_reported = True
+                        self.stop_requested = True
+                        break
                 self._auto_remove_saved_card_if_ready(page)
                 continue
             if command.name == "stop":
