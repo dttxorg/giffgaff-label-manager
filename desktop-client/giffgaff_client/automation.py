@@ -14,6 +14,8 @@ from playwright.sync_api import sync_playwright
 from .api import AgentApi, ApiError
 from .config import AppConfig
 
+PHONE_NUMBER_PATTERN = re.compile(r"\b07\d{3}[\s-]?\d{6}\b")
+
 
 LogCallback = Callable[[str], None]
 
