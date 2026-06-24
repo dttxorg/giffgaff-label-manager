@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         self.api_workers: list[ApiWorker] = []
         self.proxy_worker: ProxyTestWorker | None = None
         self.browser_worker: BrowserWorker | None = None
+        self.auto_running: bool = False
         self._build_ui()
         self._load_config_into_ui()
         self._set_task(None)
@@ -537,6 +538,8 @@ class MainWindow(QMainWindow):
         self.browser_worker.logged.connect(self.log)
         self.browser_worker.failed.connect(self.on_browser_error)
         self.browser_worker.stopped.connect(self.on_browser_stopped)
+        self.auto_running = True
+        self._apply_auto_running_ui()
         self.browser_worker.start()
 
     def stop_browser(self) -> None:
@@ -632,7 +635,22 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "浏览器自动化失败", message)
 
     def on_browser_stopped(self) -> None:
+        self.auto_running = False
+        self._apply_auto_running_ui()
         self.log("浏览器自动化已停止")
+
+    def _apply_auto_running_ui(self) -> None:
+        """Enable/disable buttons based on auto_running state."""
+        running = self.auto_running
+        # Always allow stopping the browser; otherwise disable task actions during auto
+        self.refresh_code_btn.setEnabled(not running and bool(self.last_code))
+        self.fill_code_btn.setEnabled(not running and bool(self.last_code))
+        self.continue_browser_btn.setEnabled(not running)
+        self.remove_card_btn.setEnabled(not running)
+        # start_browser_btn is replaced by stop_browser_btn during auto
+        self.start_browser_btn.setEnabled(not running)
+        # stop_browser_btn is always available while running
+        self.stop_browser_btn.setEnabled(running or (self.browser_worker is not None and self.browser_worker.isRunning()))
 
     def show_task_picker(self, payload: object) -> None:
         if isinstance(payload, dict):
