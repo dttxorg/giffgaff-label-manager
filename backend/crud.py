@@ -25,6 +25,28 @@ async def get_all_customers():
         return [dict(r) for r in rows]
 
 
+async def search_customers(query: str):
+    """模糊搜索：手机号 / 快递单号 / 快递公司 / 快递订单号 / 邮箱 任一字段含子串即匹配。
+    大小写不敏感，按 created_at DESC 排序。空串返回全部。"""
+    q = (query or "").strip().lower()
+    if not q:
+        return await get_all_customers()
+    pattern = f"%{q}%"
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await db.execute_fetchall(
+            """SELECT * FROM customers
+               WHERE LOWER(COALESCE(phone_number, '')) LIKE ?
+                  OR LOWER(COALESCE(tracking_number, '')) LIKE ?
+                  OR LOWER(COALESCE(courier_company, '')) LIKE ?
+                  OR LOWER(COALESCE(courier_order_code, '')) LIKE ?
+                  OR LOWER(COALESCE(email, '')) LIKE ?
+               ORDER BY created_at DESC""",
+            (pattern, pattern, pattern, pattern, pattern),
+        )
+        return [dict(r) for r in rows] 
+
+
 async def get_customer(customer_id: int):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row

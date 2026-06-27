@@ -25,7 +25,7 @@ from models import (
     DomainInfo, LabelConfig
 )
 from crud import (
-    get_all_customers, get_customer,
+    get_all_customers, get_customer, search_customers,
     update_customer, delete_customer,
     update_customer_moemail,
     get_settings, set_setting, fetch_one, normalize_optional_text
@@ -597,8 +597,8 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
 # ── 客户管理 ──
 
 @app.get("/api/customers", response_model=list[CustomerOut])
-async def list_customers():
-    rows = await get_all_customers()
+async def list_customers(search: str = ""):
+    rows = await (search_customers(search) if (search or "").strip() else get_all_customers())
     return [CustomerOut(
         id=r["id"],
         phone_number=r["phone_number"],
@@ -619,7 +619,7 @@ async def list_customers():
         activation_error=r.get("activation_error"),
         activated_at=r.get("activated_at"),
         created_at=r["created_at"],
-    ) for r in rows]
+    ) for r in rows] 
 
 
 @app.get("/api/customers/{customer_id}", response_model=CustomerDetail)
