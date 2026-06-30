@@ -1251,6 +1251,20 @@
     <div class="detail-body">
       <div class="info-box" id="d-activation-box"></div>
       <div class="info-box" id="d-moemail-box"></div>
+      <div class="info-box" id="d-esim-box">
+        <div class="code-box-head">
+          <strong>eSIM 激活码</strong>
+          <span id="d-esim-saved-indicator" hidden>已保存到客户</span>
+        </div>
+        <textarea id="d-esim-raw" rows="3" placeholder="1$cel.prod.ondemandconnectivity.com$..."></textarea>
+        <div class="esim-actions">
+          <button type="button" class="small blue" id="d-esim-generate-btn" onclick="generateEsimQr()">生成二维码</button>
+        </div>
+        <div id="d-esim-qr-container" hidden>
+          <img id="d-esim-qr-img" alt="eSIM QR" />
+          <p class="code-meta">完整 LPA：<code id="d-esim-lpa-text"></code></p>
+        </div>
+      </div>
       <div class="code-box" id="d-code-box">
         <div class="code-box-head">
           <strong>验证码</strong>
@@ -1847,6 +1861,7 @@ async function viewCustomer(id, focusTarget='') {
     renderShippingDetail(activeCustomer);
     renderActivationDetail(activeCustomer);
     renderMoemailBox(activeCustomer);
+    renderEsimDetail(activeCustomer);
     renderVerificationCodeBox(activeCustomer);
     document.getElementById('detail-panel').classList.add('open');
     if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
@@ -1966,6 +1981,60 @@ function renderMoemailBox(c) {
     a.rel = 'noopener';
     a.textContent = c.share_link;
     box.appendChild(a);
+  }
+}
+
+function renderEsimDetail(customer) {
+  const raw = (customer && customer.esim_raw_code) || '';
+  const textarea = document.getElementById('d-esim-raw');
+  const indicator = document.getElementById('d-esim-saved-indicator');
+  const container = document.getElementById('d-esim-qr-container');
+  const img = document.getElementById('d-esim-qr-img');
+  if (textarea) textarea.value = raw;
+  if (indicator) indicator.hidden = !raw;
+  if (container) container.hidden = !raw;
+  if (img && customer && customer.id && raw) {
+    img.src = '/api/customers/' + customer.id + '/esim-qr.png?ts=' + Date.now();
+  }
+}
+
+async function generateEsimQr() {
+  if (!activeCustomer) {
+    toast('请先打开客户详情', 'error');
+    return;
+  }
+  const raw = (document.getElementById('d-esim-raw').value || '').trim();
+  if (!raw) {
+    toast('请先粘入激活码', 'error');
+    return;
+  }
+  try {
+    const saveRes = await fetch('/api/customers/' + activeCustomer.id + '/esim-code', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: raw }),
+    });
+    if (!saveRes.ok) {
+      const t = await saveRes.text();
+      toast('保存失败：' + t, 'error');
+      return;
+    }
+    activeCustomer.esim_raw_code = raw;
+    const qrRes = await fetch('/api/customers/' + activeCustomer.id + '/esim-qr.png');
+    if (!qrRes.ok) {
+      const t = await qrRes.text();
+      toast('生成失败：' + t, 'error');
+      return;
+    }
+    const lpa = qrRes.headers.get('X-LPA-String') || '';
+    const blob = await qrRes.blob();
+    document.getElementById('d-esim-qr-img').src = URL.createObjectURL(blob);
+    document.getElementById('d-esim-lpa-text').textContent = lpa;
+    document.getElementById('d-esim-saved-indicator').hidden = false;
+    document.getElementById('d-esim-qr-container').hidden = false;
+    toast('已生成二维码', 'success');
+  } catch (err) {
+    toast(err.message || String(err), 'error');
   }
 }
 
