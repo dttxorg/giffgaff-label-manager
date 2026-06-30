@@ -46,6 +46,7 @@ async def init_db():
         await _ensure_column(db, "customers", "sim_code_id", "INTEGER")
         await _ensure_column(db, "customers", "sim_activation_code", "TEXT")
         await _ensure_column(db, "customers", "initial_password", "TEXT")
+        await _ensure_column(db, "customers", "esim_raw_code", "TEXT")
         await _ensure_column(db, "customers", "activation_status", "TEXT NOT NULL DEFAULT '未开始'")
         await _ensure_column(db, "customers", "activation_error", "TEXT")
         await _ensure_column(db, "customers", "activated_at", "TEXT")
