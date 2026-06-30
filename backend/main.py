@@ -22,7 +22,7 @@ from models import (
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
     SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
     ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
-    DomainInfo, LabelConfig
+    DomainInfo, LabelConfig, EsimCodeUpdate
 )
 from crud import (
     get_all_customers, get_customer, search_customers,
@@ -30,6 +30,7 @@ from crud import (
     update_customer_moemail,
     get_settings, set_setting, fetch_one, normalize_optional_text
 )
+from qr_utils import parse_esim_raw, build_lpa_string, generate_esim_qr_png
 
 app = FastAPI(title="giffgaff-label-manager API")
 
@@ -734,6 +735,23 @@ async def update_customer_activation_status(customer_id: int, data: ActivationSt
     message = data.message or f"后台手动标记激活状态：{data.status}"
     await _insert_activation_log(customer_id, "info", data.step or "admin", message)
     return {"ok": True}
+
+
+@app.put("/api/customers/{customer_id}/esim-code")
+async def save_customer_esim_code(customer_id: int, data: EsimCodeUpdate):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    raw = (data.code or "").strip()
+    if raw and not parse_esim_raw(raw):
+        raise HTTPException(status_code=400, detail="eSIM 激活码格式无效，需为 1$SM-DP+$激活码")
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE customers SET esim_raw_code = ? WHERE id = ?",
+            (raw or None, customer_id),
+        )
+        await db.commit()
+    return {"ok": True, "esim_raw_code": raw or None}
 
 
 @app.post("/api/customers/{customer_id}/cainiao-waybill", status_code=200)
