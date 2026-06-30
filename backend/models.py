@@ -51,6 +51,7 @@ class CustomerOut(BaseModel):
     is_moemail_auto: bool
     sim_code_id: Optional[int] = None
     sim_activation_code: Optional[str] = None
+    esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"
     activation_error: Optional[str] = None
     activated_at: Optional[str] = None
@@ -75,6 +76,7 @@ class CustomerDetail(BaseModel):
     sim_code_id: Optional[int] = None
     sim_activation_code: Optional[str] = None
     initial_password: Optional[str] = None
+    esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"
     activation_error: Optional[str] = None
     activated_at: Optional[str] = None
@@ -209,3 +211,7 @@ class DomainInfo(BaseModel):
 class LabelConfig(BaseModel):
     giffgaff_download_url: str
     templates: list[dict[str, Any]]
+
+
+class EsimCodeUpdate(BaseModel):
+    code: str = ""
