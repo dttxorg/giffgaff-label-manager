@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -752,6 +752,27 @@ async def save_customer_esim_code(customer_id: int, data: EsimCodeUpdate):
         )
         await db.commit()
     return {"ok": True, "esim_raw_code": raw or None}
+
+
+@app.get("/api/customers/{customer_id}/esim-qr.png")
+async def get_customer_esim_qr(customer_id: int):
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    raw = (c.get("esim_raw_code") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=404, detail="该客户尚未保存 eSIM 激活码")
+    parsed = parse_esim_raw(raw)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="保存的 eSIM 激活码格式无效")
+    smdp, code = parsed
+    lpa = build_lpa_string(smdp, code)
+    png_bytes = generate_esim_qr_png(lpa)
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store", "X-LPA-String": lpa},
+    )
 
 
 @app.post("/api/customers/{customer_id}/cainiao-waybill", status_code=200)
