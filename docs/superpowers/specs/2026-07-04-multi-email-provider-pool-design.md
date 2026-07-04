@@ -108,6 +108,8 @@ ALTER TABLE customers ADD COLUMN email_provider_id INTEGER REFERENCES email_prov
 ALTER TABLE customers ADD COLUMN email_account_id TEXT;       -- provider-specific account ID
 ```
 
+Note: column name uses `email_account_id` (provider's resource ID) vs `email_provider_id` (FK row). Intentional asymmetry — see §3.1.4.
+
 Via `_ensure_column` (existing helper). Old `moemail_id` / `moemail_address` columns **kept** for backward compatibility; application code reads new columns first, falls back to old columns for legacy customers.
 
 ### 3.2 `backend/email_providers/` (new package)
