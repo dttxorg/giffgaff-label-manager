@@ -22,7 +22,8 @@ from models import (
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
     SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
     ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
-    DomainInfo, LabelConfig, EsimCodeUpdate
+    DomainInfo, LabelConfig, EsimCodeUpdate,
+    EmailProviderCreate, EmailProviderOut, EmailProviderUpdate
 )
 from crud import (
     get_all_customers, get_customer, search_customers,
@@ -1616,6 +1617,153 @@ def _load_label_templates(raw: str):
         return _merge_default_label_templates(templates) if isinstance(templates, list) else deepcopy(DEFAULT_LABEL_TEMPLATES)
     except json.JSONDecodeError:
         return deepcopy(DEFAULT_LABEL_TEMPLATES)
+
+
+def _build_provider_config_json(provider_type: str, config: dict) -> str:
+    """Validate and serialize provider-specific config to JSON string."""
+    if provider_type == "moemail":
+        if "url" not in config or "api_key" not in config:
+            raise HTTPException(status_code=400, detail="MoEmail 需要 url 和 api_key")
+        return json.dumps({"url": config["url"].rstrip("/"), "api_key": config["api_key"]})
+    if provider_type == "cloudmail":
+        if "url" not in config or "email" not in config or "password" not in config:
+            raise HTTPException(status_code=400, detail="Cloud-Mail 需要 url/email/password")
+        return json.dumps({
+            "url": config["url"].rstrip("/"),
+            "email": config["email"],
+            "password": config["password"],
+            "domain": config.get("domain", ""),
+        })
+    raise HTTPException(status_code=400, detail=f"未知 provider_type: {provider_type}")
+
+
+def _hydrate_provider_config_to_dict(row) -> dict:
+    """Inverse: row → config dict (without leaking password to UI)."""
+    cfg = json.loads(row["config_json"])
+    typ = row["provider_type"]
+    if typ == "moemail":
+        return {"url": cfg["url"], "api_key": cfg["api_key"]}
+    if typ == "cloudmail":
+        return {
+            "url": cfg["url"],
+            "email": cfg["email"],
+            "domain": cfg.get("domain", ""),
+            "password_set": bool(cfg.get("password")),
+        }
+    return {}
+
+
+def _row_to_email_provider_out(row) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "provider_type": row["provider_type"],
+        "config": _hydrate_provider_config_to_dict(row),
+        "last_used_at": row["last_used_at"],
+        "last_error": row["last_error"],
+        "last_error_at": row["last_error_at"],
+        "last_jwt_acquired_at": row["last_jwt_at"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+@app.get("/api/email-providers")
+async def list_email_providers():
+    rows = list_providers(DATABASE_PATH)
+    return [_row_to_email_provider_out(r) for r in rows]
+
+
+@app.post("/api/email-providers", status_code=201)
+async def add_email_provider(data: EmailProviderCreate):
+    config_json = _build_provider_config_json(data.provider_type, data.config)
+    now = _utc_now()
+    try:
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            cur = await db.execute(
+                """INSERT INTO email_providers
+                   (name, provider_type, config_json, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (data.name, data.provider_type, config_json, now, now),
+            )
+            provider_id = cur.lastrowid
+            await db.commit()
+    except aiosqlite.IntegrityError:
+        raise HTTPException(status_code=409, detail="名称已存在")
+    return {
+        "id": provider_id,
+        "name": data.name,
+        "provider_type": data.provider_type,
+        "config": data.config,
+        "last_used_at": None,
+        "last_error": None,
+        "last_error_at": None,
+        "last_jwt_acquired_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+@app.get("/api/email-providers/{provider_id}")
+async def get_email_provider(provider_id: int):
+    rows = list_providers(DATABASE_PATH)
+    row = next((r for r in rows if r["id"] == provider_id), None)
+    if not row:
+        raise HTTPException(status_code=404, detail="Provider 不存在")
+    return _row_to_email_provider_out(row)
+
+
+@app.patch("/api/email-providers/{provider_id}", status_code=200)
+async def update_email_provider(provider_id: int, data: EmailProviderUpdate):
+    rows = list_providers(DATABASE_PATH)
+    row = next((r for r in rows if r["id"] == provider_id), None)
+    if not row:
+        raise HTTPException(status_code=404, detail="Provider 不存在")
+    now = _utc_now()
+    fields = []
+    values = []
+    if data.name is not None:
+        fields.append("name = ?"); values.append(data.name)
+    if data.config is not None:
+        cfg = _build_provider_config_json(row["provider_type"], data.config)
+        fields.append("config_json = ?"); values.append(cfg)
+        # Invalidate cached JWT — new credentials may invalidate it
+        fields.append("last_jwt_token = NULL"); fields.append("last_jwt_at = NULL")
+    fields.append("updated_at = ?"); values.append(now)
+    values.append(provider_id)
+    sql = f"UPDATE email_providers SET {', '.join(fields)} WHERE id = ?"
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(sql, values)
+        await db.commit()
+    return {"ok": True, "id": provider_id}
+
+
+@app.post("/api/email-providers/{provider_id}/test")
+async def test_email_provider(provider_id: int):
+    pid, provider = get_provider(DATABASE_PATH, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider 不存在")
+    ok = provider.ping()
+    if ok:
+        record_provider_use(DATABASE_PATH, provider_id)
+        return {"ok": True, "message": "连接成功"}
+    record_provider_use(DATABASE_PATH, provider_id, error="ping failed")
+    raise HTTPException(status_code=502, detail="Provider 不可达")
+
+
+@app.delete("/api/email-providers/{provider_id}", status_code=200)
+async def delete_email_provider(provider_id: int):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cur = await db.execute(
+            "SELECT COUNT(*) FROM customers WHERE email_provider_id = ?",
+            (provider_id,),
+        )
+        count = (await cur.fetchone())[0]
+        if count > 0:
+            raise HTTPException(status_code=409, detail=f"仍有 {count} 个客户使用此 provider")
+        await db.execute("DELETE FROM email_providers WHERE id = ?", (provider_id,))
+        await db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/label-config", response_model=LabelConfig)
