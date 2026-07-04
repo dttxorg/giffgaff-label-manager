@@ -124,6 +124,34 @@ class CloudMailProvider(EmailProvider):
             for m in items
         ]
 
+    def get_email_messages(self, provider_account_id: str) -> dict:
+        """Return MoEmail-shaped JSON for main.py endpoint interop.
+
+        cloud-mail's /email/latest uses `emailId` as the per-message id and
+        doesn't separate summary from detail (the body is in the same payload).
+        Returns a MoEmail-compatible summary list — main.py's message-detail
+        paths will then call get_message() for the body.
+        """
+        messages = self.fetch_latest_messages(provider_account_id)
+        return {
+            "messages": [
+                {
+                    "id": int(m.id) if m.id.isdigit() else m.id,
+                    "subject": m.subject,
+                    "receivedAt": m.received_at,
+                }
+                for m in messages
+            ]
+        }
+
+    def get_message(self, provider_account_id: str, message_id: str) -> dict:
+        """cloud-mail has no per-message GET; look up by id in the already-fetched list."""
+        results = self.fetch_latest_messages(provider_account_id, after_message_id="")
+        for m in results:
+            if m.id == str(message_id):
+                return {"text": m.text, "subject": m.subject}
+        return {}
+
     def extract_verification_code(self, message: InboxMessage) -> str | None:
         m = VERIFICATION_CODE_RE.search(message.text)
         return m.group(0) if m else None

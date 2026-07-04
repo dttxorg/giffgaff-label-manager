@@ -57,6 +57,14 @@ class MoEmailProvider(EmailProvider):
             ))
         return msgs
 
+    def get_email_messages(self, provider_account_id: str) -> dict:
+        """Alias returning raw MoEmail payload format for backward compat
+        with main.py endpoints that consume MoEmail-shaped JSON."""
+        return {"messages": [
+            {"id": m.id, "subject": m.subject, "receivedAt": m.received_at}
+            for m in self.fetch_latest_messages(provider_account_id)
+        ]}
+
     def extract_verification_code(self, message: InboxMessage) -> str | None:
         m = VERIFICATION_CODE_RE.search(message.text)
         return m.group(0) if m else None

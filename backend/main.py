@@ -886,21 +886,66 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
         raise HTTPException(status_code=502, detail=f"为客户生成邮箱失败：{exc}") from exc
 
 
+# ── Inbox provider resolution ──
+
+
+async def _resolve_inbox_provider(customer_row: dict) -> tuple[str, "MoEmailClient | CloudMailProvider"]:
+    """Pick the right provider client for fetching a customer's inbox messages.
+
+    Strategy:
+    1. If customer has email_provider_id pointing to a pool entry → use that provider.
+    2. Otherwise (legacy customer) → find first MoEmail-type provider in pool.
+    3. If no MoEmail in pool → construct ad-hoc MoEmailClient from global settings
+       (preserves pre-pool behavior for users who never set up pool entries).
+
+    Returns (provider_account_id_on_provider, provider_client_instance).
+    Raises HTTPException(400) if no usable provider exists.
+    """
+    provider_id = customer_row.get("email_provider_id")
+    if provider_id:
+        pid, provider = get_provider(DATABASE_PATH, int(provider_id))
+        if not provider:
+            raise HTTPException(
+                status_code=400,
+                detail=f"客户关联的邮箱 provider(id={provider_id}) 不存在，请联系管理员",
+            )
+        account_id = customer_row.get("email_account_id") or customer_row.get("moemail_id")
+        if not account_id:
+            raise HTTPException(status_code=400, detail="客户无邮箱账号信息")
+        return str(account_id), provider
+
+    # Legacy fallback: legacy customers were created when only MoEmail existed.
+    rows = list_providers(DATABASE_PATH)
+    moemail_rows = [r for r in rows if r["provider_type"] == "moemail"]
+    if moemail_rows:
+        r = moemail_rows[0]
+        pid, provider = get_provider(DATABASE_PATH, r["id"])
+        legacy_id = customer_row.get("moemail_id")
+        if not legacy_id:
+            raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱")
+        return str(legacy_id), provider
+
+    # Final fallback: global MoEmail settings (pre-pool users)
+    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
+    moemail_key = await _get_setting("moemail_api_key")
+    if not moemail_url or not moemail_key:
+        raise HTTPException(
+            status_code=400,
+            detail="尚未配置邮箱服务商，且全局 MoEmail 设置也未配置",
+        )
+    from email_providers._moemail_client import MoEmailClient
+    legacy_id = customer_row.get("moemail_id")
+    if not legacy_id:
+        raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱")
+    return str(legacy_id), MoEmailClient(moemail_url, moemail_key)
+
+
 @app.get("/api/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
 async def get_customer_verification_code(customer_id: int):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    moemail_id = (c.get("moemail_id") or "").strip()
-    if not moemail_id:
-        raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱，手填邮箱无法自动接码")
-    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
-    moemail_key = await _get_setting("moemail_api_key")
-    if not moemail_url or not moemail_key:
-        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
-
-    from moemail import MoEmailClient
-    client = MoEmailClient(moemail_url, moemail_key)
+    moemail_id, client = await _resolve_inbox_provider(c)
     email_address = c.get("moemail_address") or c.get("email") or ""
     try:
         mailbox = client.get_email_messages(moemail_id)
@@ -961,16 +1006,7 @@ async def get_customer_payment_info_emails(customer_id: int, limit: int = 50):
     c = await get_customer(customer_id)
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    moemail_id = (c.get("moemail_id") or "").strip()
-    if not moemail_id:
-        raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱，无法自动检查支付信息邮件")
-    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
-    moemail_key = await _get_setting("moemail_api_key")
-    if not moemail_url or not moemail_key:
-        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
-
-    from moemail import MoEmailClient
-    client = MoEmailClient(moemail_url, moemail_key)
+    moemail_id, client = await _resolve_inbox_provider(c)
     email_address = c.get("moemail_address") or c.get("email") or ""
     limit = min(max(1, limit), 100)
     try:
