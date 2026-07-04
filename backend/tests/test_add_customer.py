@@ -24,25 +24,26 @@ class AddCustomerTests(unittest.IsolatedAsyncioTestCase):
             crud.DATABASE_PATH,
             main.DATABASE_PATH,
         )
-        self.original_generate_moemail = main._generate_moemail_account
+        self.original_generate_email = main._generate_email_account
         database.DATABASE_PATH = self.db_path
         crud.DATABASE_PATH = self.db_path
         main.DATABASE_PATH = self.db_path
 
-        async def fake_generate_moemail(domain=None):
+        async def fake_generate_email(*, manual_provider_id=None):
             return {
                 "email": "auto@example.com",
-                "moemail_id": "mailbox-1",
-                "moemail_address": "auto@example.com",
+                "email_account_id": "mailbox-1",
+                "email_provider_id": None,
                 "share_link": "https://681218.xyz/shared/token",
+                "is_email_auto": True,
             }
 
-        main._generate_moemail_account = fake_generate_moemail
+        main._generate_email_account = fake_generate_email
         await database.init_db()
 
     async def asyncTearDown(self):
         database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH = self.original_paths
-        main._generate_moemail_account = self.original_generate_moemail
+        main._generate_email_account = self.original_generate_email
         self.temp_dir.cleanup()
 
     async def test_blank_email_auto_generates_without_sim_code(self):

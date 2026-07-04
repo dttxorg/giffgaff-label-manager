@@ -35,13 +35,8 @@ class SaveEsimCodeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp_dir_ctx = tempfile.TemporaryDirectory()
         _patch_db_paths(self, self.temp_dir_ctx.name)
-        self.original_gen = main._generate_moemail_account
-
-        async def fake_gen(domain=None):
-            return {"email": "x@y", "moemail_id": None, "moemail_address": "x@y",
-                    "share_link": None, "is_moemail_auto": False}
-
-        main._generate_moemail_account = fake_gen
+        # No need to mock _generate_email_account — add_customer gets email="x@y",
+        # so the email-generation branch is never entered.
         await database.init_db()
         result = await main.add_customer(
             CustomerCreate(
@@ -54,7 +49,6 @@ class SaveEsimCodeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         _restore_db_paths(self)
-        main._generate_moemail_account = self.original_gen
         self.temp_dir_ctx.cleanup()
 
     async def test_save_valid_code(self):
@@ -110,13 +104,8 @@ class GetEsimQrTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp_dir_ctx = tempfile.TemporaryDirectory()
         _patch_db_paths(self, self.temp_dir_ctx.name)
-        self.original_gen = main._generate_moemail_account
 
-        async def fake_gen(domain=None):
-            return {"email": "x@y", "moemail_id": None, "moemail_address": "x@y",
-                    "share_link": None, "is_moemail_auto": False}
-
-        main._generate_moemail_account = fake_gen
+        # No need to mock _generate_email_account — add_customer gets email="x@y".
         await database.init_db()
         result = await main.add_customer(
             CustomerCreate(email="x@y", activation_date=date(2026, 6, 24), use_sim_code=False)
@@ -125,7 +114,6 @@ class GetEsimQrTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         _restore_db_paths(self)
-        main._generate_moemail_account = self.original_gen
         self.temp_dir_ctx.cleanup()
 
     async def test_get_qr_returns_404_when_no_code_saved(self):

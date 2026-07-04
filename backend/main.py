@@ -31,6 +31,17 @@ from crud import (
     get_settings, set_setting, fetch_one, normalize_optional_text
 )
 from qr_utils import parse_esim_raw, build_lpa_string, generate_esim_qr_png
+from email_providers.pool import (
+    pick_provider,
+    record_provider_use,
+    persist_provider_jwt,
+    list_providers,
+    get_provider,
+)
+from email_providers.auth import (
+    hydrate_provider,
+    extract_jwt_for_persist,
+)
 
 app = FastAPI(title="giffgaff-label-manager API")
 
@@ -468,29 +479,36 @@ async def _get_setting(key: str) -> str:
     return rows.get(key, "")
 
 
-async def _generate_moemail_account(domain: Optional[str] = None) -> dict:
-    moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
-    moemail_key = await _get_setting("moemail_api_key")
-    if not moemail_url or not moemail_key:
-        raise HTTPException(status_code=400, detail="MoEmail 未配置，请在设置页面配置")
-    from moemail import MoEmailClient
-    client = MoEmailClient(moemail_url, moemail_key)
-    if not domain:
-        domains = client.get_domains()
-        domain = domains[0] if domains else ""
-    email_resp = client.generate_email(expiry_time=0, domain=domain)
-    moemail_id = email_resp.get("id", "")
-    moemail_address = email_resp.get("email", "")
-    if not moemail_id or not moemail_address:
-        raise ValueError("MoEmail 未返回邮箱 ID 或地址")
-    share_resp = client.create_share_link(moemail_id, expires_in=0)
-    token = share_resp.get("token", "")
+async def _generate_email_account(*, manual_provider_id: Optional[int] = None) -> dict:
+    """Pool-backed email account generator.
+
+    Returns {email, email_account_id, email_provider_id, share_link, is_email_auto}.
+    Raises HTTPException(503) if no usable provider, 502 if generation fails.
+    """
+    try:
+        provider_id, provider = pick_provider(DATABASE_PATH, manual_provider_id=manual_provider_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    try:
+        gen = provider.generate_email()
+    except Exception as exc:
+        record_provider_use(DATABASE_PATH, provider_id, error=str(exc))
+        raise HTTPException(status_code=502, detail=f"生成邮箱失败：{exc}") from exc
+    record_provider_use(DATABASE_PATH, provider_id)
+    jwt, jwt_at = extract_jwt_for_persist(provider)
+    if jwt:
+        persist_provider_jwt(DATABASE_PATH, provider_id, jwt, jwt_at)
     return {
-        "email": moemail_address,
-        "moemail_id": moemail_id,
-        "moemail_address": moemail_address,
-        "share_link": f"{moemail_url}/shared/{token}" if token else "",
+        "email": gen.address,
+        "email_account_id": gen.provider_account_id,
+        "email_provider_id": provider_id,
+        "share_link": gen.share_link,
+        "is_email_auto": True,
     }
+
+
+# Note: legacy `_generate_moemail_account` removed (was just an alias to _generate_email_account).
+# Callers updated inline to call `_generate_email_account` directly.
 
 
 async def _has_available_sim_code() -> bool:
@@ -673,9 +691,13 @@ async def add_customer(data: CustomerCreate):
     try:
         email = (data.email or "").strip()
         if email:
-            email_bundle = {"email": email, "is_moemail_auto": False}
+            email_bundle = {"email": email, "is_moemail_auto": False, "email_provider_id": None, "email_account_id": None}
         else:
-            email_bundle = await _generate_moemail_account()
+            email_bundle = await _generate_email_account()
+            # Pool-backed path returns new keys (email_account_id, email_provider_id, share_link)
+            # Legacy callers expect moemail_id/moemail_address/is_moemail_auto/share_link.
+            email_bundle["moemail_id"] = email_bundle.get("email_account_id")
+            email_bundle["moemail_address"] = email_bundle.get("email")
             email_bundle["is_moemail_auto"] = True
         if data.use_sim_code:
             initial_password = _generate_initial_password()
@@ -836,24 +858,25 @@ async def create_customer_moemail(customer_id: int, data: MoEmailCreateRequest):
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
     try:
-        email_bundle = await _generate_moemail_account(data.domain)
+        email_bundle = await _generate_email_account()
+        # Bridge to legacy fields so update_customer_moemail (which writes old columns) works
         await update_customer_moemail(
             customer_id,
-            email_bundle["moemail_id"],
-            email_bundle["moemail_address"],
-            email_bundle["share_link"],
+            email_bundle["email_account_id"],
+            email_bundle["email"],
+            email_bundle.get("share_link", ""),
             True,
         )
         return {
             "ok": True,
             "email": email_bundle["email"],
-            "moemail_id": email_bundle["moemail_id"],
-            "share_link": email_bundle["share_link"],
+            "moemail_id": email_bundle["email_account_id"],
+            "email_provider_id": email_bundle["email_provider_id"],
         }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"MoEmail 调用失败：{e}") from e
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"为客户生成邮箱失败：{exc}") from exc
 
 
 @app.get("/api/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
@@ -1283,7 +1306,7 @@ async def _claim_activation_task_row(db: aiosqlite.Connection, row, agent_id: st
 
 
 async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) -> ActivationTaskOut:
-    email_bundle = await _generate_moemail_account()
+    email_bundle = await _generate_email_account()
     initial_password = _generate_initial_password()
     activation_date = datetime.date.today().isoformat()
     async with aiosqlite.connect(DATABASE_PATH) as db:
