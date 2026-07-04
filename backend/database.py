@@ -47,6 +47,8 @@ async def init_db():
         await _ensure_column(db, "customers", "sim_activation_code", "TEXT")
         await _ensure_column(db, "customers", "initial_password", "TEXT")
         await _ensure_column(db, "customers", "esim_raw_code", "TEXT")
+        await _ensure_column(db, "customers", "email_provider_id", "INTEGER")
+        await _ensure_column(db, "customers", "email_account_id", "TEXT")
         await _ensure_column(db, "customers", "activation_status", "TEXT NOT NULL DEFAULT '未开始'")
         await _ensure_column(db, "customers", "activation_error", "TEXT")
         await _ensure_column(db, "customers", "activated_at", "TEXT")
@@ -82,6 +84,21 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS email_providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                provider_type TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                last_used_at TEXT,
+                last_error TEXT,
+                last_error_at TEXT,
+                last_jwt_token TEXT,
+                last_jwt_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
         await db.commit()
