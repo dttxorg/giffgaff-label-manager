@@ -530,8 +530,9 @@ async def _create_customer_without_activation(data: CustomerCreate, email_bundle
             """INSERT INTO customers
                (phone_number, email, shipping_address, shipping_status, courier_company,
                 tracking_number, courier_order_code, courier_print_data, activation_date,
-                moemail_id, moemail_address, share_link, is_moemail_auto, activation_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                moemail_id, moemail_address, share_link, is_moemail_auto,
+                email_provider_id, email_account_id, activation_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 phone_number,
                 email_bundle.get("email", ""),
@@ -546,6 +547,8 @@ async def _create_customer_without_activation(data: CustomerCreate, email_bundle
                 email_bundle.get("moemail_address"),
                 email_bundle.get("share_link"),
                 1 if email_bundle.get("is_moemail_auto") else 0,
+                email_bundle.get("email_provider_id"),
+                email_bundle.get("email_account_id"),
                 "未开始",
             ),
         )
@@ -575,8 +578,9 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                    (phone_number, email, shipping_address, shipping_status, courier_company,
                     tracking_number, courier_order_code, courier_print_data, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
-                    sim_code_id, sim_activation_code, initial_password, activation_status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    sim_code_id, sim_activation_code, initial_password,
+                    email_provider_id, email_account_id, activation_status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     phone_number,
                     email_bundle.get("email", ""),
@@ -594,6 +598,8 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                     sim["id"],
                     sim["code"],
                     initial_password,
+                    email_bundle.get("email_provider_id"),
+                    email_bundle.get("email_account_id"),
                     "等待客户端领取",
                 ),
             )
@@ -1328,8 +1334,9 @@ async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) 
                 """INSERT INTO customers
                    (phone_number, email, shipping_address, shipping_status, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
-                    sim_code_id, sim_activation_code, initial_password, activation_status)
-                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    sim_code_id, sim_activation_code, initial_password,
+                    email_provider_id, email_account_id, activation_status)
+                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     email_bundle.get("email", ""),
                     DEFAULT_SHIPPING_STATUS,
@@ -1341,6 +1348,8 @@ async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) 
                     sim["id"],
                     sim["code"],
                     initial_password,
+                    email_bundle.get("email_provider_id"),
+                    email_bundle.get("email_account_id"),
                     "等待客户端领取",
                 ),
             )
