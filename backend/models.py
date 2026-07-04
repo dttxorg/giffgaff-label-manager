@@ -19,6 +19,7 @@ class CustomerCreate(BaseModel):
     courier_print_data: Optional[str] = None
     activation_date: date
     use_sim_code: bool = True
+    email_provider_id: Optional[int] = None  # None = pool round-robin
 
 
 class CustomerUpdate(BaseModel):

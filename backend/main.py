@@ -700,7 +700,7 @@ async def add_customer(data: CustomerCreate):
         if email:
             email_bundle = {"email": email, "is_moemail_auto": False, "email_provider_id": None, "email_account_id": None}
         else:
-            email_bundle = await _generate_email_account()
+            email_bundle = await _generate_email_account(manual_provider_id=data.email_provider_id)
             # Pool-backed path returns new keys (email_account_id, email_provider_id, share_link)
             # Legacy callers expect moemail_id/moemail_address/is_moemail_auto/share_link.
             email_bundle["moemail_id"] = email_bundle.get("email_account_id")
