@@ -923,6 +923,7 @@
     <button class="tab" id="tab-btn-sim-codes" type="button" onclick="switchTab('sim-codes', this)">SIM 激活码</button>
     <button class="tab" id="tab-btn-labels" type="button" onclick="switchTab('labels', this)">标签模板</button>
     <button class="tab" id="tab-btn-settings" type="button" onclick="switchTab('settings', this)">系统设置</button>
+    <button class="tab" id="tab-btn-email-providers" type="button" onclick="switchTab('email-providers', this)">邮箱服务商</button>
   </div>
 
   <section id="tab-customers" class="tab-content active">
@@ -1108,6 +1109,45 @@
             </div>
           </aside>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-email-providers" class="tab-content">
+    <div class="card">
+      <div class="card-header">邮箱服务商（轮换池）</div>
+      <div class="card-body">
+        <p class="hint">添加多个邮箱服务商，系统会按最后使用时间轮换分配给新客户。同一 MoEmail 域名下批量注册会触发 giffgaff 风控，所以推荐至少 2 个不同后缀的 provider。</p>
+        <div class="toolbar">
+          <button type="button" id="ep-add-btn" onclick="openEpDialog()">+ 添加服务商</button>
+        </div>
+        <table id="ep-table">
+          <thead><tr><th>名称</th><th>类型</th><th>URL</th><th>最后使用</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="dialog" id="ep-dialog" hidden>
+      <h3 id="ep-dialog-title">添加邮箱服务商</h3>
+      <label>名称 <input id="ep-name" type="text" placeholder="例如 moemail_main"></label>
+      <label>类型 <select id="ep-type" onchange="toggleEpFields()">
+        <option value="moemail">MoEmail</option>
+        <option value="cloudmail">Cloud-Mail</option>
+      </select></label>
+      <div data-ep-fields="moemail">
+        <label>URL <input id="ep-url" type="url" placeholder="https://moemail.example.com"></label>
+        <label>API Key <input id="ep-key" type="password"></label>
+      </div>
+      <div data-ep-fields="cloudmail" hidden>
+        <label>URL <input id="ep-url-c" type="url" placeholder="https://mail.example.com"></label>
+        <label>登录邮箱 <input id="ep-email-c" type="email"></label>
+        <label>密码 <input id="ep-pass-c" type="password"></label>
+        <label>默认域名 <input id="ep-domain-c" type="text" placeholder="example.com"></label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="ep-save-btn" onclick="saveEp()">保存</button>
+        <button type="button" onclick="closeEpDialog()">取消</button>
       </div>
     </div>
   </section>
@@ -2392,6 +2432,142 @@ function copyAgentToken() {
 function openSettings() {
   switchTab('settings', document.getElementById('tab-btn-settings'));
   loadSettings();
+}
+
+// ---- 邮箱服务商管理 ----
+
+const _ORIG_switchTab = switchTab;
+function switchTab(name, el) {
+  _ORIG_switchTab(name, el);
+  if (name === 'email-providers') {
+    loadEmailProviders();
+  }
+}
+
+async function loadEmailProviders() {
+  const r = await fetch(API + '/email-providers');
+  if (!r.ok) { toast('加载服务商失败', 'error'); return; }
+  const list = await r.json();
+  const tbody = document.querySelector('#ep-table tbody');
+  tbody.replaceChildren();
+  for (const p of list) {
+    const tr = document.createElement('tr');
+    const status = p.last_error ? `<span class="bad">❌ ${escapeHtml(p.last_error)}</span>`
+                              : `<span class="good">✅ OK</span>`;
+    const url = (p.config && p.config.url) ? escapeHtml(p.config.url) : '';
+    tr.innerHTML = `
+      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(p.provider_type)}</td>
+      <td>${url}</td>
+      <td>${p.last_used_at || '—'}</td>
+      <td>${status}</td>
+      <td>
+        <button type="button" class="small" onclick="testEp(${p.id})">测试</button>
+        <button type="button" class="small" onclick="openEpDialog(${p.id})">编辑</button>
+        <button type="button" class="small danger" onclick="deleteEp(${p.id})">删除</button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function toggleEpFields() {
+  const t = document.getElementById('ep-type').value;
+  document.querySelector('[data-ep-fields="moemail"]').hidden = (t !== 'moemail');
+  document.querySelector('[data-ep-fields="cloudmail"]').hidden = (t !== 'cloudmail');
+}
+
+function openEpDialog(id) {
+  const dlg = document.getElementById('ep-dialog');
+  document.getElementById('ep-dialog-title').textContent = id ? '编辑邮箱服务商' : '添加邮箱服务商';
+  document.getElementById('ep-name').value = '';
+  document.getElementById('ep-type').value = 'moemail';
+  document.getElementById('ep-type').disabled = !!id;  // type is immutable on edit
+  document.getElementById('ep-url').value = '';
+  document.getElementById('ep-key').value = '';
+  document.getElementById('ep-url-c').value = '';
+  document.getElementById('ep-email-c').value = '';
+  document.getElementById('ep-pass-c').value = '';
+  document.getElementById('ep-domain-c').value = '';
+  if (id) {
+    fetch(API + '/email-providers').then(r => r.json()).then(list => {
+      const p = list.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('ep-name').value = p.name;
+      document.getElementById('ep-url').value = (p.config.url || '');
+      if (p.provider_type === 'cloudmail') {
+        document.getElementById('ep-type').value = 'cloudmail';
+        document.getElementById('ep-url-c').value = (p.config.url || '');
+        document.getElementById('ep-email-c').value = (p.config.email || '');
+        document.getElementById('ep-domain-c').value = (p.config.domain || '');
+        // Don't pre-fill password; user re-enters to change
+      } else {
+        document.getElementById('ep-key').value = (p.config.api_key || '');
+      }
+      toggleEpFields();
+    });
+  }
+  toggleEpFields();
+  dlg.hidden = false;
+}
+
+function closeEpDialog() {
+  document.getElementById('ep-dialog').hidden = true;
+}
+
+async function saveEp() {
+  const name = document.getElementById('ep-name').value.trim();
+  if (!name) { toast('请输入名称', 'error'); return; }
+  const type = document.getElementById('ep-type').value;
+  let config;
+  if (type === 'moemail') {
+    config = {
+      url: document.getElementById('ep-url').value.trim(),
+      api_key: document.getElementById('ep-key').value,
+    };
+  } else {
+    config = {
+      url: document.getElementById('ep-url-c').value.trim(),
+      email: document.getElementById('ep-email-c').value.trim(),
+      password: document.getElementById('ep-pass-c').value,
+      domain: document.getElementById('ep-domain-c').value.trim(),
+    };
+  }
+  const r = await fetch(API + '/email-providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, provider_type: type, config }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    toast('保存失败：' + (err.detail || r.statusText), 'error');
+    return;
+  }
+  closeEpDialog();
+  loadEmailProviders();
+  toast('已添加', 'success');
+}
+
+async function testEp(id) {
+  const r = await fetch(API + '/email-providers/' + id + '/test', { method: 'POST' });
+  if (r.ok) {
+    toast('连接成功', 'success');
+  } else {
+    const err = await r.json().catch(() => ({}));
+    toast('连接失败：' + (err.detail || r.statusText), 'error');
+  }
+  loadEmailProviders();
+}
+
+async function deleteEp(id) {
+  if (!confirm('确定删除？')) return;
+  const r = await fetch(API + '/email-providers/' + id, { method: 'DELETE' });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    toast('删除失败：' + (err.detail || r.statusText), 'error');
+    return;
+  }
+  loadEmailProviders();
+  toast('已删除', 'success');
 }
 
 async function loadLabelConfig() {
