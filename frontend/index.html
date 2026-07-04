@@ -940,8 +940,15 @@
           </div>
 	          <div>
 	            <label>邮箱</label>
-	            <input type="email" id="email" placeholder="可手填；留空自动生成 MoEmail">
+	            <input type="email" id="email" placeholder="可手填；留空自动生成（按服务商池轮换）">
 	          </div>
+	          <div>
+	            <label>
+              <input type="checkbox" id="customer-auto-rotate" checked>
+              使用自动轮换
+            </label>
+            <select id="customer-provider-pick" hidden></select>
+          </div>
           <div>
             <label>开通日期</label>
             <input type="date" id="act-date" required>
@@ -1482,6 +1489,13 @@ function resetAddFormDefaults() {
   const useSimCodeInput = document.getElementById('use-sim-code');
   if (dateInput) dateInput.value = todayDateValue();
   if (useSimCodeInput) useSimCodeInput.value = 'true';
+  // Load provider picker list (async, no-op if no providers yet)
+  loadCustomerProviderPicker();
+  // Reset auto-rotate to checked
+  const ar = document.getElementById('customer-auto-rotate');
+  if (ar) ar.checked = true;
+  const picker = document.getElementById('customer-provider-pick');
+  if (picker) picker.hidden = true;
 }
 
 function switchTab(name, el) {
@@ -2229,6 +2243,21 @@ document.getElementById('add-form').onsubmit = async (e) => {
   const trackingNumber = document.getElementById('tracking-number').value.trim();
   const actDate = document.getElementById('act-date').value;
   const useSimCode = document.getElementById('use-sim-code').value === 'true';
+  const autoRotate = document.getElementById('customer-auto-rotate').checked;
+  const providerPick = document.getElementById('customer-provider-pick');
+  const manualProviderId = (!autoRotate && providerPick.value) ? parseInt(providerPick.value, 10) : null;
+  const body = {
+    phone_number: phone,
+    email,
+    shipping_address: shippingAddress,
+    shipping_status: shippingStatus,
+    courier_company: courierCompany,
+    tracking_number: trackingNumber,
+    activation_date: actDate,
+    use_sim_code: useSimCode,
+  };
+  if (manualProviderId) body.email_provider_id = manualProviderId;
+
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '处理中...';
@@ -2236,16 +2265,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
     const res = await fetch(API + '/customers', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        phone_number: phone,
-        email,
-        shipping_address: shippingAddress,
-        shipping_status: shippingStatus,
-        courier_company: courierCompany,
-        tracking_number: trackingNumber,
-        activation_date: actDate,
-        use_sim_code: useSimCode,
-      }),
+      body: JSON.stringify(body),
     });
 	    const data = await res.json();
 	    if (!res.ok) throw new Error(data.detail || '添加失败');
@@ -2569,6 +2589,33 @@ async function deleteEp(id) {
   loadEmailProviders();
   toast('已删除', 'success');
 }
+
+// Populate the add-customer form's provider picker
+async function loadCustomerProviderPicker() {
+  const sel = document.getElementById('customer-provider-pick');
+  if (!sel) return;
+  const r = await fetch(API + '/email-providers');
+  if (!r.ok) { sel.replaceChildren(); return; }
+  const list = await r.json();
+  sel.replaceChildren();
+  for (const p of list) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = `${p.name} (${p.provider_type})`;
+    sel.appendChild(opt);
+  }
+}
+
+// Toggle visibility of provider picker based on auto-rotate checkbox
+document.addEventListener('DOMContentLoaded', () => {
+  const checkbox = document.getElementById('customer-auto-rotate');
+  const picker = document.getElementById('customer-provider-pick');
+  if (checkbox && picker) {
+    function sync() { picker.hidden = checkbox.checked; }
+    checkbox.addEventListener('change', sync);
+    sync();
+  }
+});
 
 async function loadLabelConfig() {
   try {
