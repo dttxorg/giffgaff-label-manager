@@ -215,3 +215,27 @@ class LabelConfig(BaseModel):
 
 class EsimCodeUpdate(BaseModel):
     code: str = ""
+
+
+class EmailProviderCreate(BaseModel):
+    name: str
+    provider_type: str  # 'moemail' | 'cloudmail'
+    config: dict
+
+
+class EmailProviderOut(BaseModel):
+    id: int
+    name: str
+    provider_type: str
+    config: dict
+    last_used_at: Optional[str] = None
+    last_error: Optional[str] = None
+    last_error_at: Optional[str] = None
+    last_jwt_acquired_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class EmailProviderUpdate(BaseModel):
+    name: Optional[str] = None
+    config: Optional[dict] = None
