@@ -133,6 +133,17 @@ GET   /api/agent/customers/{id}/verification-code
 GET   /api/agent/customers/{id}/payment-info-emails
 ```
 
+后台客户管理也支持多域邮箱与客户重置：
+
+```text
+POST  /api/customers                            -- 新增客户，可选 email_provider_id 与 email_provider_domain
+POST  /api/customers/{id}/reset                 -- 重置已“已完成/激活中”的客户：还原 SIM、邮箱、初次密码到池里
+GET   /api/email-providers                      -- 返回 domain / default_domain 字段
+PATCH /api/email-providers/{id}                 -- 修改 name / config / domains / default_domain
+```
+
+当 moemail provider 同时配置多个 `domains` 时，前端“添加客户”表单会显示域名选择，提交后会写入 `customers.email_provider_domain`，并透传给 provider；如果 provider 没有显式 `domains`，表单隐藏域名选择并使用其内置 `default_domain`。Cloud-Mail provider 单值绑死，每次只能配置一个域名（要换域就改 provider 的 `domain` 字段）。
+
 客户端领取任务后会拿到客户 ID、邮箱、初始密码、SIM 激活码和收货地址；完成网页流程后回传手机号，并把状态推进到「等待转 eSIM」或「已完成」。
 支付卡解绑后，客户端会检查 MoEmail 中的 giffgaff 邮件：`your payment info has been updated` 代表支付信息更新/绑卡，`your payment info has changed` 作为取消绑定确认。
 

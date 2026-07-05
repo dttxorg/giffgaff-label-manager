@@ -25,6 +25,9 @@ async def init_db():
                 sim_code_id INTEGER,
                 sim_activation_code TEXT,
                 initial_password TEXT,
+                email_provider_id INTEGER,
+                email_account_id TEXT,
+                email_provider_domain TEXT,
                 activation_status TEXT NOT NULL DEFAULT '未开始',
                 activation_error TEXT,
                 activated_at TEXT,
@@ -49,6 +52,7 @@ async def init_db():
         await _ensure_column(db, "customers", "esim_raw_code", "TEXT")
         await _ensure_column(db, "customers", "email_provider_id", "INTEGER")
         await _ensure_column(db, "customers", "email_account_id", "TEXT")
+        await _ensure_column(db, "customers", "email_provider_domain", "TEXT")
         await _ensure_column(db, "customers", "activation_status", "TEXT NOT NULL DEFAULT '未开始'")
         await _ensure_column(db, "customers", "activation_error", "TEXT")
         await _ensure_column(db, "customers", "activated_at", "TEXT")
@@ -92,6 +96,8 @@ async def init_db():
                 name TEXT NOT NULL UNIQUE,
                 provider_type TEXT NOT NULL,
                 config_json TEXT NOT NULL,
+                domains_json TEXT,
+                default_domain TEXT,
                 last_used_at TEXT,
                 last_error TEXT,
                 last_error_at TEXT,
@@ -101,6 +107,8 @@ async def init_db():
                 updated_at TEXT NOT NULL
             )
         """)
+        await _ensure_column(db, "email_providers", "domains_json", "TEXT")
+        await _ensure_column(db, "email_providers", "default_domain", "TEXT")
         await db.commit()
 
 

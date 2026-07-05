@@ -125,7 +125,7 @@ def test_add_customer_routes_through_pool(client):
     # Monkey-patch _generate_email_account to return synthetic data
     orig_gen = main._generate_email_account
 
-    async def fake_gen(*, manual_provider_id=None):
+    async def fake_gen(*, manual_provider_id=None, manual_domain=None):
         return {
             "email": "synthetic@example.com",
             "email_account_id": "syn-99",

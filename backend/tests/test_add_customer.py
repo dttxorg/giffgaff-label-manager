@@ -29,7 +29,7 @@ class AddCustomerTests(unittest.IsolatedAsyncioTestCase):
         crud.DATABASE_PATH = self.db_path
         main.DATABASE_PATH = self.db_path
 
-        async def fake_generate_email(*, manual_provider_id=None):
+        async def fake_generate_email(*, manual_provider_id=None, manual_domain=None):
             return {
                 "email": "auto@example.com",
                 "email_account_id": "mailbox-1",

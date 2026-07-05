@@ -20,6 +20,7 @@ class CustomerCreate(BaseModel):
     activation_date: date
     use_sim_code: bool = True
     email_provider_id: Optional[int] = None  # None = pool round-robin
+    email_provider_domain: Optional[str] = None  # explicit domain; None = provider default
 
 
 class CustomerUpdate(BaseModel):
@@ -222,6 +223,8 @@ class EmailProviderCreate(BaseModel):
     name: str
     provider_type: str  # 'moemail' | 'cloudmail'
     config: dict
+    domains: list[str] = []
+    default_domain: Optional[str] = None
 
 
 class EmailProviderOut(BaseModel):
@@ -229,6 +232,8 @@ class EmailProviderOut(BaseModel):
     name: str
     provider_type: str
     config: dict
+    domains: list[str] = []
+    default_domain: Optional[str] = None
     last_used_at: Optional[str] = None
     last_error: Optional[str] = None
     last_error_at: Optional[str] = None
@@ -240,3 +245,15 @@ class EmailProviderOut(BaseModel):
 class EmailProviderUpdate(BaseModel):
     name: Optional[str] = None
     config: Optional[dict] = None
+    domains: Optional[list[str]] = None
+    default_domain: Optional[str] = None
+
+
+class ResetCustomerRequest(BaseModel):
+    detach_sim_code: bool = True
+    detach_email: bool = True
+    reset_activation: bool = True
+
+
+class EmailProviderDomainPick(BaseModel):
+    domain: Optional[str] = None  # None -> use provider's default_domain

@@ -947,7 +947,12 @@
               <input type="checkbox" id="customer-auto-rotate" checked>
               使用自动轮换
             </label>
-            <select id="customer-provider-pick" hidden></select>
+            <div class="provider-row">
+              <select id="customer-provider-pick" hidden></select>
+              <select id="customer-domain-pick" hidden>
+                <option value="">（默认域名）</option>
+              </select>
+            </div>
           </div>
           <div>
             <label>开通日期</label>
@@ -1496,6 +1501,15 @@ function resetAddFormDefaults() {
   if (ar) ar.checked = true;
   const picker = document.getElementById('customer-provider-pick');
   if (picker) picker.hidden = true;
+  const domainSel = document.getElementById('customer-domain-pick');
+  if (domainSel) {
+    domainSel.replaceChildren();
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '（默认域名）';
+    domainSel.appendChild(opt);
+    domainSel.hidden = true;
+  }
 }
 
 function switchTab(name, el) {
@@ -2257,6 +2271,8 @@ document.getElementById('add-form').onsubmit = async (e) => {
     use_sim_code: useSimCode,
   };
   if (manualProviderId) body.email_provider_id = manualProviderId;
+  const domainPick = document.getElementById('customer-domain-pick');
+  if (domainPick && domainPick.value) body.email_provider_domain = domainPick.value;
 
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
@@ -2593,25 +2609,65 @@ async function deleteEp(id) {
 // Populate the add-customer form's provider picker
 async function loadCustomerProviderPicker() {
   const sel = document.getElementById('customer-provider-pick');
+  const domainSel = document.getElementById('customer-domain-pick');
   if (!sel) return;
   const r = await fetch(API + '/email-providers');
   if (!r.ok) { sel.replaceChildren(); return; }
   const list = await r.json();
   sel.replaceChildren();
+  let lastSelectedDomains = [];
+  let lastSelectedDefault = '';
   for (const p of list) {
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = `${p.name} (${p.provider_type})`;
+    opt.dataset.domains = JSON.stringify(p.domains || []);
+    opt.dataset.defaultDomain = p.default_domain || '';
     sel.appendChild(opt);
   }
+  function syncDomainOptions() {
+    if (!domainSel) return;
+    const opt = sel.selectedOptions[0];
+    const domains = opt ? JSON.parse(opt.dataset.domains || '[]') : [];
+    const fallback = opt ? opt.dataset.defaultDomain : '';
+    if (domains && domains.length) {
+      domainSel.replaceChildren();
+      const def = document.createElement('option');
+      def.value = '';
+      def.textContent = '默认：' + (fallback || domains[0]);
+      domainSel.appendChild(def);
+      for (const d of domains) {
+        const o = document.createElement('option');
+        o.value = d;
+        o.textContent = d;
+        domainSel.appendChild(o);
+      }
+      domainSel.hidden = false;
+      lastSelectedDomains = domains;
+      lastSelectedDefault = fallback;
+    } else {
+      domainSel.replaceChildren();
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = '（默认域名）';
+      domainSel.appendChild(o);
+      domainSel.hidden = true;
+    }
+  }
+  sel.addEventListener('change', syncDomainOptions);
+  syncDomainOptions();
 }
 
 // Toggle visibility of provider picker based on auto-rotate checkbox
 document.addEventListener('DOMContentLoaded', () => {
   const checkbox = document.getElementById('customer-auto-rotate');
   const picker = document.getElementById('customer-provider-pick');
+  const domainSel = document.getElementById('customer-domain-pick');
   if (checkbox && picker) {
-    function sync() { picker.hidden = checkbox.checked; }
+    function sync() {
+      picker.hidden = checkbox.checked;
+      if (domainSel) domainSel.hidden = checkbox.checked || !picker.selectedOptions[0];
+    }
     checkbox.addEventListener('change', sync);
     sync();
   }

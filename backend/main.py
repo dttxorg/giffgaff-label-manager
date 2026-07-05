@@ -23,7 +23,8 @@ from models import (
     SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
     ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
     DomainInfo, LabelConfig, EsimCodeUpdate,
-    EmailProviderCreate, EmailProviderOut, EmailProviderUpdate
+    EmailProviderCreate, EmailProviderOut, EmailProviderUpdate,
+    ResetCustomerRequest, EmailProviderDomainPick,
 )
 from crud import (
     get_all_customers, get_customer, search_customers,
@@ -168,12 +169,21 @@ def _is_authenticated(request: Request) -> bool:
 
 
 async def _agent_api_tokens() -> list[str]:
+    """Return the set of valid Agent API bearer tokens.
+
+    Combines the AGENT_API_TOKEN env var with the optional "agent_api_token"
+    setting in the DB. Logs a warning if the DB read fails so an operator
+    notices degraded auth rather than silently restricting tokens to env-only.
+    """
+    import logging
+    log = logging.getLogger(__name__)
     tokens: list[str] = []
     if AGENT_API_TOKEN:
         tokens.append(AGENT_API_TOKEN)
     try:
         setting_token = (await _get_setting("agent_api_token")).strip()
-    except Exception:
+    except Exception as exc:
+        log.warning("agent_api_token DB read failed; falling back to env-only tokens: %s", exc)
         setting_token = ""
     if setting_token and setting_token not in tokens:
         tokens.append(setting_token)
@@ -480,10 +490,10 @@ async def _get_setting(key: str) -> str:
     return rows.get(key, "")
 
 
-async def _generate_email_account(*, manual_provider_id: Optional[int] = None) -> dict:
+async def _generate_email_account(*, manual_provider_id: Optional[int] = None, manual_domain: Optional[str] = None) -> dict:
     """Pool-backed email account generator.
 
-    Returns {email, email_account_id, email_provider_id, share_link, is_email_auto}.
+    Returns {email, email_account_id, email_provider_id, email_provider_domain, share_link, is_email_auto}.
     Raises HTTPException(503) if no usable provider, 502 if generation fails.
     """
     try:
@@ -491,21 +501,54 @@ async def _generate_email_account(*, manual_provider_id: Optional[int] = None) -
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     try:
-        gen = provider.generate_email()
+        # MoEmailProvider accepts domain= kwarg; CloudMailProvider ignores it
+        # because its domain is part of the instance configuration.
+        gen = provider.generate_email(domain=manual_domain)
     except Exception as exc:
         record_provider_use(DATABASE_PATH, provider_id, error=str(exc))
         raise HTTPException(status_code=502, detail=f"生成邮箱失败：{exc}") from exc
-    record_provider_use(DATABASE_PATH, provider_id)
+    # Defer last_used_at/jwt persistence until the downstream INSERT commits.
+    # See _record_email_provider_use_after_commit. If the INSERT fails and we
+    # skip that call, the email account already exists on the provider but
+    # will simply age out (and is harmless).
     jwt, jwt_at = extract_jwt_for_persist(provider)
-    if jwt:
-        persist_provider_jwt(DATABASE_PATH, provider_id, jwt, jwt_at)
     return {
         "email": gen.address,
         "email_account_id": gen.provider_account_id,
         "email_provider_id": provider_id,
+        "email_provider_domain": manual_domain,
         "share_link": gen.share_link,
         "is_email_auto": True,
+        "_provider_jwt": (provider_id, jwt, jwt_at) if jwt else None,
     }
+
+
+async def _record_email_provider_use_after_commit(payload: Optional[dict]) -> None:
+    """Mark a provider as successfully used and persist any JWT it returned.
+
+    Call this ONLY after the customer row that references this email provider
+    has been committed. Calling it on a pending or failed transaction will skew
+    the pool's round-robin / cooldown signals.
+    """
+    if not payload:
+        return
+    provider_id = payload.get("email_provider_id")
+    if not provider_id:
+        return
+    # Look up via the pool module each call so test monkeypatches apply.
+    from email_providers import pool as _pool
+    try:
+        _pool.record_provider_use(DATABASE_PATH, provider_id)
+    except Exception:
+        # If recording use fails we don't want to roll back the customer insert.
+        pass
+    jwt_info = payload.get("_provider_jwt")
+    if jwt_info:
+        _, jwt, jwt_at = jwt_info
+        try:
+            _pool.persist_provider_jwt(DATABASE_PATH, provider_id, jwt, jwt_at)
+        except Exception:
+            pass
 
 
 # Note: legacy `_generate_moemail_account` removed (was just an alias to _generate_email_account).
@@ -531,8 +574,8 @@ async def _create_customer_without_activation(data: CustomerCreate, email_bundle
                (phone_number, email, shipping_address, shipping_status, courier_company,
                 tracking_number, courier_order_code, courier_print_data, activation_date,
                 moemail_id, moemail_address, share_link, is_moemail_auto,
-                email_provider_id, email_account_id, activation_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                email_provider_id, email_account_id, email_provider_domain, activation_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 phone_number,
                 email_bundle.get("email", ""),
@@ -549,6 +592,7 @@ async def _create_customer_without_activation(data: CustomerCreate, email_bundle
                 1 if email_bundle.get("is_moemail_auto") else 0,
                 email_bundle.get("email_provider_id"),
                 email_bundle.get("email_account_id"),
+                email_bundle.get("email_provider_domain"),
                 "未开始",
             ),
         )
@@ -579,8 +623,8 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                     tracking_number, courier_order_code, courier_print_data, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
                     sim_code_id, sim_activation_code, initial_password,
-                    email_provider_id, email_account_id, activation_status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    email_provider_id, email_account_id, email_provider_domain, activation_status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     phone_number,
                     email_bundle.get("email", ""),
@@ -600,6 +644,7 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                     initial_password,
                     email_bundle.get("email_provider_id"),
                     email_bundle.get("email_account_id"),
+                    email_bundle.get("email_provider_domain"),
                     "等待客户端领取",
                 ),
             )
@@ -700,7 +745,10 @@ async def add_customer(data: CustomerCreate):
         if email:
             email_bundle = {"email": email, "is_moemail_auto": False, "email_provider_id": None, "email_account_id": None}
         else:
-            email_bundle = await _generate_email_account(manual_provider_id=data.email_provider_id)
+            email_bundle = await _generate_email_account(
+                manual_provider_id=data.email_provider_id,
+                manual_domain=data.email_provider_domain,
+            )
             # Pool-backed path returns new keys (email_account_id, email_provider_id, share_link)
             # Legacy callers expect moemail_id/moemail_address/is_moemail_auto/share_link.
             email_bundle["moemail_id"] = email_bundle.get("email_account_id")
@@ -723,10 +771,18 @@ async def add_customer(data: CustomerCreate):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"自动建档失败：{exc}") from exc
 
+    # Provider use is recorded ONLY after the customer insert is committed.
+    try:
+        await _record_email_provider_use_after_commit(email_bundle)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("failed to record provider use after commit: %s", exc)
     return {
         "customer_id": customer_id,
         "message": message,
         "email": email_bundle.get("email", ""),
+        "email_provider_id": email_bundle.get("email_provider_id"),
+        "email_provider_domain": email_bundle.get("email_provider_domain"),
         "sim_activation_code": sim_activation_code,
         "initial_password": initial_password,
     }
@@ -764,6 +820,85 @@ async def update_customer_activation_status(customer_id: int, data: ActivationSt
     message = data.message or f"后台手动标记激活状态：{data.status}"
     await _insert_activation_log(customer_id, "info", data.step or "admin", message)
     return {"ok": True}
+
+
+@app.post("/api/customers/{customer_id}/reset", status_code=200)
+async def reset_customer(customer_id: int, data: ResetCustomerRequest):
+    """Reset a customer so they can be re-issued/re-activated.
+
+    Lets operators recover from:
+    * accidental "已完成" (which locks the SIM into '已使用')
+    * old manual customers that still appear as 等待客户端领取
+    * customers left in '激活中' after a desktop crash
+
+    All three sub-flags default to True (full reset) but can be set
+    independently to detach just the SIM, just the email, or just the
+    activation state.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    c = await get_customer(customer_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    sim_code_id = c.get("sim_code_id")
+    phone_number = c.get("phone_number")
+    detached: list[str] = []
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            if data.detach_sim_code and sim_code_id:
+                # Bring the SIM back into the pool so it can be re-allocated.
+                await db.execute(
+                    """UPDATE sim_codes
+                       SET status = '未分配', customer_id = NULL,
+                           updated_at = datetime('now')
+                       WHERE id = ?""",
+                    (sim_code_id,),
+                )
+                await db.execute(
+                    "UPDATE customers SET sim_code_id = NULL, sim_activation_code = NULL, initial_password = NULL WHERE id = ?",
+                    (customer_id,),
+                )
+                detached.append("sim_code")
+            if data.detach_email:
+                await db.execute(
+                    """UPDATE customers
+                       SET email = '', moemail_id = NULL, moemail_address = NULL,
+                           share_link = NULL, email_provider_id = NULL,
+                           email_account_id = NULL, email_provider_domain = NULL,
+                           is_moemail_auto = 0
+                       WHERE id = ?""",
+                    (customer_id,),
+                )
+                # Detach phone_number when email is detached so the row
+                # looks like a fresh import (otherwise re-import will clash
+                # via the UNIQUE constraint on phone_number).
+                if phone_number:
+                    await db.execute("UPDATE customers SET phone_number = NULL WHERE id = ?", (customer_id,))
+                    detached.append("email+phone")
+                else:
+                    detached.append("email")
+            if data.reset_activation:
+                await db.execute(
+                    """UPDATE customers
+                       SET activation_status = '未开始', activation_error = NULL,
+                           activated_at = NULL, automation_lock_owner = NULL,
+                           automation_locked_at = NULL
+                       WHERE id = ?""",
+                    (customer_id,),
+                )
+                detached.append("activation")
+            await db.execute(
+                """INSERT INTO activation_logs (customer_id, level, step, message)
+                   VALUES (?, 'info', 'reset', ?)""",
+                (customer_id, f"已重置客户：{', '.join(detached) or '无'}"),
+            )
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            log.exception("reset_customer %s failed: %s", customer_id, exc)
+            raise HTTPException(status_code=500, detail=f"重置失败：{exc}") from exc
+    return {"ok": True, "detached": detached}
 
 
 @app.put("/api/customers/{customer_id}/esim-code")
@@ -1371,8 +1506,8 @@ async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) 
                    (phone_number, email, shipping_address, shipping_status, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
                     sim_code_id, sim_activation_code, initial_password,
-                    email_provider_id, email_account_id, activation_status)
-                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    email_provider_id, email_account_id, email_provider_domain, activation_status)
+                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     email_bundle.get("email", ""),
                     DEFAULT_SHIPPING_STATUS,
@@ -1386,6 +1521,7 @@ async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) 
                     initial_password,
                     email_bundle.get("email_provider_id"),
                     email_bundle.get("email_account_id"),
+                    email_bundle.get("email_provider_domain"),
                     "等待客户端领取",
                 ),
             )
@@ -1683,15 +1819,23 @@ def _build_provider_config_json(provider_type: str, config: dict) -> str:
 
 
 def _hydrate_provider_config_to_dict(row) -> dict:
-    """Inverse: row → config dict (without leaking password to UI)."""
-    cfg = json.loads(row["config_json"])
+    """Inverse: row → config dict (without leaking password to UI).
+
+    Defensive against malformed config_json: returns an empty dict instead
+    of 500-ing the whole /api/email-providers endpoint.
+    """
+    raw = row["config_json"] or "{}"
+    try:
+        cfg = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        return {"_invalid": True}
     typ = row["provider_type"]
     if typ == "moemail":
-        return {"url": cfg["url"], "api_key": cfg["api_key"]}
+        return {"url": cfg.get("url", ""), "api_key": cfg.get("api_key", "")}
     if typ == "cloudmail":
         return {
-            "url": cfg["url"],
-            "email": cfg["email"],
+            "url": cfg.get("url", ""),
+            "email": cfg.get("email", ""),
             "domain": cfg.get("domain", ""),
             "password_set": bool(cfg.get("password")),
         }
@@ -1699,11 +1843,23 @@ def _hydrate_provider_config_to_dict(row) -> dict:
 
 
 def _row_to_email_provider_out(row) -> dict:
+    raw_domains = row["domains_json"]
+    domains: list[str] = []
+    if raw_domains:
+        try:
+            parsed = json.loads(raw_domains)
+            if isinstance(parsed, list):
+                domains = [str(d) for d in parsed if d]
+        except json.JSONDecodeError:
+            domains = []
+    default_domain = (row["default_domain"] or "").strip() or None
     return {
         "id": row["id"],
         "name": row["name"],
         "provider_type": row["provider_type"],
         "config": _hydrate_provider_config_to_dict(row),
+        "domains": domains,
+        "default_domain": default_domain,
         "last_used_at": row["last_used_at"],
         "last_error": row["last_error"],
         "last_error_at": row["last_error_at"],
@@ -1722,14 +1878,17 @@ async def list_email_providers():
 @app.post("/api/email-providers", status_code=201)
 async def add_email_provider(data: EmailProviderCreate):
     config_json = _build_provider_config_json(data.provider_type, data.config)
+    domains_json = json.dumps(data.domains or [], ensure_ascii=False)
+    default_domain = (data.default_domain or "").strip() or None
     now = _utc_now()
     try:
         async with aiosqlite.connect(DATABASE_PATH) as db:
             cur = await db.execute(
                 """INSERT INTO email_providers
-                   (name, provider_type, config_json, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (data.name, data.provider_type, config_json, now, now),
+                   (name, provider_type, config_json, domains_json, default_domain,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (data.name, data.provider_type, config_json, domains_json, default_domain, now, now),
             )
             provider_id = cur.lastrowid
             await db.commit()
@@ -1740,6 +1899,8 @@ async def add_email_provider(data: EmailProviderCreate):
         "name": data.name,
         "provider_type": data.provider_type,
         "config": data.config,
+        "domains": data.domains or [],
+        "default_domain": default_domain,
         "last_used_at": None,
         "last_error": None,
         "last_error_at": None,
@@ -1774,6 +1935,10 @@ async def update_email_provider(provider_id: int, data: EmailProviderUpdate):
         fields.append("config_json = ?"); values.append(cfg)
         # Invalidate cached JWT — new credentials may invalidate it
         fields.append("last_jwt_token = NULL"); fields.append("last_jwt_at = NULL")
+    if data.domains is not None:
+        fields.append("domains_json = ?"); values.append(json.dumps(data.domains, ensure_ascii=False))
+    if data.default_domain is not None:
+        fields.append("default_domain = ?"); values.append((data.default_domain or "").strip() or None)
     fields.append("updated_at = ?"); values.append(now)
     values.append(provider_id)
     sql = f"UPDATE email_providers SET {', '.join(fields)} WHERE id = ?"

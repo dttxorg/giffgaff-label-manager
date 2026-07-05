@@ -82,10 +82,14 @@ def test_pool_round_robin(client_with_two_providers):
         mock_instance.generate_email.side_effect = fake_generate_email
         mock_instance.create_share_link.return_value = {"link": "http://share/test"}
 
-        # Stub record_provider_use / persist_provider_jwt to track only
-        with patch("email_providers.pool.record_provider_use") as mock_record, \
+        # Stub only the JWT cache persistence (the test legacy concern);
+        # provider use is now recorded by a deferred helper called AFTER
+        # the customer row commits. To keep round-robin working we delegate
+        # to the real implementation via side_effect.
+        import email_providers.pool as _pool
+        real_record = _pool.record_provider_use
+        with patch("email_providers.pool.record_provider_use", side_effect=lambda *a, **k: real_record(*a, **k)), \
              patch("email_providers.pool.persist_provider_jwt"):
-            mock_record.return_value = None
             provider_ids = []
             for _ in range(4):
                 # Add 4 customers with blank email
