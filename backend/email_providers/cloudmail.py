@@ -59,7 +59,7 @@ class CloudMailProvider(EmailProvider):
         if self._jwt_is_fresh():
             return
         r = httpx.post(
-            f"{self.base_url}/login",
+            f"{self.base_url}/api/login",
             json={"email": self._email, "password": self._password},
             timeout=10,
         )
@@ -89,7 +89,7 @@ class CloudMailProvider(EmailProvider):
         prefix = generate_random_prefix()
         email = f"{prefix}@{self._domain}"
         r = httpx.post(
-            f"{self.base_url}/account/add",
+            f"{self.base_url}/api/account/add",
             json={"email": email},
             headers=self._headers(),
             timeout=10,
@@ -107,7 +107,7 @@ class CloudMailProvider(EmailProvider):
     ) -> list[InboxMessage]:
         params = {"accountId": provider_account_id, "emailId": after_message_id or 0}
         r = httpx.get(
-            f"{self.base_url}/email/latest",
+            f"{self.base_url}/api/email/latest",
             params=params,
             headers=self._headers(),
             timeout=10,
@@ -160,7 +160,7 @@ class CloudMailProvider(EmailProvider):
         try:
             self._ensure_jwt()
             r = httpx.get(
-                f"{self.base_url}/my/loginUserInfo",
+                f"{self.base_url}/api/user/loginUserInfo",
                 headers=self._headers(),
                 timeout=10,
             )

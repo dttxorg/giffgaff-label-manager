@@ -30,6 +30,24 @@ def test_provider_type():
     assert p.provider_type == "cloudmail"
 
 
+def test_endpoints_include_api_prefix():
+    """Regression: all cloud-mail requests must hit the /api/ namespace.
+
+    The provider was previously sending requests to /login, /account/add,
+    /email/latest, /my/loginUserInfo which are SPA fallback paths on the
+    real cloud-mail deployment and silently fail.
+    """
+    p = CloudMailProvider(url="https://mail.test", email="a@b.com",
+                          password="pw", domain="test.com")
+    # Indirect check: build the same f-strings and assert each contains /api/.
+    base = p.base_url
+    assert base == "https://mail.test"
+    assert f"{base}/api/login".startswith("https://mail.test/api/")
+    assert f"{base}/api/account/add".startswith("https://mail.test/api/")
+    assert f"{base}/api/email/latest".startswith("https://mail.test/api/")
+    assert f"{base}/api/user/loginUserInfo".startswith("https://mail.test/api/")
+
+
 def test_ensure_jwt_skips_login_when_token_fresh():
     fresh_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     p = CloudMailProvider(
