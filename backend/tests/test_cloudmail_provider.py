@@ -45,7 +45,59 @@ def test_endpoints_include_api_prefix():
     assert f"{base}/api/login".startswith("https://mail.test/api/")
     assert f"{base}/api/account/add".startswith("https://mail.test/api/")
     assert f"{base}/api/email/latest".startswith("https://mail.test/api/")
-    assert f"{base}/api/user/loginUserInfo".startswith("https://mail.test/api/")
+    assert f"{base}/api/my/loginUserInfo".startswith("https://mail.test/api/")
+
+
+def test_auth_header_uses_raw_token_not_bearer():
+    """Regression: cloud-mail's API does not accept the "Bearer " prefix.
+
+    Earlier we sent `Authorization: Bearer <jwt>` which the server rejected
+    with 401, so the wrapper reported a failed ping and `generate_email`
+    could not obtain a token. Cloud-mail expects the raw JWT in the header.
+    """
+    fresh_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    p = CloudMailProvider(
+        url="https://mail.test", email="a@b.com", password="pw",
+        domain="b.com", jwt_token="my-jwt", jwt_acquired_at=fresh_iso,
+    )
+    headers = p._headers()
+    assert headers["Authorization"] == "my-jwt", (
+        f"expected raw token, got {headers['Authorization']!r}"
+    )
+    # Old broken value would be "Bearer my-jwt"
+    assert not headers["Authorization"].startswith("Bearer "), (
+        "cloud-mail rejects the 'Bearer ' prefix; use raw token"
+    )
+
+
+def test_login_url_uses_my_path():
+    """Regression: the JWT-validation endpoint is /api/my/loginUserInfo.
+
+    We previously hit /api/user/loginUserInfo (which 401s) and
+    /my/loginUserInfo (which falls through the SPA). cloud-mail's frontend
+    bundle pins the path under /my/.
+    """
+    p = CloudMailProvider(
+        url="https://mail.test", email="a@b.com", password="pw", domain="b.com",
+    )
+    # Force a refresh so the login POST happens; capture the URL it hit.
+    with _patch_httpx() as m:
+        m.post.return_value.status_code = 200
+        m.post.return_value.json.return_value = {"data": {"token": "x"}}
+        p._jwt = None
+        p._jwt_at = None
+        p._ensure_jwt()
+    login_url = m.post.call_args[0][0]
+    assert login_url == "https://mail.test/api/login", login_url
+    # The same prefix must be used by ping()
+    with _patch_httpx() as m:
+        m.post.return_value.status_code = 200
+        m.post.return_value.json.return_value = {"data": {"token": "x"}}
+        p._jwt = None
+        p._jwt_at = None
+        p.ping()
+    ping_url = m.get.call_args[0][0]
+    assert ping_url == "https://mail.test/api/my/loginUserInfo", ping_url
 
 
 def test_ensure_jwt_skips_login_when_token_fresh():

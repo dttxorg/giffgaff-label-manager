@@ -73,7 +73,7 @@ class CloudMailProvider(EmailProvider):
 
     def _headers(self) -> dict:
         self._ensure_jwt()
-        return {"Authorization": f"Bearer {self._jwt}"}
+        return {"Authorization": self._jwt}
 
     # Public introspection for auth.py to persist JWT to DB
     @property
@@ -160,7 +160,7 @@ class CloudMailProvider(EmailProvider):
         try:
             self._ensure_jwt()
             r = httpx.get(
-                f"{self.base_url}/api/user/loginUserInfo",
+                f"{self.base_url}/api/my/loginUserInfo",
                 headers=self._headers(),
                 timeout=10,
             )
