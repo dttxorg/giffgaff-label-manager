@@ -19,7 +19,7 @@ from typing import Optional
 from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
-    SystemSettings, AuthLoginRequest, MoEmailCreateRequest, CainiaoWaybillRequest,
+    SystemSettings, AuthLoginRequest, MoEmailCreateRequest,
     SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
     ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
     DomainInfo, LabelConfig, EsimCodeUpdate,
@@ -60,27 +60,6 @@ ACTIVATION_STATUSES = {
 SIM_CODE_STATUSES = {"未分配", "已分配", "激活中", "已使用", "失败", "作废"}
 DETACHABLE_ACTIVATION_STATUSES = {"未开始", "已分配激活码", "等待客户端领取", "失败"}
 SELECTABLE_AGENT_TASK_STATUSES = ("等待客户端领取", "激活中", "等待人工支付", "失败", "已分配激活码")
-DEFAULT_CAINIAO_ENDPOINT = "https://eco.taobao.com/router/rest"
-CAINIAO_PLAIN_SETTINGS = (
-    "cainiao_endpoint",
-    "cainiao_app_key",
-    "cainiao_cp_code",
-    "cainiao_cp_name",
-    "cainiao_template_url",
-    "cainiao_user_id",
-    "cainiao_order_channel",
-    "cainiao_goods_name",
-    "cainiao_weight_grams",
-    "sender_name",
-    "sender_mobile",
-    "sender_phone",
-    "sender_province",
-    "sender_city",
-    "sender_district",
-    "sender_town",
-    "sender_detail",
-)
-CAINIAO_SECRET_SETTINGS = ("cainiao_app_secret", "cainiao_session")
 DEFAULT_LABEL_TEMPLATES = [
     {
         "id": "basic-50x30",
@@ -430,51 +409,18 @@ async def auth_logout():
 async def get_sys_settings():
     rows = await get_settings()
     return SystemSettings(
-        moemail_url=rows.get("moemail_url", ""),
-        moemail_api_key="***" if rows.get("moemail_api_key") else "",
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
         agent_api_token="***" if rows.get("agent_api_token") else "",
         agent_api_token_source=_agent_token_source(rows),
-        cainiao_endpoint=rows.get("cainiao_endpoint", DEFAULT_CAINIAO_ENDPOINT),
-        cainiao_app_key=rows.get("cainiao_app_key", ""),
-        cainiao_app_secret=_masked_setting(rows, "cainiao_app_secret"),
-        cainiao_session=_masked_setting(rows, "cainiao_session"),
-        cainiao_cp_code=rows.get("cainiao_cp_code", ""),
-        cainiao_cp_name=rows.get("cainiao_cp_name", ""),
-        cainiao_template_url=rows.get("cainiao_template_url", ""),
-        cainiao_user_id=rows.get("cainiao_user_id", ""),
-        cainiao_order_channel=rows.get("cainiao_order_channel", "OTHERS"),
-        cainiao_goods_name=rows.get("cainiao_goods_name", "giffgaff SIM"),
-        cainiao_weight_grams=rows.get("cainiao_weight_grams", "100"),
-        sender_name=rows.get("sender_name", ""),
-        sender_mobile=rows.get("sender_mobile", ""),
-        sender_phone=rows.get("sender_phone", ""),
-        sender_province=rows.get("sender_province", ""),
-        sender_city=rows.get("sender_city", ""),
-        sender_district=rows.get("sender_district", ""),
-        sender_town=rows.get("sender_town", ""),
-        sender_detail=rows.get("sender_detail", ""),
     )
 
 
 @app.patch("/api/settings")
 async def update_settings(data: SystemSettings):
-    if data.moemail_url is not None:
-        await set_setting("moemail_url", _normalize_base_url(data.moemail_url))
-    if data.moemail_api_key not in (None, "***", ""):
-        await set_setting("moemail_api_key", data.moemail_api_key)
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     if data.agent_api_token not in (None, "***", ""):
         await set_setting("agent_api_token", data.agent_api_token.strip())
-    for key in CAINIAO_PLAIN_SETTINGS:
-        value = getattr(data, key)
-        if value is not None:
-            await set_setting(key, value.strip())
-    for key in CAINIAO_SECRET_SETTINGS:
-        value = getattr(data, key)
-        if value not in (None, "***", ""):
-            await set_setting(key, value.strip())
     return {"ok": True}
 
 
@@ -499,7 +445,13 @@ async def _generate_email_account(*, manual_provider_id: Optional[int] = None, m
     try:
         provider_id, provider = pick_provider(DATABASE_PATH, manual_provider_id=manual_provider_id)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"{exc}。请在网页右上角「邮箱服务商」标签里至少添加一个 provider "
+                "(MoEmail 或 Cloud-Mail)，并配置 URL / API Key。"
+            ),
+        ) from exc
     try:
         # MoEmailProvider accepts domain= kwarg; CloudMailProvider ignores it
         # because its domain is part of the instance configuration.
@@ -939,39 +891,6 @@ async def get_customer_esim_qr(customer_id: int):
     )
 
 
-@app.post("/api/customers/{customer_id}/cainiao-waybill", status_code=200)
-async def create_cainiao_waybill(customer_id: int, data: CainiaoWaybillRequest):
-    c = await get_customer(customer_id)
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
-    rows = await get_settings()
-    from cainiao import CainiaoConfigError, create_waybill
-    try:
-        result = await create_waybill(rows, c, dry_run=data.dry_run)
-    except CainiaoConfigError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"菜鸟接口调用失败：{exc}") from exc
-
-    if not data.dry_run:
-        courier_company = rows.get("cainiao_cp_name") or rows.get("cainiao_cp_code") or c.get("courier_company")
-        await update_customer(customer_id, CustomerUpdate(
-            courier_company=courier_company,
-            tracking_number=result.get("tracking_number", ""),
-            courier_order_code=result.get("order_code", ""),
-            courier_print_data=result.get("courier_print_data", ""),
-        ))
-    return {
-        "ok": True,
-        "dry_run": data.dry_run,
-        "order_code": result.get("order_code", ""),
-        "tracking_number": result.get("tracking_number", ""),
-        "courier_company": rows.get("cainiao_cp_name") or rows.get("cainiao_cp_code", ""),
-        "has_print_data": bool(result.get("courier_print_data")),
-        "request": result.get("request") if data.dry_run else None,
-    }
-
-
 @app.delete("/api/customers/{customer_id}", status_code=200)
 async def remove_customer(customer_id: int):
     c = await get_customer(customer_id)
@@ -1060,13 +979,18 @@ async def _resolve_inbox_provider(customer_row: dict) -> tuple[str, "MoEmailClie
             raise HTTPException(status_code=400, detail="该客户没有 MoEmail 邮箱")
         return str(legacy_id), provider
 
-    # Final fallback: global MoEmail settings (pre-pool users)
+    # Final fallback: legacy global MoEmail settings (pre-pool users).
+    # These keys may still be set on older deployments; we still honor them
+    # for legacy customers so historical inboxes keep working.
     moemail_url = _normalize_base_url(await _get_setting("moemail_url"))
     moemail_key = await _get_setting("moemail_api_key")
     if not moemail_url or not moemail_key:
         raise HTTPException(
             status_code=400,
-            detail="尚未配置邮箱服务商，且全局 MoEmail 设置也未配置",
+            detail=(
+                "尚未配置邮箱服务商。请在「邮箱服务商」标签里添加一个 MoEmail 或 Cloud-Mail provider，"
+                "并把客户改用 email_provider_id 关联；或者重新录入客户让后台分配新 provider。"
+            ),
         )
     from email_providers._moemail_client import MoEmailClient
     legacy_id = customer_row.get("moemail_id")
@@ -2013,7 +1937,6 @@ async def _export_backup_payload() -> dict:
             "moemail_url": _normalize_base_url(rows.get("moemail_url", "")),
             "giffgaff_download_url": rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
-            **{key: rows.get(key, "") for key in CAINIAO_PLAIN_SETTINGS},
         },
     }
 
@@ -2056,9 +1979,6 @@ async def _restore_backup_payload(data: dict) -> dict:
         safe_settings["moemail_url"] = _normalize_base_url(settings["moemail_url"])
     if isinstance(settings.get("giffgaff_download_url"), str):
         safe_settings["giffgaff_download_url"] = settings["giffgaff_download_url"]
-    for key in CAINIAO_PLAIN_SETTINGS:
-        if isinstance(settings.get(key), str):
-            safe_settings[key] = settings[key]
     if "label_templates" in settings:
         label_templates = settings["label_templates"]
         if not isinstance(label_templates, list):

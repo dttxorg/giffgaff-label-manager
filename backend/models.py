@@ -85,30 +85,9 @@ class CustomerDetail(BaseModel):
 
 
 class SystemSettings(BaseModel):
-    moemail_url: Optional[str] = None
-    moemail_api_key: Optional[str] = None
     giffgaff_download_url: Optional[str] = None
     agent_api_token: Optional[str] = None
     agent_api_token_source: Optional[str] = None
-    cainiao_endpoint: Optional[str] = None
-    cainiao_app_key: Optional[str] = None
-    cainiao_app_secret: Optional[str] = None
-    cainiao_session: Optional[str] = None
-    cainiao_cp_code: Optional[str] = None
-    cainiao_cp_name: Optional[str] = None
-    cainiao_template_url: Optional[str] = None
-    cainiao_user_id: Optional[str] = None
-    cainiao_order_channel: Optional[str] = None
-    cainiao_goods_name: Optional[str] = None
-    cainiao_weight_grams: Optional[str] = None
-    sender_name: Optional[str] = None
-    sender_mobile: Optional[str] = None
-    sender_phone: Optional[str] = None
-    sender_province: Optional[str] = None
-    sender_city: Optional[str] = None
-    sender_district: Optional[str] = None
-    sender_town: Optional[str] = None
-    sender_detail: Optional[str] = None
 
 
 class AuthLoginRequest(BaseModel):
@@ -117,10 +96,6 @@ class AuthLoginRequest(BaseModel):
 
 class MoEmailCreateRequest(BaseModel):
     domain: Optional[str] = None
-
-
-class CainiaoWaybillRequest(BaseModel):
-    dry_run: bool = False
 
 
 class SimCodeImport(BaseModel):

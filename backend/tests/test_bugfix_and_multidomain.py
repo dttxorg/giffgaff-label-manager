@@ -418,3 +418,34 @@ class TestProviderDomainUpdate:
         provider = next(p for p in r.json() if p["id"] == self.pid)
         assert provider["domains"] == ["a.test", "b.test"]
         assert provider["default_domain"] == "b.test"
+
+
+class TestEmptyPoolError:
+    """The 503 returned when no providers are configured should be actionable."""
+
+    def setup_method(self):
+        self.db_path, self._td = _new_db()
+        self.original = _bind_db(self.db_path)
+        _init(self.db_path)
+        main.APP_PASSWORD = ""
+        main.AGENT_API_TOKEN = ""
+        self.client = TestClient(main.app)
+
+    def teardown_method(self):
+        import shutil
+        _restore(self.original)
+        main.APP_PASSWORD = ""
+        main.AGENT_API_TOKEN = ""
+        shutil.rmtree(self._td, ignore_errors=True)
+
+    def test_add_customer_with_no_providers_mentions_email_providers_tab(self):
+        r = self.client.post("/api/customers", json={
+            "phone_number": "447000000099",
+            "email": "",
+            "activation_date": "2026-07-04",
+            "use_sim_code": False,
+        })
+        assert r.status_code == 503, r.text
+        body = r.json()
+        assert "No email providers" in body["detail"]
+        assert "邮箱服务商" in body["detail"]
