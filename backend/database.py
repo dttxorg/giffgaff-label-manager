@@ -98,6 +98,7 @@ async def init_db():
                 config_json TEXT NOT NULL,
                 domains_json TEXT,
                 default_domain TEXT,
+                disabled INTEGER NOT NULL DEFAULT 0,
                 last_used_at TEXT,
                 last_error TEXT,
                 last_error_at TEXT,
@@ -109,6 +110,7 @@ async def init_db():
         """)
         await _ensure_column(db, "email_providers", "domains_json", "TEXT")
         await _ensure_column(db, "email_providers", "default_domain", "TEXT")
+        await _ensure_column(db, "email_providers", "disabled", "INTEGER NOT NULL DEFAULT 0")
         await db.commit()
 
 

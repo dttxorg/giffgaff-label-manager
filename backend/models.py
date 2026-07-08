@@ -200,6 +200,7 @@ class EmailProviderCreate(BaseModel):
     config: dict
     domains: list[str] = []
     default_domain: Optional[str] = None
+    disabled: bool = False
 
 
 class EmailProviderOut(BaseModel):
@@ -209,6 +210,7 @@ class EmailProviderOut(BaseModel):
     config: dict
     domains: list[str] = []
     default_domain: Optional[str] = None
+    disabled: bool = False
     last_used_at: Optional[str] = None
     last_error: Optional[str] = None
     last_error_at: Optional[str] = None
@@ -222,6 +224,7 @@ class EmailProviderUpdate(BaseModel):
     config: Optional[dict] = None
     domains: Optional[list[str]] = None
     default_domain: Optional[str] = None
+    disabled: Optional[bool] = None
 
 
 class ResetCustomerRequest(BaseModel):

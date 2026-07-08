@@ -125,7 +125,8 @@ def _candidate_pool(conn: sqlite3.Connection, cooldown_iso: str):
     """
     cur = conn.execute(
         """SELECT * FROM email_providers
-           WHERE last_error_at IS NULL OR last_error_at < ?
+           WHERE (last_error_at IS NULL OR last_error_at < ?)
+             AND (disabled IS NULL OR disabled = 0)
            ORDER BY last_used_at IS NOT NULL, last_used_at ASC, id ASC""",
         (cooldown_iso,),
     )
@@ -159,6 +160,7 @@ def pick_provider(db_path: str, *, manual_provider_id: int | None = None) -> tup
         # All errored out recently; pick the least-recently-errored, ignoring cooldown
         cur = conn.execute(
             """SELECT * FROM email_providers
+               WHERE disabled IS NULL OR disabled = 0
                ORDER BY last_used_at IS NOT NULL, last_used_at ASC, id ASC"""
         )
         for row in cur.fetchall():

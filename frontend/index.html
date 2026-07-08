@@ -2348,13 +2348,28 @@ async function loadEmailProviders() {
     tbody.appendChild(tr);
     return;
   }
+  if (!list.length) {
+    const tr = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.innerHTML = '<strong>还没有邮箱服务商</strong>，请用下方表单添加一个 MoEmail 或 Cloud-Mail；否则保存客户时会报 "No email providers configured"。';
+    tr.appendChild(cell);
+    tbody.appendChild(tr);
+    return;
+  }
   for (const p of list) {
     const tr = document.createElement('tr');
     const status = p.last_error ? `<span class="bad">❌ ${escapeHtml(p.last_error)}</span>`
                               : `<span class="good">✅ OK</span>`;
     const url = (p.config && p.config.url) ? escapeHtml(p.config.url) : '';
+    const disabledBadge = p.disabled
+      ? ' <span class="bad">⛔ 已禁用</span>'
+      : '';
+    const toggleLabel = p.disabled ? '启用' : '禁用';
+    const toggleClass = p.disabled ? 'small' : 'small ghost';
     tr.innerHTML = `
-      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(p.name)}${disabledBadge}</td>
       <td>${escapeHtml(p.provider_type)}</td>
       <td>${url}</td>
       <td>${p.last_used_at || '—'}</td>
@@ -2362,6 +2377,7 @@ async function loadEmailProviders() {
       <td>
         <button type="button" class="small" onclick="testEp(${p.id})">测试</button>
         <button type="button" class="small" onclick="openEpDialog(${p.id})">编辑</button>
+        <button type="button" class="${toggleClass}" onclick="toggleProviderDisabled(${p.id}, ${p.disabled ? 'true' : 'false'})">${toggleLabel}</button>
         <button type="button" class="small danger" onclick="deleteEp(${p.id})">删除</button>
       </td>`;
     tbody.appendChild(tr);
@@ -2466,6 +2482,23 @@ async function deleteEp(id) {
   }
   loadEmailProviders();
   toast('已删除', 'success');
+}
+
+async function toggleProviderDisabled(id, currentlyDisabled) {
+  const action = currentlyDisabled ? '启用' : '禁用';
+  if (!confirm(`确认${action}这个 provider？${action}后 pool 将不会选中它。`)) return;
+  const r = await fetch(API + '/email-providers/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled: !currentlyDisabled }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    toast(`${action}失败：` + (err.detail || r.statusText), 'error');
+    return;
+  }
+  toast(`已${action}`, 'success');
+  loadEmailProviders();
 }
 
 // Populate the add-customer form's provider picker

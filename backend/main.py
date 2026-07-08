@@ -1777,6 +1777,7 @@ def _row_to_email_provider_out(row) -> dict:
         except json.JSONDecodeError:
             domains = []
     default_domain = (row["default_domain"] or "").strip() or None
+    disabled = bool(row["disabled"]) if "disabled" in row.keys() else False
     return {
         "id": row["id"],
         "name": row["name"],
@@ -1784,6 +1785,7 @@ def _row_to_email_provider_out(row) -> dict:
         "config": _hydrate_provider_config_to_dict(row),
         "domains": domains,
         "default_domain": default_domain,
+        "disabled": disabled,
         "last_used_at": row["last_used_at"],
         "last_error": row["last_error"],
         "last_error_at": row["last_error_at"],
@@ -1810,9 +1812,10 @@ async def add_email_provider(data: EmailProviderCreate):
             cur = await db.execute(
                 """INSERT INTO email_providers
                    (name, provider_type, config_json, domains_json, default_domain,
-                    created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (data.name, data.provider_type, config_json, domains_json, default_domain, now, now),
+                    disabled, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (data.name, data.provider_type, config_json, domains_json, default_domain,
+                 1 if data.disabled else 0, now, now),
             )
             provider_id = cur.lastrowid
             await db.commit()
@@ -1825,6 +1828,7 @@ async def add_email_provider(data: EmailProviderCreate):
         "config": data.config,
         "domains": data.domains or [],
         "default_domain": default_domain,
+        "disabled": data.disabled,
         "last_used_at": None,
         "last_error": None,
         "last_error_at": None,
@@ -1863,6 +1867,8 @@ async def update_email_provider(provider_id: int, data: EmailProviderUpdate):
         fields.append("domains_json = ?"); values.append(json.dumps(data.domains, ensure_ascii=False))
     if data.default_domain is not None:
         fields.append("default_domain = ?"); values.append((data.default_domain or "").strip() or None)
+    if data.disabled is not None:
+        fields.append("disabled = ?"); values.append(1 if data.disabled else 0)
     fields.append("updated_at = ?"); values.append(now)
     values.append(provider_id)
     sql = f"UPDATE email_providers SET {', '.join(fields)} WHERE id = ?"

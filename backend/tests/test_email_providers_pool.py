@@ -149,3 +149,22 @@ def test_list_providers_returns_all(db_path):
     _make_provider_row("c")
     providers = list_providers(db_path)
     assert len(providers) == 3
+
+
+def test_pick_provider_skips_disabled(db_path):
+    """Disabled providers must NEVER be picked, even when their cooldown
+    elapsed. C-lite defense: an operator can mark a misconfigured provider
+    as disabled so the pool ignores it indefinitely instead of fighting
+    a 5-minute failure cycle.
+    """
+    pid_disabled = _make_provider_row("broken", last_used_at=None)
+    pid_good = _make_provider_row("good", last_used_at=None)
+    conn = sqlite3.connect(database.DATABASE_PATH)
+    try:
+        conn.execute("UPDATE email_providers SET disabled = 1 WHERE id = ?", (pid_disabled,))
+        conn.commit()
+    finally:
+        conn.close()
+    for _ in range(3):
+        pid, _ = pick_provider(db_path)
+        assert pid == pid_good, f"disabled provider was picked, got {pid}"
