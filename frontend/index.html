@@ -1404,6 +1404,7 @@ function switchTab(name, el) {
   document.getElementById('tab-' + name).classList.add('active');
   el.classList.add('active');
   if (name === 'labels') renderTemplateEditor();
+  if (name === 'email-providers') loadEmailProviders();
 }
 
 async function checkAuth() {
@@ -2330,14 +2331,6 @@ function openSettings() {
 }
 
 // ---- 邮箱服务商管理 ----
-
-const _ORIG_switchTab = switchTab;
-function switchTab(name, el) {
-  _ORIG_switchTab(name, el);
-  if (name === 'email-providers') {
-    loadEmailProviders();
-  }
-}
 
 async function loadEmailProviders() {
   const r = await fetch(API + '/email-providers');
