@@ -163,3 +163,62 @@ def test_generate_email_name_has_at_least_one_uppercase_letter():
     for _ in range(200):
         name = generate_email_name()
         assert any(c.isupper() for c in name), name
+
+
+def test_get_message_unwraps_moemail_message_envelope(mocked_provider):
+    """beilunyang/moemail wraps the message body under a "message" key
+    (see app/api/emails/[id]/[messageId]/route.ts). Without unwrapping,
+    `client.get_message(...)` would return a dict whose `content` /
+    `html` / `subject` fields are all hidden one level deep and the
+    verification code extractor would see an empty body.
+    """
+    p, client = mocked_provider
+    client.get_message.return_value = {
+        "message": {
+            "id": "msg-1",
+            "subject": "Your code is 123456",
+            "content": "code: 123456",
+            "html": "<p>code: 123456</p>",
+        }
+    }
+    body = p.get_message("acct-1", "msg-1")
+    assert body == {
+        "id": "msg-1",
+        "subject": "Your code is 123456",
+        "content": "code: 123456",
+        "html": "<p>code: 123456</p>",
+    }
+
+
+def test_get_message_tolerates_legacy_flat_shape(mocked_provider):
+    """Older / non-standard MoEmail deployments return the message
+    body at the top level, not under a "message" key. MoEmailProvider
+    should accept both shapes.
+    """
+    p, client = mocked_provider
+    client.get_message.return_value = {"id": "msg-1", "content": "code: 654321"}
+    body = p.get_message("acct-1", "msg-1")
+    assert body == {"id": "msg-1", "content": "code: 654321"}
+
+
+def test_fetch_latest_messages_extracts_text_from_message_envelope(mocked_provider):
+    """Regression: the inbox path extracts `text` (or falls back to
+    `content`) from the inner body. If the upstream wraps the body
+    in a "message" key and we don't unwrap, the InboxMessage's `text`
+    field would be empty and verification code detection would fail.
+    """
+    p, client = mocked_provider
+    client.get_email_messages.return_value = {
+        "messages": [{"id": "msg-1", "subject": "Verify", "receivedAt": "2026-07-09"}]
+    }
+    client.get_message.return_value = {
+        "message": {
+            "id": "msg-1",
+            "subject": "Verify",
+            "content": "code: 999999",
+        }
+    }
+    msgs = p.fetch_latest_messages("acct-1")
+    assert len(msgs) == 1
+    assert msgs[0].text == "code: 999999"
+    assert msgs[0].subject == "Verify"

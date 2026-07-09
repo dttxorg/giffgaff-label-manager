@@ -106,10 +106,15 @@ class MoEmailProvider(EmailProvider):
                 body = self._client.get_message(provider_account_id, mid)
             except Exception:
                 continue
-            text = body.get("text") or body.get("content") or ""
+            # beilunyang/moemail wraps the message body under a "message" key.
+            # Also tolerate the legacy flat shape.
+            inner = body.get("message") if isinstance(body, dict) else None
+            if not isinstance(inner, dict):
+                inner = body if isinstance(body, dict) else {}
+            text = inner.get("text") or inner.get("content") or ""
             msgs.append(InboxMessage(
                 id=mid,
-                subject=m.get("subject", ""),
+                subject=m.get("subject", "") or inner.get("subject", ""),
                 text=text,
                 received_at=m.get("receivedAt") or m.get("createdAt") or "",
             ))
@@ -122,6 +127,22 @@ class MoEmailProvider(EmailProvider):
             {"id": m.id, "subject": m.subject, "receivedAt": m.received_at}
             for m in self.fetch_latest_messages(provider_account_id)
         ]}
+
+    def get_message(self, provider_account_id: str, message_id: str) -> dict:
+        """Return the inner message body, unwrapping beilunyang/moemail's
+        `{"message": {...}}` envelope. Mirrors CloudMailProvider's
+        signature so main.py can call `client.get_message(...)` on either
+        provider and get a flat body dict back.
+
+        Without this alias, MoEmailProvider raises AttributeError in
+        main.py:get_customer_verification_code, leaving moemail customers
+        unable to read their verification codes even though the same
+        CloudMailProvider-shaped flow works for cloud-mail customers.
+        """
+        body = self._client.get_message(provider_account_id, message_id)
+        if isinstance(body, dict) and isinstance(body.get("message"), dict):
+            return body["message"]
+        return body if isinstance(body, dict) else {}
 
     def extract_verification_code(self, message: InboxMessage) -> str | None:
         m = VERIFICATION_CODE_RE.search(message.text)
