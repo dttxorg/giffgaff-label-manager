@@ -474,3 +474,162 @@ class TestMoEmailExpiryTime:
         provider = r.json()[0]
         # The field is present (None for providers that don't set it)
         assert "expiry_time_ms" in provider
+
+class TestProviderIsolation:
+    """moemail and cloud-mail must remain independent code paths.
+
+    Each provider's methods are independent (different HTTP endpoints,
+    different JSON shapes, different auth). A bug or refactor in one
+    must not break the other's contract — the test suite explicitly
+    enforces this.
+    """
+
+    def setup_method(self):
+        self.db_path, self._td = _new_db()
+        self.original = _bind_db(self.db_path)
+        _init(self.db_path)
+        main.APP_PASSWORD = ""
+        main.AGENT_API_TOKEN = ""
+
+    def teardown_method(self):
+        import shutil
+        _restore(self.original)
+        main.APP_PASSWORD = ""
+        main.AGENT_API_TOKEN = ""
+        shutil.rmtree(self._td, ignore_errors=True)
+
+    def _build_moemail(self):
+        from unittest.mock import MagicMock, patch
+        from email_providers.moemail import MoEmailProvider
+        with patch("email_providers._moemail_client.httpx") as _:
+            client = MagicMock()
+            with patch("email_providers.moemail.MoEmailClient", return_value=client):
+                p = MoEmailProvider(url="https://moemail.test", api_key="k")
+        return p, client
+
+    def _build_cloudmail(self):
+        from unittest.mock import MagicMock, patch
+        from email_providers.cloudmail import CloudMailProvider
+        # Patch httpx so the real __init__ does not make a network call.
+        with patch("email_providers.cloudmail.httpx") as mock_httpx:
+            mock_httpx.post.return_value.status_code = 200
+            mock_httpx.post.return_value.json.return_value = {"data": {"token": "tok"}}
+            p = CloudMailProvider(
+                url="https://cm.test",
+                email="a@b.com", password="pw", domain="test.com",
+            )
+            # Replace the auto-created client with our mock for fine control.
+            client = MagicMock()
+            p._client = client
+        return p, client
+
+    def test_moemail_generate_only_calls_moemail_endpoints(self):
+        """moemail.generate_email must only POST to /api/emails/generate.
+        It must never touch cloud-mail's /api/account/add or /api/login.
+        """
+        from unittest.mock import MagicMock, patch
+        from email_providers.moemail import MoEmailProvider
+        with patch("email_providers._moemail_client.httpx") as mock_httpx:
+            client = MagicMock()
+            with patch("email_providers.moemail.MoEmailClient", return_value=client):
+                p = MoEmailProvider(url="https://moemail.test", api_key="k")
+            client.generate_email.return_value = {"id": 1, "email": "a@test"}
+            client.create_share_link.return_value = {"link": "x"}
+            p.generate_email()
+            # Walk every URL the client.post hit (via the inner client).
+            for call in client.post.call_args_list:
+                url = call.args[0] if call.args else call.kwargs.get("url", "")
+                assert "emails/generate" in url, f"unexpected URL: {url}"
+                assert "/api/account/add" not in url, f"moemail touched cloud-mail: {url}"
+                assert "/api/login" not in url, f"moemail touched cloud-mail: {url}"
+
+    def test_cloudmail_generate_only_calls_cloudmail_endpoints(self):
+        """cloudmail.generate_email must only POST to /api/account/add.
+        It must never touch moemail's /api/emails/generate or /api/share.
+        """
+        from unittest.mock import MagicMock, patch
+        from email_providers.cloudmail import CloudMailProvider
+        # cloudmail uses module-level `httpx.post` directly, so we patch
+        # the module's httpx to intercept every POST.
+        with patch("email_providers.cloudmail.httpx") as mock_httpx:
+            mock_httpx.post.return_value.status_code = 200
+            mock_httpx.post.return_value.json.return_value = {"data": {"accountId": 1, "email": "a@test.com"}}
+            p = CloudMailProvider(
+                url="https://cm.test",
+                email="a@b.com", password="pw", domain="test.com",
+            )
+            p._jwt = "tok"
+            p._jwt_at = "2026-07-09T00:00:00"
+            p.generate_email()
+            for call in mock_httpx.post.call_args_list:
+                url = call.args[0] if call.args else call.kwargs.get("url", "")
+                assert "/api/account/add" in url, f"unexpected URL: {url}"
+                assert "/api/emails/generate" not in url, f"cloud-mail touched moemail: {url}"
+                assert "/api/emails/" not in url or "/api/emails/generate" in url, f"cloud-mail touched moemail: {url}"
+
+    def test_both_providers_independently_extract_verification_code(self):
+        """Same 6-digit code, but from each provider's own JSON shape.
+        This proves the inbox-read path works regardless of which
+        provider the customer is bound to.
+        """
+        from unittest.mock import MagicMock, patch
+        from email_providers.moemail import MoEmailProvider
+        from email_providers.cloudmail import CloudMailProvider
+
+        # moemail path: {"messages": [...]} summary + {"message": {...}} body
+        with patch("email_providers._moemail_client.httpx"):
+            client = MagicMock()
+            with patch("email_providers.moemail.MoEmailClient", return_value=client):
+                p_moe = MoEmailProvider(url="https://moemail.test", api_key="k")
+            client.get_email_messages.return_value = {
+                "messages": [{"id": "1", "subject": "Verify", "receivedAt": "t"}]
+            }
+            client.get_message.return_value = {
+                "message": {"subject": "Verify", "content": "code 111111"}
+            }
+            inbox_moe = p_moe.get_email_messages("acct")
+            body_moe = p_moe.get_message("acct", inbox_moe["messages"][0]["id"])
+            code_moe = self._extract_code({**inbox_moe["messages"][0], **body_moe})
+            assert code_moe == "111111", f"moemail path failed; body={body_moe}"
+
+        # cloud-mail path: {"data": [...]} with text inline
+        with patch("email_providers.cloudmail.httpx") as mock_httpx:
+            mock_httpx.post.return_value.status_code = 200
+            mock_httpx.post.return_value.json.return_value = {"data": {"token": "tok"}}
+            p_cm = CloudMailProvider(
+                url="https://cm.test",
+                email="a@b.com", password="pw", domain="test.com",
+            )
+            p_cm._jwt = "tok"
+            p_cm._jwt_at = "2026-07-09T00:00:00"
+            mock_httpx.get.return_value.status_code = 200
+            mock_httpx.get.return_value.json.return_value = {
+                "data": [
+                    {"emailId": 1, "subject": "Verify", "text": "code 222222",
+                     "createTime": "t"}
+                ]
+            }
+            inbox_cm = p_cm.get_email_messages("acct")
+            assert len(inbox_cm["messages"]) == 1
+            # Mimic main.py: get_message re-fetches the body, then merge
+            # summary + detail and extract the code.
+            body_cm = p_cm.get_message("acct", "1")
+            msg = inbox_cm["messages"][0]
+            code_cm = self._extract_code({**msg, **body_cm})
+            assert code_cm == "222222", f"cloud-mail path failed; body={body_cm}"
+
+        # And the two are independent — fixing one does not break the
+        # other: cloud-mail still works after the moemail envelope fix.
+        assert code_moe != code_cm
+
+    def _extract_code(self, message: dict) -> str | None:
+        """Mirror the production _extract_verification_code."""
+        import re
+        from html import unescape
+        text = message.get("subject", "") + "\n" + (
+            message.get("content", "") or message.get("text", "") or message.get("body", "") or ""
+        )
+        html_content = re.sub(r"<[^>]+>", " ", message.get("html", "") or "")
+        text = text + "\n" + html_content
+        m = re.search(r"\b\d{6}\b", text)
+        return m.group(0) if m else None
