@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
-from email_providers.cloudmail import CloudMailProvider
+from email_providers.cloudmail import CloudMailProvider, generate_random_prefix
 
 
 def _patch_httpx():
@@ -28,6 +28,15 @@ def _make_provider(jwt=None, jwt_at=None):
 def test_provider_type():
     p = CloudMailProvider(url="x", email="e", password="p", domain="d")
     assert p.provider_type == "cloudmail"
+
+
+def test_generate_random_prefix_has_uppercase_letter():
+    """The local-part must contain at least one upper-case character so
+    the resulting email can be used directly as a password on services
+    (e.g. giffgaff) that require upper-case."""
+    for _ in range(200):
+        prefix = generate_random_prefix()
+        assert any(c.isupper() for c in prefix), prefix
 
 
 def test_endpoints_include_api_prefix():

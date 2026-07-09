@@ -18,8 +18,18 @@ JWT_REFRESH_DAYS = 25
 
 
 def generate_random_prefix() -> str:
+    """Build a 10-char local-part and ensure at least one ASCII letter
+    is uppercased so the resulting address can be used directly as a
+    password on services (e.g. giffgaff) whose password policy
+    requires an upper-case character.
+
+    Mirrors the same guarantee in MoEmailClient.generate_email_name().
+    """
     chars = string.ascii_lowercase + string.digits
-    return "".join(random.choices(chars, k=10))
+    prefix = "".join(random.choices(chars, k=10))
+    letter_positions = [i for i, ch in enumerate(prefix) if ch.isalpha()]
+    pos = random.choice(letter_positions)
+    return prefix[:pos] + prefix[pos].upper() + prefix[pos + 1:]
 
 
 class CloudMailProvider(EmailProvider):
