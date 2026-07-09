@@ -355,6 +355,7 @@
       padding: 10px 28px;
       min-height: var(--btn-h);
     }
+    .add-form-hint { margin: 8px 0 0; font-size: 12px; }
 
     .inline-form {
       display: grid;
@@ -933,30 +934,7 @@
         <span class="muted">先选开通日期即可添加；可选择是否使用激活码</span>
       </div>
       <div class="card-body">
-        <form class="form-grid" id="add-form">
-          <div>
-            <label>手机号</label>
-            <input type="text" id="phone" placeholder="拿到号码后再补充">
-          </div>
-	          <div>
-	            <label>邮箱</label>
-	            <input type="email" id="email" placeholder="可手填；留空自动生成（按服务商池轮换）">
-	          </div>
-	          <div>
-	            <label>
-              <input type="checkbox" id="customer-auto-rotate" checked>
-              使用自动轮换
-            </label>
-            <div class="provider-row">
-              <select id="customer-provider-pick" hidden></select>
-              <select id="customer-domain-pick" hidden>
-                <option value="">（默认域名）</option>
-              </select>
-              <span class="provider-empty-hint muted" id="customer-provider-empty" hidden>
-                还没有邮箱服务商——<a href="#" id="customer-provider-go">立即添加</a>
-              </span>
-            </div>
-          </div>
+        <form class="form-grid add-form-compact" id="add-form">
           <div>
             <label>开通日期</label>
             <input type="date" id="act-date" required>
@@ -969,27 +947,23 @@
             </select>
           </div>
           <div class="wide-field">
-            <label>收货地址</label>
-            <input type="text" id="shipping-address" placeholder="成交后可补充">
-          </div>
-          <div>
-            <label>发货状态</label>
-            <select id="shipping-status">
-              <option value="未发货">未发货</option>
-              <option value="已发货">已发货</option>
-              <option value="已收货">已收货</option>
-            </select>
-          </div>
-          <div>
-            <label>快递公司</label>
-            <input type="text" id="courier-company" placeholder="如 顺丰 / 中通">
-          </div>
-          <div>
-            <label>快递单号</label>
-            <input type="text" id="tracking-number" placeholder="发货后补充">
+            <label>
+              <input type="checkbox" id="customer-auto-rotate" checked>
+              邮箱自动轮换（按服务商池轮换）
+            </label>
+            <div class="provider-row">
+              <select id="customer-provider-pick" hidden></select>
+              <select id="customer-domain-pick" hidden>
+                <option value="">（默认域名）</option>
+              </select>
+              <span class="provider-empty-hint muted" id="customer-provider-empty" hidden>
+                还没有邮箱服务商——<a href="#" id="customer-provider-go">立即添加</a>
+              </span>
+            </div>
           </div>
           <button type="submit">添加客户</button>
         </form>
+        <p class="muted add-form-hint">手机号、邮箱、收货地址、快递等暂不预填；保存客户后可在「详情」面板里补充。</p>
       </div>
     </div>
 
@@ -2104,24 +2078,15 @@ async function deleteCustomer(id, phone) {
 
 document.getElementById('add-form').onsubmit = async (e) => {
   e.preventDefault();
-  const phone = document.getElementById('phone').value.trim();
-  const email = document.getElementById('email').value.trim();
-  const shippingAddress = document.getElementById('shipping-address').value.trim();
-  const shippingStatus = normalizeShippingStatus(document.getElementById('shipping-status').value);
-  const courierCompany = document.getElementById('courier-company').value.trim();
-  const trackingNumber = document.getElementById('tracking-number').value.trim();
   const actDate = document.getElementById('act-date').value;
   const useSimCode = document.getElementById('use-sim-code').value === 'true';
   const autoRotate = document.getElementById('customer-auto-rotate').checked;
   const providerPick = document.getElementById('customer-provider-pick');
   const manualProviderId = (!autoRotate && providerPick.value) ? parseInt(providerPick.value, 10) : null;
+  // Form only ships activation_date / use_sim_code / email_provider_id / email_provider_domain;
+  // phone/email/shipping/courier default to empty in the backend and are filled in later
+  // via the customer detail panel.
   const body = {
-    phone_number: phone,
-    email,
-    shipping_address: shippingAddress,
-    shipping_status: shippingStatus,
-    courier_company: courierCompany,
-    tracking_number: trackingNumber,
     activation_date: actDate,
     use_sim_code: useSimCode,
   };
