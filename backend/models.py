@@ -201,6 +201,7 @@ class EmailProviderCreate(BaseModel):
     domains: list[str] = []
     default_domain: Optional[str] = None
     disabled: bool = False
+    expiry_time_ms: Optional[int] = None  # moemail only; 0 / None = default 7 days
 
 
 class EmailProviderOut(BaseModel):
@@ -211,6 +212,7 @@ class EmailProviderOut(BaseModel):
     domains: list[str] = []
     default_domain: Optional[str] = None
     disabled: bool = False
+    expiry_time_ms: Optional[int] = None
     last_used_at: Optional[str] = None
     last_error: Optional[str] = None
     last_error_at: Optional[str] = None
@@ -225,6 +227,7 @@ class EmailProviderUpdate(BaseModel):
     domains: Optional[list[str]] = None
     default_domain: Optional[str] = None
     disabled: Optional[bool] = None
+    expiry_time_ms: Optional[int] = None
 
 
 class ResetCustomerRequest(BaseModel):

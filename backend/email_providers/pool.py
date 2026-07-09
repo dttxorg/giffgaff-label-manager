@@ -33,11 +33,17 @@ def _construct_provider(row: sqlite3.Row) -> EmailProvider | None:
         return None
     try:
         if typ == "moemail":
+            expiry_ms = config.get("expiry_time_ms")
+            try:
+                expiry_ms_int = int(expiry_ms) if expiry_ms is not None else None
+            except (TypeError, ValueError):
+                expiry_ms_int = None
             return MoEmailProvider(
                 url=config["url"],
                 api_key=config["api_key"],
                 domains=_decode_domains(row),
                 default_domain=_decode_default_domain(row),
+                expiry_time_ms=expiry_ms_int,
             )
         if typ == "cloudmail":
             domain = (

@@ -1127,6 +1127,9 @@
       <div data-ep-fields="moemail">
         <label>URL <input id="ep-url" type="url" placeholder="https://moemail.example.com"></label>
         <label>API Key <input id="ep-key" type="password"></label>
+        <label>过期时间（毫秒，0=默认 7 天）
+          <input id="ep-expiry" type="number" min="0" step="1" placeholder="604800000">
+        </label>
       </div>
       <div data-ep-fields="cloudmail" hidden>
         <label>URL <input id="ep-url-c" type="url" placeholder="https://mail.example.com"></label>
@@ -2381,6 +2384,7 @@ function openEpDialog(id) {
         // Don't pre-fill password; user re-enters to change
       } else {
         document.getElementById('ep-key').value = (p.config.api_key || '');
+        if (p.config.expiry_time_ms != null) document.getElementById('ep-expiry').value = p.config.expiry_time_ms;
       }
       toggleEpFields();
     });
@@ -2391,6 +2395,7 @@ function openEpDialog(id) {
 
 function closeEpDialog() {
   document.getElementById('ep-dialog').hidden = true;
+  document.getElementById('ep-expiry').value = '';
 }
 
 async function saveEp() {
@@ -2403,6 +2408,13 @@ async function saveEp() {
       url: document.getElementById('ep-url').value.trim(),
       api_key: document.getElementById('ep-key').value,
     };
+    const expiryRaw = document.getElementById('ep-expiry').value.trim();
+    if (expiryRaw !== '') {
+      const expiryNum = parseInt(expiryRaw, 10);
+      if (!Number.isNaN(expiryNum) && expiryNum >= 0) {
+        config.expiry_time_ms = expiryNum;
+      }
+    }
   } else {
     config = {
       url: document.getElementById('ep-url-c').value.trim(),

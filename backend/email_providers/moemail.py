@@ -13,15 +13,26 @@ from .base import EmailProvider, GeneratedEmail, InboxMessage
 VERIFICATION_CODE_RE = re.compile(r"\b\d{6}\b")
 
 
+# Default expiry time for newly generated MoEmail accounts: 7 days in ms.
+# MoEmail's v2/forked servers reject `expiryTime: 0` with `{"error":"无效的过期时间"}`
+# so the default cannot be the "永久 (permanent)" sentinel. 7 days is plenty for
+# a verification-email flow and is the value the original upstream client uses
+# when callers pass nothing.
+DEFAULT_EXPIRY_TIME_MS = 7 * 24 * 60 * 60 * 1000  # 604_800_000
+
+
 class MoEmailProvider(EmailProvider):
     provider_type = "moemail"
 
-    def __init__(self, url: str, api_key: str, *, domains: list[str] | None = None, default_domain: str | None = None):
+    def __init__(self, url: str, api_key: str, *, domains: list[str] | None = None,
+                 default_domain: str | None = None,
+                 expiry_time_ms: int | None = None):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self._client = MoEmailClient(url, api_key)
         self._domains = list(domains or [])
         self._default_domain = default_domain
+        self._expiry_time_ms = int(expiry_time_ms) if expiry_time_ms else DEFAULT_EXPIRY_TIME_MS
 
     def _pick_domain(self, requested: str | None = None) -> str | None:
         if requested:
@@ -38,7 +49,7 @@ class MoEmailProvider(EmailProvider):
         chosen = self._pick_domain(domain)
         data = self._client.generate_email(
             name=generate_email_name(),
-            expiry_time=0,
+            expiry_time=self._expiry_time_ms,
             domain=chosen,
         )
         share_link = None

@@ -449,3 +449,28 @@ class TestEmptyPoolError:
         body = r.json()
         assert "No email providers" in body["detail"]
         assert "邮箱服务商" in body["detail"]
+
+
+class TestMoEmailExpiryTime:
+    """Regression: MoEmail v2/forked servers reject `expiryTime: 0`. The
+    backend must default to a positive value (7 days) and let operators
+    override per-provider via the `expiry_time_ms` field."""
+
+    def setup_method(self):
+        self.db_path, self._td = _new_db()
+        self.original = _bind_db(self.db_path)
+        _init(self.db_path)
+        self.client = TestClient(main.app)
+
+    def teardown_method(self):
+        import shutil
+        _restore(self.original)
+        shutil.rmtree(self._td, ignore_errors=True)
+
+    def test_provider_output_exposes_expiry_time_ms_field(self):
+        _insert_provider(self.db_path, "m1")
+        r = self.client.get("/api/email-providers")
+        assert r.status_code == 200
+        provider = r.json()[0]
+        # The field is present (None for providers that don't set it)
+        assert "expiry_time_ms" in provider

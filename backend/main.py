@@ -1729,7 +1729,14 @@ def _build_provider_config_json(provider_type: str, config: dict) -> str:
     if provider_type == "moemail":
         if "url" not in config or "api_key" not in config:
             raise HTTPException(status_code=400, detail="MoEmail 需要 url 和 api_key")
-        return json.dumps({"url": config["url"].rstrip("/"), "api_key": config["api_key"]})
+        out = {"url": config["url"].rstrip("/"), "api_key": config["api_key"]}
+        # Persist optional expiry_time_ms (0 / None = use the default 7 days).
+        if config.get("expiry_time_ms") is not None:
+            try:
+                out["expiry_time_ms"] = int(config["expiry_time_ms"])
+            except (TypeError, ValueError):
+                pass
+        return json.dumps(out)
     if provider_type == "cloudmail":
         if "url" not in config or "email" not in config or "password" not in config:
             raise HTTPException(status_code=400, detail="Cloud-Mail 需要 url/email/password")
@@ -1778,6 +1785,17 @@ def _row_to_email_provider_out(row) -> dict:
             domains = []
     default_domain = (row["default_domain"] or "").strip() or None
     disabled = bool(row["disabled"]) if "disabled" in row.keys() else False
+    raw_config = row["config_json"] or "{}"
+    try:
+        cfg_dict = json.loads(raw_config) if raw_config else {}
+    except json.JSONDecodeError:
+        cfg_dict = {}
+    expiry_time_ms = None
+    if isinstance(cfg_dict, dict) and "expiry_time_ms" in cfg_dict:
+        try:
+            expiry_time_ms = int(cfg_dict["expiry_time_ms"])
+        except (TypeError, ValueError):
+            expiry_time_ms = None
     return {
         "id": row["id"],
         "name": row["name"],
@@ -1786,6 +1804,7 @@ def _row_to_email_provider_out(row) -> dict:
         "domains": domains,
         "default_domain": default_domain,
         "disabled": disabled,
+        "expiry_time_ms": expiry_time_ms,
         "last_used_at": row["last_used_at"],
         "last_error": row["last_error"],
         "last_error_at": row["last_error_at"],
@@ -1803,7 +1822,12 @@ async def list_email_providers():
 
 @app.post("/api/email-providers", status_code=201)
 async def add_email_provider(data: EmailProviderCreate):
-    config_json = _build_provider_config_json(data.provider_type, data.config)
+    # Persist top-level `expiry_time_ms` (moemail) inside config_json so the
+    # provider row is self-contained.
+    config = dict(data.config or {})
+    if data.expiry_time_ms is not None and "expiry_time_ms" not in config:
+        config["expiry_time_ms"] = data.expiry_time_ms
+    config_json = _build_provider_config_json(data.provider_type, config)
     domains_json = json.dumps(data.domains or [], ensure_ascii=False)
     default_domain = (data.default_domain or "").strip() or None
     now = _utc_now()
@@ -1829,6 +1853,7 @@ async def add_email_provider(data: EmailProviderCreate):
         "domains": data.domains or [],
         "default_domain": default_domain,
         "disabled": data.disabled,
+        "expiry_time_ms": data.expiry_time_ms,
         "last_used_at": None,
         "last_error": None,
         "last_error_at": None,
@@ -1859,7 +1884,10 @@ async def update_email_provider(provider_id: int, data: EmailProviderUpdate):
     if data.name is not None:
         fields.append("name = ?"); values.append(data.name)
     if data.config is not None:
-        cfg = _build_provider_config_json(row["provider_type"], data.config)
+        cfg_in = dict(data.config or {})
+        if data.expiry_time_ms is not None and "expiry_time_ms" not in cfg_in:
+            cfg_in["expiry_time_ms"] = data.expiry_time_ms
+        cfg = _build_provider_config_json(row["provider_type"], cfg_in)
         fields.append("config_json = ?"); values.append(cfg)
         # Invalidate cached JWT — new credentials may invalidate it
         fields.append("last_jwt_token = NULL"); fields.append("last_jwt_at = NULL")
@@ -1869,6 +1897,14 @@ async def update_email_provider(provider_id: int, data: EmailProviderUpdate):
         fields.append("default_domain = ?"); values.append((data.default_domain or "").strip() or None)
     if data.disabled is not None:
         fields.append("disabled = ?"); values.append(1 if data.disabled else 0)
+    if data.expiry_time_ms is not None and "config" not in (data.__dict__ or {}) and data.config is None:
+        # No config change requested but expiry_time_ms is. Merge it into existing config_json.
+        try:
+            current_cfg = json.loads(row["config_json"] or "{}")
+        except json.JSONDecodeError:
+            current_cfg = {}
+        current_cfg["expiry_time_ms"] = data.expiry_time_ms
+        fields.append("config_json = ?"); values.append(json.dumps(current_cfg, ensure_ascii=False))
     fields.append("updated_at = ?"); values.append(now)
     values.append(provider_id)
     sql = f"UPDATE email_providers SET {', '.join(fields)} WHERE id = ?"
