@@ -13,12 +13,19 @@ from .base import EmailProvider, GeneratedEmail, InboxMessage
 VERIFICATION_CODE_RE = re.compile(r"\b\d{6}\b")
 
 
-# Default expiry time for newly generated MoEmail accounts: 7 days in ms.
-# MoEmail's v2/forked servers reject `expiryTime: 0` with `{"error":"无效的过期时间"}`
-# so the default cannot be the "永久 (permanent)" sentinel. 7 days is plenty for
-# a verification-email flow and is the value the original upstream client uses
-# when callers pass nothing.
-DEFAULT_EXPIRY_TIME_MS = 7 * 24 * 60 * 60 * 1000  # 604_800_000
+# Default expiry time for newly generated MoEmail accounts: 10 years in ms.
+# MoEmail's v2/forked servers reject `expiryTime: 0` with
+# `{"error":"无效的过期时间"}` so the "永久 (permanent)" sentinel doesn't
+# work. The smallest safe upper bound we can pick without knowing the
+# server's max-time cap is 10 years — long enough that any single
+# giffgaff customer's email stays accessible for the lifetime of their
+# SIM, while still being a value that virtually all MoEmail servers
+# accept (most cap at 1 year so 10y will be rejected and the operator
+# can dial it back per provider). Operators can override per provider
+# via the `expiry_time_ms` field on EmailProviderCreate/Update; the
+# expiry is also persisted alongside the provider row in
+# `config_json.expiry_time_ms`.
+DEFAULT_EXPIRY_TIME_MS = 10 * 365 * 24 * 60 * 60 * 1000  # 315_360_000_000
 
 
 class MoEmailProvider(EmailProvider):
