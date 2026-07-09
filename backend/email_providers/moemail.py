@@ -13,19 +13,28 @@ from .base import EmailProvider, GeneratedEmail, InboxMessage
 VERIFICATION_CODE_RE = re.compile(r"\b\d{6}\b")
 
 
-# Default expiry time for newly generated MoEmail accounts: 10 years in ms.
-# MoEmail's v2/forked servers reject `expiryTime: 0` with
-# `{"error":"无效的过期时间"}` so the "永久 (permanent)" sentinel doesn't
-# work. The smallest safe upper bound we can pick without knowing the
-# server's max-time cap is 10 years — long enough that any single
-# giffgaff customer's email stays accessible for the lifetime of their
-# SIM, while still being a value that virtually all MoEmail servers
-# accept (most cap at 1 year so 10y will be rejected and the operator
-# can dial it back per provider). Operators can override per provider
-# via the `expiry_time_ms` field on EmailProviderCreate/Update; the
-# expiry is also persisted alongside the provider row in
+# Default expiry time for newly generated MoEmail accounts: 0 = 永久.
+#
+# beilunyang/moemail (the upstream project this code targets) only accepts
+# one of these four values in `expiryTime` (see app/types/email.ts):
+#     0           (永久, expiresAt = "9999-01-01")
+#     3600000     (1 小时)
+#     86400000    (1 天)
+#     259200000   (3 天)
+# Any other value (including "10 years" 315360000000) is rejected with
+# 400 `{"error":"无效的过期时间"}`. The README on the upstream repo
+# mentions 7 days but the actual code is 3 days — we go with the code.
+#
+# The 0 / 永久 sentinel maps server-side to a year-9999 timestamp, which
+# is effectively "never expires" for any practical purpose. This is what
+# giffgaff customers need: their email inbox must stay reachable for
+# the lifetime of the SIM.
+#
+# Operators can override per provider via the `expiry_time_ms` field on
+# EmailProviderCreate/Update (1 hour / 1 day / 3 day are the only other
+# options the upstream server accepts). The override is persisted in
 # `config_json.expiry_time_ms`.
-DEFAULT_EXPIRY_TIME_MS = 10 * 365 * 24 * 60 * 60 * 1000  # 315_360_000_000
+DEFAULT_EXPIRY_TIME_MS = 0
 
 
 class MoEmailProvider(EmailProvider):
@@ -39,7 +48,10 @@ class MoEmailProvider(EmailProvider):
         self._client = MoEmailClient(url, api_key)
         self._domains = list(domains or [])
         self._default_domain = default_domain
-        self._expiry_time_ms = int(expiry_time_ms) if expiry_time_ms else DEFAULT_EXPIRY_TIME_MS
+        # Default to 永久 (0). 0 is intentionally allowed as a valid
+        # value here — beilunyang/moemail treats it as the "永久" sentinel
+        # and stores expiresAt as "9999-01-01".
+        self._expiry_time_ms = DEFAULT_EXPIRY_TIME_MS if expiry_time_ms is None else int(expiry_time_ms)
 
     def _pick_domain(self, requested: str | None = None) -> str | None:
         if requested:

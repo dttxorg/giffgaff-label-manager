@@ -1127,9 +1127,10 @@
       <div data-ep-fields="moemail">
         <label>URL <input id="ep-url" type="url" placeholder="https://moemail.example.com"></label>
         <label>API Key <input id="ep-key" type="password"></label>
-        <label>过期时间（毫秒，留空=默认 10 年）
-          <input id="ep-expiry" type="number" min="0" step="1" placeholder="315360000000">
+        <label>过期时间（毫秒，留空=默认 0=永久）
+          <input id="ep-expiry" type="number" min="0" step="1" placeholder="0">
         </label>
+        <small class="muted">上游 beilunyang/moemail 仅接受 0/3600000/86400000/259200000 四档</small>
       </div>
       <div data-ep-fields="cloudmail" hidden>
         <label>URL <input id="ep-url-c" type="url" placeholder="https://mail.example.com"></label>

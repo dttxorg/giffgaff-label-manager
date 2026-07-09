@@ -98,26 +98,29 @@ def test_ping_false_on_failure(mocked_provider):
     client.get_config.side_effect = Exception("network down")
     assert p.ping() is False
 
-def test_default_expiry_time_is_long_enough():
-    """The default expiry_time_ms must be at least 10 years.
+# beilunyang/moemail only accepts these four values for `expiryTime`:
+#   0          (永久, expiresAt = "9999-01-01")
+#   3600000    (1 hour)
+#   86400000   (1 day)
+#   259200000  (3 days)
+# See app/types/email.ts in the upstream repo. Any other value is rejected
+# with 400 `{"error":"无效的过期时间"}`. We default to 0 (=永久) so the
+# inbox stays reachable for the lifetime of the giffgaff customer.
+ACCEPTED_EXPIRY_TIME_MS = (0, 3_600_000, 86_400_000, 259_200_000)
 
-    Rationale: a giffgaff customer may keep their SIM for years, and the
-    MoEmail inbox is the only place we can read verification codes. If the
-    inbox expires, the customer can no longer reset their password or
-    receive security emails.
-    """
+
+def test_default_expiry_time_is_zero():
+    """The default must be 0 (=永久). Any other value gets rejected."""
     from email_providers.moemail import DEFAULT_EXPIRY_TIME_MS
-    ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
-    assert DEFAULT_EXPIRY_TIME_MS >= 10 * ONE_YEAR_MS, (
-        f"DEFAULT_EXPIRY_TIME_MS must be at least 10 years, got "
-        f"{DEFAULT_EXPIRY_TIME_MS // ONE_YEAR_MS} years"
+    assert DEFAULT_EXPIRY_TIME_MS == 0, (
+        f"DEFAULT_EXPIRY_TIME_MS must be 0 (永久), got {DEFAULT_EXPIRY_TIME_MS}"
     )
+    assert DEFAULT_EXPIRY_TIME_MS in ACCEPTED_EXPIRY_TIME_MS
 
 
 def test_generate_email_sends_default_expiry_time_ms():
-    """Regression: MoEmail v2/forked servers reject `expiryTime: 0` with
-    `{"error":"无效的过期时间"}`. The default must be a positive value
-    AND match the 10-year minimum.
+    """Regression: the default must be 0 (=永久), accepted by the
+    upstream beilunyang/moemail server's whitelist.
     """
     from email_providers.moemail import DEFAULT_EXPIRY_TIME_MS
     with patch("email_providers._moemail_client.httpx") as mock_httpx:
@@ -128,21 +131,25 @@ def test_generate_email_sends_default_expiry_time_ms():
         client.create_share_link.return_value = {"link": "x"}
         p.generate_email()
         sent = client.generate_email.call_args.kwargs["expiry_time"]
-        assert sent == DEFAULT_EXPIRY_TIME_MS
-        assert sent >= 10 * 365 * 24 * 60 * 60 * 1000
+        assert sent == DEFAULT_EXPIRY_TIME_MS == 0
+        assert sent in ACCEPTED_EXPIRY_TIME_MS
 
 
 def test_provider_expiry_time_ms_override():
-    """Per-provider `expiry_time_ms` overrides the default."""
+    """Per-provider `expiry_time_ms` overrides the default. The override
+    must still be a value the upstream server accepts, otherwise the
+    server returns 400 `{"error":"无效的过期时间"}`.
+    """
     with patch("email_providers._moemail_client.httpx") as mock_httpx:
         client = MagicMock()
         with patch("email_providers.moemail.MoEmailClient", return_value=client):
             p = MoEmailProvider(
                 url="https://moemail.test", api_key="k",
-                expiry_time_ms=10 * 365 * 24 * 60 * 60 * 1000,  # 10 years
+                expiry_time_ms=259200000,  # 3 days
             )
         client.generate_email.return_value = {"id": 1, "email": "a@b.test"}
         client.create_share_link.return_value = {"link": "x"}
         p.generate_email()
         sent = client.generate_email.call_args.kwargs["expiry_time"]
-        assert sent == 10 * 365 * 24 * 60 * 60 * 1000
+        assert sent == 259200000
+        assert sent in ACCEPTED_EXPIRY_TIME_MS
