@@ -28,11 +28,25 @@ SUFFIX_CHARS = string.ascii_lowercase + string.digits
 
 
 def generate_email_name() -> str:
-    """生成随机但有意义的邮箱名前缀，如 braveowlp3w"""
+    """生成随机但有意义的邮箱名前缀，如 braveowlp3w。
+
+    At least one ASCII letter is uppercased so the resulting address
+    contains a capital letter. Operators use the generated address
+    directly as a password on external services (e.g. giffgaff) whose
+    password policy requires an upper-case character.
+
+    The upstream MoEmail server stores the address in lower-case
+    (`LOWER(address)`) for uniqueness, so the capital letters are
+    purely a display / password-policy affordance.
+    """
     adj = random.choice(ADJECTIVES)
     noun = random.choice(NOUNS)
     suffix = "".join(random.choices(SUFFIX_CHARS, k=3))
-    return f"{adj}{noun}{suffix}"
+    name = f"{adj}{noun}{suffix}"
+    # Pick a letter position (skip digits) and capitalize it.
+    letter_positions = [i for i, ch in enumerate(name) if ch.isalpha()]
+    pos = random.choice(letter_positions)
+    return name[:pos] + name[pos].upper() + name[pos + 1:]
 
 
 class MoEmailClient:

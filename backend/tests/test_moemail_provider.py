@@ -153,3 +153,13 @@ def test_provider_expiry_time_ms_override():
         sent = client.generate_email.call_args.kwargs["expiry_time"]
         assert sent == 259200000
         assert sent in ACCEPTED_EXPIRY_TIME_MS
+
+def test_generate_email_name_has_at_least_one_uppercase_letter():
+    """Operator requirement: the generated email local-part must include
+    at least one uppercase letter, because the address is reused as a
+    password on services (e.g. giffgaff) that require upper-case."""
+    from email_providers._moemail_client import generate_email_name
+    # Run a bunch of times to avoid statistical flake
+    for _ in range(200):
+        name = generate_email_name()
+        assert any(c.isupper() for c in name), name
