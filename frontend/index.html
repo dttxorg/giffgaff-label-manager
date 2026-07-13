@@ -494,6 +494,8 @@
     .badge-activation-waiting { background: var(--orange-soft); color: var(--orange); }
     .badge-activation-done { background: var(--purple-light); color: var(--purple); }
     .badge-activation-failed { background: var(--red-light); color: var(--red); }
+    .badge-danger { background: var(--red-light); color: var(--red); }
+    .badge-warning { background: #fef3c7; color: #b45309; }
 
     /* ============================================================
        Settings —— 4 列自适应（窄到 2 列、再窄到 1 列）
@@ -1026,8 +1028,9 @@
               <th>#</th>
               <th>手机号</th>
               <th>邮箱</th>
-	              <th>邮箱来源</th>
-	              <th>SIM / 激活</th>
+              <th>邮箱来源</th>
+              <th>支付</th>
+              <th>SIM / 激活</th>
 	              <th>开通日期</th>
               <th>发货状态 / 收货地址</th>
               <th>操作</th>
@@ -1851,6 +1854,44 @@ function activationBadgeClass(status) {
   }
 }
 
+function buildPaymentStatusBadge(c) {
+  const badge = document.createElement('span');
+  if (c.payment_changed_at) {
+    badge.className = 'badge badge-danger';
+    badge.textContent = '✓ 已解绑';
+    badge.title = `信用卡已解除（${formatShortDate(c.payment_changed_at)}）`;
+  } else if (c.payment_updated_at) {
+    badge.className = 'badge badge-warning';
+    badge.textContent = '已更新';
+    badge.title = `信用卡更新过（${formatShortDate(c.payment_updated_at)}），未解除`;
+  } else if (c.payment_last_checked_at) {
+    badge.className = 'badge badge-manual';
+    badge.textContent = '未发现';
+    badge.title = `已查询过邮箱，未发现支付变更邮件（${formatShortDate(c.payment_last_checked_at)}）`;
+  } else {
+    const span = document.createElement('span');
+    span.className = 'muted';
+    span.style.fontSize = '12px';
+    span.textContent = '—';
+    span.title = '未查询过';
+    return span;
+  }
+  return badge;
+}
+
+function formatShortDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${day} ${hh}:${mm}`;
+  } catch (e) { return iso; }
+}
 // 把 text 中匹配 query（大小写不敏感）的子串用 <mark> 包裹，append 到 parent
 function highlightInto(parent, text, query) {
   if (!query) { parent.appendChild(document.createTextNode(text)); return; }
@@ -1895,6 +1936,19 @@ function buildCustomerRow(c, index) {
   sourceCell.appendChild(badge);
   row.appendChild(sourceCell);
 
+  // 支付状态（来自上次「查解绑」结果）
+  const paymentCell = document.createElement('td');
+  paymentCell.appendChild(buildPaymentStatusBadge(c));
+  if (c.payment_last_checked_at) {
+    const meta = document.createElement('div');
+    meta.className = 'address-preview';
+    meta.style.fontSize = '11px';
+    meta.style.color = 'var(--muted)';
+    meta.textContent = `查询于 ${formatShortDate(c.payment_last_checked_at)}`;
+    paymentCell.appendChild(meta);
+  }
+  row.appendChild(paymentCell);
+
   const activationCell = document.createElement('td');
   const activationBadge = document.createElement('span');
   activationBadge.className = `badge ${activationBadgeClass(c.activation_status)}`;
@@ -1933,19 +1987,31 @@ function buildCustomerRow(c, index) {
   actionsCell.className = 'actions-cell';
   const actions = document.createElement('div');
   actions.className = 'actions';
-  actions.append(
+  // 只对「已用激活码 + 已填手机号 + 有 MoEmail 邮箱」的客户显示查解绑按钮
+  const canCheckPayment = isPaymentCheckEligible(c);
+  const basicActions = [
     makeButton(c.phone_number ? '详情' : '补手机号', () => viewCustomer(c.id, c.phone_number ? '' : 'phone')),
     makeButton(hasAddress ? '地址/状态' : '录地址', () => viewCustomer(c.id, hasAddress ? 'status' : 'address'), 'small ghost'),
     makeButton(c.is_moemail_auto ? '重新生成邮箱' : '生成邮箱', () => generateMoemail(c.id), 'small blue'),
     makeButton('接码', () => openCodeForCustomer(c.id), 'small ghost', !c.moemail_id),
-    makeButton('查解绑', () => openPaymentInfoForCustomer(c.id), 'small ghost', !c.moemail_id),
     makeButton('打印标签', () => openPrintPanel(c.id), 'small green'),
     makeButton('快递单', () => openPrintPanel(c.id, COURIER_TEMPLATE_ID), 'small green'),
     makeButton('删除', () => deleteCustomer(c.id, c.phone_number || '未填手机号客户'), 'small danger'),
-  );
+  ];
+  actions.append(...basicActions);
+  if (canCheckPayment) {
+    actions.appendChild(
+      makeButton('查解绑', () => openPaymentInfoForCustomer(c.id), 'small ghost')
+    );
+  }
   actionsCell.appendChild(actions);
   row.appendChild(actionsCell);
   return row;
+}
+
+function isPaymentCheckEligible(c) {
+  // 使用了激活码 + 填了手机号 + 有 MoEmail 邮箱
+  return !!(c.phone_number && (c.sim_activation_code || c.sim_code_id) && c.moemail_id);
 }
 
 async function getCustomer(id) {
@@ -2503,6 +2569,12 @@ document.getElementById('phone-update-form').onsubmit = async (e) => {
     document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     toast(phone ? '手机号已保存' : '手机号已清空', 'success');
     await loadCustomers();
+    // 保存手机号后，如果客户满足「查解绑」条件则后台自动查询一次
+    if (phone && isPaymentCheckEligible(activeCustomer)) {
+      toast('已自动查询支付信息变更...', '');
+      // 后台跑，不阻塞 UI；查询结果会保存到 DB 并触发 toast
+      refreshPaymentInfoForActive().catch(() => {});
+    }
   } catch (err) {
     toast(err.message, 'error');
   } finally {

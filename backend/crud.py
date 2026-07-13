@@ -225,6 +225,28 @@ async def regenerate_public_link(customer_id: int) -> Optional[dict]:
         return {"public_token": new_token, "public_version": new_version}
 
 
+async def save_payment_check_result(
+    customer_id: int,
+    changed_at: Optional[str],
+    updated_at: Optional[str],
+    checked_at: Optional[str],
+) -> bool:
+    """保存「查解绑」结果到 DB，供首页列表展示。
+    changed_at / updated_at 来自最新一封「changed」/「updated」邮件的 received_at。
+    checked_at 是查询发生时间（即使没找到任何邮件也会写）。
+    客户不存在时返回 False。"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """UPDATE customers
+               SET payment_changed_at = ?, payment_updated_at = ?, payment_last_checked_at = ?
+               WHERE id = ?""",
+            (changed_at, updated_at, checked_at, customer_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+
 async def set_setting(key: str, value: str):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(

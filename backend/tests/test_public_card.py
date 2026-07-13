@@ -295,3 +295,92 @@ def test_list_customers_includes_public_version(client):
     lst = client.get("/api/customers").json()
     assert all("public_version" in c for c in lst)
     assert all(c["public_version"] == 1 for c in lst)
+
+
+# ── 支付信息持久化（save_payment_check_result）──
+
+
+def test_payment_fields_default_to_none(client):
+    cid = _create("a@x.com")
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["payment_changed_at"] is None
+    assert d["payment_updated_at"] is None
+    assert d["payment_last_checked_at"] is None
+
+
+def test_list_customers_includes_payment_fields(client):
+    _create("a@x.com")
+    lst = client.get("/api/customers").json()
+    assert all("payment_changed_at" in c for c in lst)
+    assert all("payment_updated_at" in c for c in lst)
+    assert all("payment_last_checked_at" in c for c in lst)
+
+
+def test_save_payment_check_result_persists(client):
+    """直接调用 crud.save_payment_check_result 验证持久化（无需真 MoEmail）。"""
+    import crud
+    cid = _create("a@x.com")
+    ok = asyncio.run(crud.save_payment_check_result(
+        customer_id=cid,
+        changed_at="2026-07-13T10:30:00+00:00",
+        updated_at=None,
+        checked_at="2026-07-14T08:00:00+00:00",
+    ))
+    assert ok
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["payment_changed_at"] == "2026-07-13T10:30:00+00:00"
+    assert d["payment_updated_at"] is None
+    assert d["payment_last_checked_at"] == "2026-07-14T08:00:00+00:00"
+
+
+def test_save_payment_check_result_only_updated(client):
+    """只查到 updated 邮件（信用卡更新过、未解除）的状态。"""
+    import crud
+    cid = _create("a@x.com")
+    asyncio.run(crud.save_payment_check_result(
+        customer_id=cid,
+        changed_at=None,
+        updated_at="2026-07-12T08:00:00+00:00",
+        checked_at="2026-07-14T08:00:00+00:00",
+    ))
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["payment_changed_at"] is None
+    assert d["payment_updated_at"] == "2026-07-12T08:00:00+00:00"
+    assert d["payment_last_checked_at"] == "2026-07-14T08:00:00+00:00"
+
+
+def test_save_payment_check_result_empty_inbox(client):
+    """什么都没查到时，也应写入 last_checked_at，以便首页区分「未查过」和「查过无结果」。"""
+    import crud
+    cid = _create("a@x.com")
+    asyncio.run(crud.save_payment_check_result(
+        customer_id=cid,
+        changed_at=None,
+        updated_at=None,
+        checked_at="2026-07-14T08:00:00+00:00",
+    ))
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["payment_changed_at"] is None
+    assert d["payment_updated_at"] is None
+    assert d["payment_last_checked_at"] == "2026-07-14T08:00:00+00:00"
+
+
+def test_save_payment_check_result_overwrites_previous(client):
+    """再次查询会覆盖之前的结果（用最新邮件的时间戳）。"""
+    import crud
+    cid = _create("a@x.com")
+    asyncio.run(crud.save_payment_check_result(
+        cid, "2026-07-01T00:00:00+00:00", None, "2026-07-10T00:00:00+00:00"
+    ))
+    asyncio.run(crud.save_payment_check_result(
+        cid, "2026-07-13T10:30:00+00:00", None, "2026-07-14T09:00:00+00:00"
+    ))
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["payment_changed_at"] == "2026-07-13T10:30:00+00:00"
+    assert d["payment_last_checked_at"] == "2026-07-14T09:00:00+00:00"
+
+
+def test_save_payment_check_result_nonexistent_returns_false(client):
+    import crud
+    ok = asyncio.run(crud.save_payment_check_result(99999, None, None, "x"))
+    assert ok is False

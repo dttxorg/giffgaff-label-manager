@@ -55,6 +55,9 @@ class CustomerOut(BaseModel):
     sim_activation_code: Optional[str] = None
     public_token: Optional[str] = None
     public_version: int = 1
+    payment_changed_at: Optional[str] = None
+    payment_updated_at: Optional[str] = None
+    payment_last_checked_at: Optional[str] = None
     esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"
     activation_error: Optional[str] = None
@@ -81,6 +84,9 @@ class CustomerDetail(BaseModel):
     sim_activation_code: Optional[str] = None
     public_token: Optional[str] = None
     public_version: int = 1
+    payment_changed_at: Optional[str] = None
+    payment_updated_at: Optional[str] = None
+    payment_last_checked_at: Optional[str] = None
     initial_password: Optional[str] = None
     esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"

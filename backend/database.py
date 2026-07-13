@@ -30,6 +30,9 @@ async def init_db():
                 email_provider_domain TEXT,
                 public_token TEXT,
                 public_version INTEGER NOT NULL DEFAULT 1,
+                payment_changed_at TEXT,
+                payment_updated_at TEXT,
+                payment_last_checked_at TEXT,
                 activation_status TEXT NOT NULL DEFAULT '未开始',
                 activation_error TEXT,
                 activated_at TEXT,
@@ -59,6 +62,9 @@ async def init_db():
         await _ensure_column(
             db, "customers", "public_version", "INTEGER NOT NULL DEFAULT 1"
         )
+        await _ensure_column(db, "customers", "payment_changed_at", "TEXT")
+        await _ensure_column(db, "customers", "payment_updated_at", "TEXT")
+        await _ensure_column(db, "customers", "payment_last_checked_at", "TEXT")
         await db.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_public_token "
             "ON customers(public_token) WHERE public_token IS NOT NULL"
@@ -159,6 +165,9 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             initial_password TEXT,
             public_token TEXT,
             public_version INTEGER NOT NULL DEFAULT 1,
+            payment_changed_at TEXT,
+            payment_updated_at TEXT,
+            payment_last_checked_at TEXT,
             activation_status TEXT NOT NULL DEFAULT '未开始',
             activation_error TEXT,
             activated_at TEXT,
@@ -173,11 +182,13 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
              courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
              is_moemail_auto, sim_code_id, sim_activation_code, initial_password, public_token, activation_status,
              public_version,
+             payment_changed_at, payment_updated_at, payment_last_checked_at,
              activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at)
         SELECT id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
                courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
                is_moemail_auto, sim_code_id, sim_activation_code, initial_password, public_token, activation_status,
                public_version,
+               payment_changed_at, payment_updated_at, payment_last_checked_at,
                activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at
         FROM customers_old
     """)

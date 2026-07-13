@@ -31,6 +31,7 @@ from crud import (
     update_customer, delete_customer,
     update_customer_moemail,
     regenerate_public_link,
+    save_payment_check_result,
     get_public_email,
     get_settings, set_setting, fetch_one, normalize_optional_text
 )
@@ -653,6 +654,9 @@ async def list_customers(search: str = ""):
         sim_activation_code=r.get("sim_activation_code"),
         public_token=r.get("public_token"),
         public_version=int(r.get("public_version") or 1),
+        payment_changed_at=r.get("payment_changed_at"),
+        payment_updated_at=r.get("payment_updated_at"),
+        payment_last_checked_at=r.get("payment_last_checked_at"),
         esim_raw_code=r.get("esim_raw_code"),
         activation_status=_normalize_activation_status(r.get("activation_status")),
         activation_error=r.get("activation_error"),
@@ -685,6 +689,9 @@ async def get_customer_detail(customer_id: int):
         sim_activation_code=c.get("sim_activation_code"),
         public_token=c.get("public_token"),
         public_version=int(c.get("public_version") or 1),
+        payment_changed_at=c.get("payment_changed_at"),
+        payment_updated_at=c.get("payment_updated_at"),
+        payment_last_checked_at=c.get("payment_last_checked_at"),
         initial_password=c.get("initial_password"),
         esim_raw_code=c.get("esim_raw_code"),
         activation_status=_normalize_activation_status(c.get("activation_status")),
@@ -1137,6 +1144,18 @@ async def get_customer_payment_info_emails(customer_id: int, limit: int = 50):
         )
         if detail_miss_count:
             detail += f"；{detail_miss_count} 封邮件详情已不存在或接口未返回"
+        # 持久化结果：供首页列表展示（即使没找到邮件也记下「已查过」）
+        try:
+            now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+            await save_payment_check_result(
+                customer_id,
+                changed_at=_message_received_at(latest_changed) or None,
+                updated_at=_message_received_at(latest_updated) or None,
+                checked_at=now_iso,
+            )
+        except Exception:
+            # 保存失败不影响查询结果返回
+            pass
         return PaymentInfoEmailOut(
             found=changed_count > 0,
             updated_found=updated_count > 0,
