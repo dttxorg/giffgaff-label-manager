@@ -53,6 +53,8 @@ class CustomerOut(BaseModel):
     is_moemail_auto: bool
     sim_code_id: Optional[int] = None
     sim_activation_code: Optional[str] = None
+    public_token: Optional[str] = None
+    public_version: int = 1
     esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"
     activation_error: Optional[str] = None
@@ -77,6 +79,8 @@ class CustomerDetail(BaseModel):
     is_moemail_auto: bool
     sim_code_id: Optional[int] = None
     sim_activation_code: Optional[str] = None
+    public_token: Optional[str] = None
+    public_version: int = 1
     initial_password: Optional[str] = None
     esim_raw_code: Optional[str] = None
     activation_status: ActivationStatus = "未开始"
@@ -88,6 +92,8 @@ class SystemSettings(BaseModel):
     giffgaff_download_url: Optional[str] = None
     agent_api_token: Optional[str] = None
     agent_api_token_source: Optional[str] = None
+    public_page_markdown: str = ""
+    public_worker_domain: Optional[str] = None  # 留空则 QR 编码用当前域名
 
 
 class AuthLoginRequest(BaseModel):

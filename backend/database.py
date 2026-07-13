@@ -28,6 +28,8 @@ async def init_db():
                 email_provider_id INTEGER,
                 email_account_id TEXT,
                 email_provider_domain TEXT,
+                public_token TEXT,
+                public_version INTEGER NOT NULL DEFAULT 1,
                 activation_status TEXT NOT NULL DEFAULT '未开始',
                 activation_error TEXT,
                 activated_at TEXT,
@@ -53,6 +55,14 @@ async def init_db():
         await _ensure_column(db, "customers", "email_provider_id", "INTEGER")
         await _ensure_column(db, "customers", "email_account_id", "TEXT")
         await _ensure_column(db, "customers", "email_provider_domain", "TEXT")
+        await _ensure_column(db, "customers", "public_token", "TEXT")
+        await _ensure_column(
+            db, "customers", "public_version", "INTEGER NOT NULL DEFAULT 1"
+        )
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_public_token "
+            "ON customers(public_token) WHERE public_token IS NOT NULL"
+        )
         await _ensure_column(db, "customers", "activation_status", "TEXT NOT NULL DEFAULT '未开始'")
         await _ensure_column(db, "customers", "activation_error", "TEXT")
         await _ensure_column(db, "customers", "activated_at", "TEXT")
@@ -147,6 +157,8 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
             sim_code_id INTEGER,
             sim_activation_code TEXT,
             initial_password TEXT,
+            public_token TEXT,
+            public_version INTEGER NOT NULL DEFAULT 1,
             activation_status TEXT NOT NULL DEFAULT '未开始',
             activation_error TEXT,
             activated_at TEXT,
@@ -159,11 +171,13 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
         INSERT INTO customers
             (id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
              courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
-             is_moemail_auto, sim_code_id, sim_activation_code, initial_password, activation_status,
+             is_moemail_auto, sim_code_id, sim_activation_code, initial_password, public_token, activation_status,
+             public_version,
              activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at)
         SELECT id, phone_number, email, shipping_address, shipping_status, courier_company, tracking_number,
                courier_order_code, courier_print_data, activation_date, moemail_id, moemail_address, share_link,
-               is_moemail_auto, sim_code_id, sim_activation_code, initial_password, activation_status,
+               is_moemail_auto, sim_code_id, sim_activation_code, initial_password, public_token, activation_status,
+               public_version,
                activation_error, activated_at, automation_lock_owner, automation_locked_at, created_at
         FROM customers_old
     """)

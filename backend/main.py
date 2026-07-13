@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse, HTMLResponse
 import os
 import json
 import datetime
@@ -30,6 +30,8 @@ from crud import (
     get_all_customers, get_customer, search_customers,
     update_customer, delete_customer,
     update_customer_moemail,
+    regenerate_public_link,
+    get_public_email,
     get_settings, set_setting, fetch_one, normalize_optional_text
 )
 from qr_utils import parse_esim_raw, build_lpa_string, generate_esim_qr_png
@@ -412,6 +414,8 @@ async def get_sys_settings():
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
         agent_api_token="***" if rows.get("agent_api_token") else "",
         agent_api_token_source=_agent_token_source(rows),
+        public_page_markdown=rows.get("public_page_markdown", ""),
+        public_worker_domain=rows.get("public_worker_domain"),
     )
 
 
@@ -421,6 +425,15 @@ async def update_settings(data: SystemSettings):
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     if data.agent_api_token not in (None, "***", ""):
         await set_setting("agent_api_token", data.agent_api_token.strip())
+    if data.public_page_markdown is not None:
+        await set_setting("public_page_markdown", data.public_page_markdown)
+    if data.public_worker_domain is not None:
+        v = data.public_worker_domain.strip()
+        if v and not (v.startswith("http://") or v.startswith("https://")):
+            raise HTTPException(status_code=400, detail="Worker 域名必须以 http:// 或 https:// 开头")
+        # 去掉尾部斜杠
+        v = v.rstrip("/")
+        await set_setting("public_worker_domain", v)
     return {"ok": True}
 
 
@@ -638,12 +651,14 @@ async def list_customers(search: str = ""):
         is_moemail_auto=bool(r.get("is_moemail_auto")),
         sim_code_id=r.get("sim_code_id"),
         sim_activation_code=r.get("sim_activation_code"),
+        public_token=r.get("public_token"),
+        public_version=int(r.get("public_version") or 1),
         esim_raw_code=r.get("esim_raw_code"),
         activation_status=_normalize_activation_status(r.get("activation_status")),
         activation_error=r.get("activation_error"),
         activated_at=r.get("activated_at"),
         created_at=r["created_at"],
-    ) for r in rows] 
+    ) for r in rows]
 
 
 @app.get("/api/customers/{customer_id}", response_model=CustomerDetail)
@@ -668,6 +683,8 @@ async def get_customer_detail(customer_id: int):
         is_moemail_auto=bool(c.get("is_moemail_auto")),
         sim_code_id=c.get("sim_code_id"),
         sim_activation_code=c.get("sim_activation_code"),
+        public_token=c.get("public_token"),
+        public_version=int(c.get("public_version") or 1),
         initial_password=c.get("initial_password"),
         esim_raw_code=c.get("esim_raw_code"),
         activation_status=_normalize_activation_status(c.get("activation_status")),
@@ -911,6 +928,17 @@ async def remove_customer(customer_id: int):
             await db.commit()
     await delete_customer(customer_id)
     return {"ok": True}
+
+
+@app.post("/api/customers/{customer_id}/public-link/regenerate", status_code=200)
+async def regenerate_public_link_route(customer_id: int):
+    """旋转 public_token、public_version +1。
+    旧 token 在 DB 中立即失效（Worker 再回调 /api/public/{old}/version 会 404）。
+    客户端用新 public_token 拼装新 QR。"""
+    result = await regenerate_public_link(customer_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    return result
 
 
 @app.post("/api/customers/{customer_id}/moemail")
@@ -2106,6 +2134,9 @@ async def import_backup(file: UploadFile = File(...)):
 
 
 # ── 前端静态页面 ──
+
+from public_routes import router as public_router
+app.include_router(public_router)
 
 @app.get("/")
 async def serve_index():

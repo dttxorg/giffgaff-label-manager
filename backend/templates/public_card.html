@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>您的临时邮箱</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f6f7f9; color: #1a1a1a;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .card {
+    width: 100%; max-width: 480px; background: #fff;
+    border-radius: 16px; padding: 28px 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .label { font-size: 13px; color: #6b7280; margin: 0 0 8px; letter-spacing: 0.02em; }
+  .email {
+    font-size: 18px; font-weight: 600; word-break: break-all;
+    background: #f3f4f6; border-radius: 10px; padding: 14px 14px;
+    margin: 0; line-height: 1.4; color: #111827;
+  }
+  .copy-btn {
+    margin-top: 12px; width: 100%; height: 48px;
+    border: 0; border-radius: 10px; cursor: pointer;
+    font-size: 16px; font-weight: 600; color: #fff;
+    background: #2563eb; transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .copy-btn:active { background: #1d4ed8; }
+  .copy-btn.copied { background: #16a34a; }
+  .copy-btn.failed { background: #dc2626; }
+  .copy-btn:disabled { cursor: not-allowed; background: #9ca3af; }
+  .divider { height: 1px; background: #e5e7eb; margin: 24px 0 16px; }
+  .hint { font-size: 14px; line-height: 1.7; color: #374151; }
+  .hint p { margin: 0 0 12px; }
+  .hint p:last-child { margin-bottom: 0; }
+  .hint h3, .hint h4 { margin: 18px 0 10px; line-height: 1.3; color: #111827; }
+  .hint h3 { font-size: 17px; }
+  .hint h4 { font-size: 15px; }
+  .hint code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  .footer { margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111827; color: #e5e7eb; }
+    .card { background: #1f2937; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+    .label { color: #9ca3af; }
+    .email { background: #111827; color: #f3f4f6; }
+    .divider { background: #374151; }
+    .hint { color: #d1d5db; }
+    .hint h3, .hint h4 { color: #f3f4f6; }
+    .hint code { background: #111827; color: #e5e7eb; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" role="main">
+    <p class="label">您的临时邮箱</p>
+    <p class="email" id="email" data-email="__EMAIL__">__EMAIL_DISPLAY__</p>
+    <button class="copy-btn" id="copy-btn" type="button" aria-label="复制邮箱">复制邮箱</button>
+
+    <div class="divider"></div>
+    <div class="hint" id="hint">__HINT_HTML__</div>
+  </main>
+  <p class="footer">此页面仅展示邮箱，不包含任何账户信息。</p>
+
+<script>
+(function () {
+  var btn = document.getElementById('copy-btn');
+  var el = document.getElementById('email');
+  var email = el.getAttribute('data-email') || '';
+  if (!email) {
+    btn.disabled = true;
+    btn.textContent = '邮箱未配置';
+    return;
+  }
+  function flash(cls, text) {
+    btn.classList.add(cls);
+    var orig = btn.textContent;
+    btn.textContent = text;
+    setTimeout(function () {
+      btn.classList.remove(cls);
+      btn.textContent = orig;
+    }, 1400);
+  }
+  btn.addEventListener('click', function () {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(email).then(function () {
+        flash('copied', '已复制');
+      }).catch(function () {
+        if (!fallbackCopy(email)) flash('failed', '复制失败，请长按邮箱手动复制');
+      });
+    } else {
+      if (!fallbackCopy(email)) flash('failed', '复制失败，请长按邮箱手动复制');
+    }
+  });
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, 99999);
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) flash('copied', '已复制');
+      return ok;
+    } catch (e) { return false; }
+  }
+})();
+</script>
+</body>
+</html>

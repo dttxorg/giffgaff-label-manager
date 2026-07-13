@@ -1,3 +1,5 @@
+import secrets
+
 import aiosqlite
 from models import CustomerCreate, CustomerUpdate
 from database import DATABASE_PATH
@@ -68,10 +70,12 @@ async def create_customer(data: CustomerCreate):
         cursor = await db.execute(
             """INSERT INTO customers
                (phone_number, email, shipping_address, shipping_status, courier_company,
-                tracking_number, courier_order_code, courier_print_data, activation_date)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tracking_number, courier_order_code, courier_print_data, activation_date,
+                public_token)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (phone_number, data.email, shipping_address, data.shipping_status, courier_company, tracking_number,
-             courier_order_code, courier_print_data, data.activation_date.isoformat()),
+             courier_order_code, courier_print_data, data.activation_date.isoformat(),
+             secrets.token_urlsafe(32)),
         )
         await db.commit()
         return cursor.lastrowid
@@ -138,6 +142,87 @@ async def get_settings() -> dict:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall("SELECT key, value FROM settings")
         return {r["key"]: r["value"] for r in rows}
+
+
+# ── 公开页面（扫码后展示）──
+
+async def get_public_email(token: str) -> Optional[str]:
+    """仅按 token 查邮箱。绝不返回其它客户字段，避免越权泄露。"""
+    if not token or len(token) > 128:
+        return None
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetch_one(
+            db,
+            "SELECT email FROM customers WHERE public_token = ?",
+            (token,),
+        )
+        if not row:
+            return None
+        email = row["email"]
+        return email if (email and email.strip()) else None
+
+
+async def get_public_card(token: str) -> Optional[dict]:
+    """公开页面所需的最少字段：email + public_version。
+    绝不返回手机号、地址、激活码等敏感字段。"""
+    if not token or len(token) > 128:
+        return None
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetch_one(
+            db,
+            "SELECT email, public_version FROM customers WHERE public_token = ?",
+            (token,),
+        )
+        if not row:
+            return None
+        email = row["email"]
+        if not email or not email.strip():
+            return None
+        return {
+            "email": email,
+            "public_version": int(row["public_version"] or 1),
+        }
+
+
+async def get_public_version(token: str) -> Optional[int]:
+    """仅返回 public_version（不返 email），给 Worker 做版本化缓存 key 用。
+    即使 email 尚未配置，只要 token 存在就返回 version。"""
+    if not token or len(token) > 128:
+        return None
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        row = await fetch_one(
+            db,
+            "SELECT public_version FROM customers WHERE public_token = ?",
+            (token,),
+        )
+        if not row:
+            return None
+        return int(row[0] or 1)
+
+
+async def regenerate_public_link(customer_id: int) -> Optional[dict]:
+    """旋转 public_token、public_version +1。
+    旧 token 立刻在 DB 失效（Worker 再回调会拿到 404）。
+    返回 {public_token, public_version}；客户不存在时返回 None。"""
+    new_token = secrets.token_urlsafe(32)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetch_one(
+            db,
+            "SELECT public_version FROM customers WHERE id = ?",
+            (customer_id,),
+        )
+        if not row:
+            return None
+        new_version = int(row["public_version"] or 1) + 1
+        await db.execute(
+            "UPDATE customers SET public_token = ?, public_version = ? WHERE id = ?",
+            (new_token, new_version, customer_id),
+        )
+        await db.commit()
+        return {"public_token": new_token, "public_version": new_version}
 
 
 async def set_setting(key: str, value: str):
