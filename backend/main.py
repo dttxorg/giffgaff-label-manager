@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
+from fastapi import BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse, HTMLResponse
@@ -701,7 +702,7 @@ async def get_customer_detail(customer_id: int):
 
 
 @app.post("/api/customers", status_code=201)
-async def add_customer(data: CustomerCreate):
+async def add_customer(data: CustomerCreate, background_tasks: BackgroundTasks = None):
     phone_number = normalize_optional_text(data.phone_number)
     if phone_number:
         async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -735,6 +736,10 @@ async def add_customer(data: CustomerCreate):
             customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
             message = "客户已录入，已分配激活码并创建激活任务"
             sim_activation_code = sim["code"]
+            # 后台验证 SIM 激活码是否有效（fire-and-forget，不阻塞响应）
+            # background_tasks=None 时为直接函数调用（测试），跳过
+            if background_tasks is not None:
+                background_tasks.add_task(_run_sim_code_validation, sim["id"], sim["code"])
         else:
             initial_password = None
             customer_id = await _create_customer_without_activation(data, email_bundle)
@@ -1219,7 +1224,24 @@ def _sim_code_out(row) -> SimCodeOut:
         notes=row["notes"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        last_validated_at=row["last_validated_at"] if "last_validated_at" in row.keys() else None,
+        last_validation_result=row["last_validation_result"] if "last_validation_result" in row.keys() else None,
+        last_validation_error=row["last_validation_error"] if "last_validation_error" in row.keys() else None,
     )
+
+
+async def _run_sim_code_validation(sim_code_id: int, code_value: str) -> None:
+    """后台任务：调用 Playwright 验证激活码，写回 DB。
+    出任何异常都吞掉（fire-and-forget），避免污染主请求响应。"""
+    try:
+        from activation_validator import validate_activation_code, save_validation_result
+        result = await validate_activation_code(code_value)
+        await save_validation_result(DATABASE_PATH, sim_code_id, result)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "Background SIM code validation failed (sim_id=%s)", sim_code_id
+        )
 
 
 async def _detach_sim_code_from_customer(
@@ -1279,7 +1301,11 @@ async def import_sim_codes(data: SimCodeImport):
 
 
 @app.patch("/api/sim-codes/{sim_code_id}", response_model=SimCodeOut)
-async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
+async def update_sim_code(
+    sim_code_id: int,
+    data: SimCodeUpdate,
+    background_tasks: BackgroundTasks = None,
+):
     status = _normalize_sim_code_status(data.status)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -1288,7 +1314,7 @@ async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
             row = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
             if not row:
                 raise HTTPException(status_code=404, detail="激活码不存在")
-
+            old_status = row["status"]
             customer_id = row["customer_id"]
             if customer_id:
                 customer = await fetch_one(
@@ -1327,6 +1353,9 @@ async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
             )
             updated = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
             await db.commit()
+            # 状态从未分配 → 已分配 时触发后台验证
+            if old_status == "未分配" and status == "已分配" and background_tasks is not None:
+                background_tasks.add_task(_run_sim_code_validation, sim_code_id, updated["code"])
             return _sim_code_out(updated)
         except HTTPException:
             await db.rollback()
@@ -1334,6 +1363,19 @@ async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
         except Exception:
             await db.rollback()
             raise
+
+
+@app.post("/api/sim-codes/{sim_code_id}/validate", status_code=200)
+async def trigger_sim_code_validation(sim_code_id: int, background_tasks: BackgroundTasks = None):
+    """手动重新验证激活码。后台异步执行，返回立即。"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetch_one(db, "SELECT id, code FROM sim_codes WHERE id = ?", (sim_code_id,))
+        if not row:
+            raise HTTPException(status_code=404, detail="激活码不存在")
+        if background_tasks is not None:
+            background_tasks.add_task(_run_sim_code_validation, row["id"], row["code"])
+    return {"ok": True, "message": "已加入后台验证队列"}
 
 
 @app.delete("/api/sim-codes/{sim_code_id}", status_code=200)

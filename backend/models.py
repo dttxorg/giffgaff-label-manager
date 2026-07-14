@@ -127,6 +127,9 @@ class SimCodeOut(BaseModel):
     notes: Optional[str] = None
     created_at: str
     updated_at: str
+    last_validated_at: Optional[str] = None
+    last_validation_result: Optional[str] = None  # 'valid' | 'invalid' | 'error' | 'skipped'
+    last_validation_error: Optional[str] = None
 
 
 class ActivationLogIn(BaseModel):

@@ -1064,6 +1064,7 @@
               <th>#</th>
               <th>激活码</th>
               <th>状态</th>
+              <th>有效性</th>
               <th>客户 ID</th>
               <th>更新时间</th>
               <th>操作</th>
@@ -1719,17 +1720,73 @@ function renderSimCodes() {
     const statusCell = document.createElement('td');
     statusCell.appendChild(buildSimCodeStatusSelect(item));
     row.appendChild(statusCell);
+    const validationCell = document.createElement('td');
+    validationCell.appendChild(buildSimValidationBadge(item));
+    if (item.last_validated_at) {
+      const meta = document.createElement('div');
+      meta.className = 'address-preview';
+      meta.style.fontSize = '11px';
+      meta.style.color = 'var(--muted)';
+      meta.textContent = `验证于 ${formatShortDate(item.last_validated_at)}`;
+      validationCell.appendChild(meta);
+    }
+    row.appendChild(validationCell);
     appendTextCell(row, item.customer_id ? String(item.customer_id) : '—');
     appendTextCell(row, item.updated_at);
     const actionsCell = document.createElement('td');
     actionsCell.className = 'actions-cell';
     const actions = document.createElement('div');
     actions.className = 'actions';
+    actions.appendChild(makeButton('验证', () => triggerSimCodeValidation(item.id, item.code), 'small ghost'));
     actions.appendChild(makeButton('删除', () => deleteSimCode(item.id, item.code), 'small danger'));
     actionsCell.appendChild(actions);
     row.appendChild(actionsCell);
     return row;
   }));
+}
+
+function buildSimValidationBadge(item) {
+  const result = item.last_validation_result;
+  const badge = document.createElement('span');
+  if (result === 'valid') {
+    badge.className = 'badge badge-activation-done';
+    badge.textContent = '✓ 有效';
+    badge.title = `giffgaff.com/activate 验证通过（${formatShortDate(item.last_validated_at)}）`;
+  } else if (result === 'invalid') {
+    badge.className = 'badge badge-activation-failed';
+    badge.textContent = '✗ 无效';
+    badge.title = (item.last_validation_error || '激活码无效或已被使用') + (item.last_validated_at ? `（${formatShortDate(item.last_validated_at)}）` : '');
+  } else if (result === 'skipped') {
+    badge.className = 'badge badge-manual';
+    badge.textContent = '未验证';
+    badge.title = item.last_validation_error || 'Playwright 未安装';
+  } else if (result === 'error') {
+    badge.className = 'badge badge-activation-failed';
+    badge.textContent = '验证出错';
+    badge.title = item.last_validation_error || '验证过程出错';
+  } else {
+    // 未验证过
+    const span = document.createElement('span');
+    span.className = 'muted';
+    span.style.fontSize = '12px';
+    span.textContent = '—';
+    span.title = '未验证过';
+    return span;
+  }
+  return badge;
+}
+
+async function triggerSimCodeValidation(id, code) {
+  try {
+    const res = await fetch(`${API}/sim-codes/${id}/validate`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || '触发验证失败');
+    toast(`已为「${code}」加入后台验证队列（~10s 后刷新查看结果）`, 'success');
+    // 10s 后自动刷新列表
+    setTimeout(() => loadSimCodes(), 10000);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 function buildSimCodeStatusSelect(item) {

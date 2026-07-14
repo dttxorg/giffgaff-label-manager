@@ -88,6 +88,9 @@ async def init_db():
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+        await _ensure_column(db, "sim_codes", "last_validated_at", "TEXT")
+        await _ensure_column(db, "sim_codes", "last_validation_result", "TEXT")
+        await _ensure_column(db, "sim_codes", "last_validation_error", "TEXT")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS activation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
