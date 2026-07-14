@@ -59,7 +59,13 @@ async def validate_activation_code(
     browser = None
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            # Linux 服务端 / 容器环境常见问题修复：
+            #   --no-sandbox：容器里以 root 跑必须关 sandbox
+            #   --disable-dev-shm-usage：默认 /dev/shm 只有 64MB，Chromium 会爆
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             # 全新 context：无 cookie、无 cache、无 storage，确保不带缓存
             context = await browser.new_context(
                 ignore_https_errors=False,
