@@ -2211,9 +2211,7 @@ async function viewCustomer(id, focusTarget='') {
 
 function renderShippingDetail(customer) {
   document.getElementById('d-address-input').value = customer.shipping_address || '';
-  document.getElementById('d-courier-company').textContent = customer.courier_company || '未填写';
   document.getElementById('d-courier-company-input').value = customer.courier_company || '';
-  document.getElementById('d-tracking-number').textContent = customer.tracking_number || '未填写';
   document.getElementById('d-tracking-number-input').value = customer.tracking_number || '';
 }
 
@@ -2223,8 +2221,6 @@ function renderPhoneStatusDetail(customer) {
 }
 
 function renderActivationDetail(customer) {
-  document.getElementById('d-sim-code').textContent = customer.sim_activation_code || '未分配';
-  document.getElementById('d-activation-status').textContent = customer.activation_status || '未开始';
   const box = document.getElementById('d-activation-box');
   box.replaceChildren();
   const lines = [
@@ -2653,7 +2649,7 @@ async function generateMoemailForActive() {
   if (!activeCustomer) return;
   await generateMoemail(activeCustomer.id);
   activeCustomer = await getCustomer(activeCustomer.id);
-  document.getElementById('d-email').textContent = activeCustomer.email || '—';
+  document.getElementById('d-email-line').textContent = activeCustomer.email || '—';
   renderMoemailBox(activeCustomer);
   renderVerificationCodeBox(activeCustomer);
 }
@@ -2777,7 +2773,6 @@ document.getElementById('phone-update-form').onsubmit = async (e) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
     activeCustomer = await getCustomer(activeCustomer.id);
-    document.getElementById('d-phone').textContent = activeCustomer.phone_number || '待补充';
     document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     toast(phone ? '手机号已保存' : '手机号已清空', 'success');
     await loadCustomers();
