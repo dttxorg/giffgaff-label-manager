@@ -977,7 +977,7 @@
   <div class="header-actions">
     <span id="total-count"></span>
     <button class="btn-header" type="button" onclick="exportData()">导出</button>
-    <button class="btn-header" type="button" onclick="document.getElementById('import-file').click()">导入</button>
+    <button class="btn-header" type="button" onclick="$('import-file').click()">导入</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
     <button class="btn-header" type="button" onclick="openSettings()">设置</button>
     <button class="btn-header" type="button" id="logout-btn" style="display:none" onclick="logout()">退出</button>
@@ -1598,7 +1598,7 @@ let authRequired = false;
 let appStarted = false;
 
 function toast(msg, type='') {
-  const t = document.getElementById('toast');
+  const t = $('toast');
   t.textContent = msg;
   t.className = 'toast' + (type ? ' ' + type : '') + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
@@ -1620,18 +1620,18 @@ function todayDateValue() {
 }
 
 function resetAddFormDefaults() {
-  const dateInput = document.getElementById('act-date');
-  const useSimCodeInput = document.getElementById('use-sim-code');
+  const dateInput = $('act-date');
+  const useSimCodeInput = $('use-sim-code');
   if (dateInput) dateInput.value = todayDateValue();
   if (useSimCodeInput) useSimCodeInput.value = 'true';
   // Load provider picker list (async, no-op if no providers yet)
   loadCustomerProviderPicker();
   // Reset auto-rotate to checked
-  const ar = document.getElementById('customer-auto-rotate');
+  const ar = $('customer-auto-rotate');
   if (ar) ar.checked = true;
-  const picker = document.getElementById('customer-provider-pick');
+  const picker = $('customer-provider-pick');
   if (picker) picker.hidden = true;
-  const domainSel = document.getElementById('customer-domain-pick');
+  const domainSel = $('customer-domain-pick');
   if (domainSel) {
     domainSel.replaceChildren();
     const opt = document.createElement('option');
@@ -1645,14 +1645,14 @@ function resetAddFormDefaults() {
 function switchTab(name, el) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
+  $('tab-' + name).classList.add('active');
   el.classList.add('active');
   if (name === 'labels') renderTemplateEditor();
   if (name === 'email-providers') loadEmailProviders();
 }
 
 function switchDetailTab(name, el) {
-  const root = document.getElementById('detail-panel');
+  const root = $('detail-panel');
   root.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   root.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
   root.querySelector(`.tab-content[data-tab="${name}"]`).classList.add('active');
@@ -1670,19 +1670,19 @@ async function checkAuth() {
   const res = await fetch(API + '/auth/status');
   const status = await res.json();
   authRequired = !!status.auth_required;
-  document.getElementById('logout-btn').style.display = authRequired ? '' : 'none';
+  $('logout-btn').style.display = authRequired ? '' : 'none';
   if (authRequired && !status.authenticated) {
-    document.getElementById('auth-screen').classList.add('open');
-    document.getElementById('auth-password').focus();
+    $('auth-screen').classList.add('open');
+    $('auth-password').focus();
     return false;
   }
-  document.getElementById('auth-screen').classList.remove('open');
+  $('auth-screen').classList.remove('open');
   return true;
 }
 
-document.getElementById('auth-form').onsubmit = async (e) => {
+$('auth-form').onsubmit = async (e) => {
   e.preventDefault();
-  const password = document.getElementById('auth-password').value;
+  const password = $('auth-password').value;
   const button = e.target.querySelector('button');
   button.disabled = true;
   button.textContent = '验证中...';
@@ -1694,8 +1694,8 @@ document.getElementById('auth-form').onsubmit = async (e) => {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '口令错误');
-    document.getElementById('auth-password').value = '';
-    document.getElementById('auth-screen').classList.remove('open');
+    $('auth-password').value = '';
+    $('auth-screen').classList.remove('open');
     await initApp();
   } catch (err) {
     toast(err.message, 'error');
@@ -1708,7 +1708,7 @@ document.getElementById('auth-form').onsubmit = async (e) => {
 async function logout() {
   await fetch(API + '/auth/logout', { method: 'POST' });
   appStarted = false;
-  document.getElementById('auth-screen').classList.add('open');
+  $('auth-screen').classList.add('open');
 }
 
 async function loadCustomers() {
@@ -1725,9 +1725,9 @@ async function loadCustomers() {
 }
 
 function bindCustomerSearch() {
-  const input = document.getElementById('customer-search-input');
-  const box = document.getElementById('customer-search-box');
-  const clear = document.getElementById('customer-search-clear');
+  const input = $('customer-search-input');
+  const box = $('customer-search-box');
+  const clear = $('customer-search-clear');
   if (!input || input.dataset.bound === '1') return;
   input.dataset.bound = '1';
   const syncClearVisibility = () => {
@@ -1772,9 +1772,9 @@ async function loadSimCodes() {
 }
 
 function renderCustomers() {
-  const tbody = document.getElementById('customer-table');
-  document.getElementById('total-count').textContent = totalCustomerCount ? `共 ${totalCustomerCount} 位客户` : '';
-  const listCount = document.getElementById('list-count');
+  const tbody = $('customer-table');
+  $('total-count').textContent = totalCustomerCount ? `共 ${totalCustomerCount} 位客户` : '';
+  const listCount = $('list-count');
   if (currentSearch) {
     listCount.innerHTML = customers.length
       ? ` · 匹配 <span class="count">${customers.length}</span> / ${totalCustomerCount}`
@@ -1798,12 +1798,12 @@ function renderCustomers() {
 }
 
 function renderSimCodes() {
-  const tbody = document.getElementById('sim-code-table');
+  const tbody = $('sim-code-table');
   const counts = simCodes.reduce((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
     return acc;
   }, {});
-  document.getElementById('sim-code-count').textContent = simCodes.length
+  $('sim-code-count').textContent = simCodes.length
     ? `共 ${simCodes.length} 个，未分配 ${counts['未分配'] || 0} 个`
     : '';
   if (!simCodes.length) {
@@ -2191,7 +2191,7 @@ async function getCustomer(id) {
 async function viewCustomer(id, focusTarget='') {
   try {
     activeCustomer = await getCustomer(id);
-    document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
+    $('d-phone-input').value = activeCustomer.phone_number || '';
     renderIdentityFields(activeCustomer);
     renderPhoneStatusDetail(activeCustomer);
     renderShippingDetail(activeCustomer);
@@ -2201,27 +2201,27 @@ async function viewCustomer(id, focusTarget='') {
     renderEsimDetail(activeCustomer);
     renderVerificationCodeBox(activeCustomer);
     renderPaymentInfoBox(activeCustomer);
-    document.getElementById('detail-panel').classList.add('open');
-    if (focusTarget === 'phone') setTimeout(() => document.getElementById('d-phone-input').focus(), 0);
-    if (focusTarget === 'address') setTimeout(() => document.getElementById('d-address-input').focus(), 0);
+    $('detail-panel').classList.add('open');
+    if (focusTarget === 'phone') setTimeout(() => $('d-phone-input').focus(), 0);
+    if (focusTarget === 'address') setTimeout(() => $('d-address-input').focus(), 0);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
 function renderShippingDetail(customer) {
-  document.getElementById('d-address-input').value = customer.shipping_address || '';
-  document.getElementById('d-courier-company-input').value = customer.courier_company || '';
-  document.getElementById('d-tracking-number-input').value = customer.tracking_number || '';
+  $('d-address-input').value = customer.shipping_address || '';
+  $('d-courier-company-input').value = customer.courier_company || '';
+  $('d-tracking-number-input').value = customer.tracking_number || '';
 }
 
 function renderPhoneStatusDetail(customer) {
-  const sel = document.getElementById('d-phone-status-input');
+  const sel = $('d-phone-status-input');
   if (sel) sel.value = normalizePhoneStatus(customer.phone_status);
 }
 
 function renderActivationDetail(customer) {
-  const box = document.getElementById('d-activation-box');
+  const box = $('d-activation-box');
   box.replaceChildren();
   const lines = [
     `激活状态：${customer.activation_status || '未开始'}`,
@@ -2298,8 +2298,29 @@ function copyText(value, message) {
   navigator.clipboard.writeText(value).then(() => toast(message, 'success'));
 }
 
+// 安全版 getElementById：元素不存在时返回 no-op Proxy，避免抛 TypeError。
+// 重构期经常因 ID 改名漏改一处就炸整个面板，加这个防御层。
+function $(id) {
+  const el = document.getElementById(id);
+  if (el) return el;
+  return new Proxy(function () {}, {
+    get(_, prop) {
+      if (typeof prop === 'symbol') return undefined;
+      // 常见属性读：返回合理空值
+      if (prop === 'value' || prop === 'textContent' || prop === 'innerHTML') return '';
+      if (prop === 'checked' || prop === 'hidden' || prop === 'disabled') return false;
+      if (prop === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
+      if (prop === 'style') return {};
+      if (prop === 'dataset') return {};
+      // 默认（包含各种方法）：返回 no-op 函数
+      return () => undefined;
+    },
+    set() { return true; },
+  });
+}
+
 function copyElText(elementId, message) {
-  const el = document.getElementById(elementId);
+  const el = $(elementId);
   const value = el ? el.textContent.trim() : '';
   if (!value || value === '—') {
     toast('内容为空', 'error');
@@ -2310,7 +2331,7 @@ function copyElText(elementId, message) {
 
 function renderIdentityFields(c) {
   const setVal = (id, v) => {
-    const el = document.getElementById(id);
+    const el = $(id);
     if (el) el.textContent = v || '—';
   };
   setVal('d-last-name', c.last_name);
@@ -2325,7 +2346,7 @@ function renderIdentityFields(c) {
   // 邮箱
   setVal('d-email-line', c.email);
   // 头标题加 ID
-  const hid = document.getElementById('d-header-id');
+  const hid = $('d-header-id');
   if (hid) hid.textContent = c.id ? `#${c.id}` : '';
 }
 
@@ -2345,7 +2366,7 @@ async function regenerateIdentityForActive() {
 }
 
 function renderMoemailBox(c) {
-  const box = document.getElementById('d-moemail-box');
+  const box = $('d-moemail-box');
   box.replaceChildren();
   const lines = [];
   lines.push(`邮箱来源：${c.is_moemail_auto ? 'MoEmail 自动生成' : '手填邮箱'}`);
@@ -2367,8 +2388,8 @@ function renderMoemailBox(c) {
 }
 
 function renderPublicLinkBox(c) {
-  const box = document.getElementById('d-public-link-box');
-  const input = document.getElementById('d-public-link-input');
+  const box = $('d-public-link-box');
+  const input = $('d-public-link-input');
   if (!c.public_token) {
     box.hidden = true;
     return;
@@ -2377,10 +2398,10 @@ function renderPublicLinkBox(c) {
   const url = `${base}/p/${c.public_token}`;
   input.value = url;
   box.hidden = false;
-  const copyBtn = document.getElementById('d-public-link-copy');
-  const openBtn = document.getElementById('d-public-link-open');
-  const regenBtn = document.getElementById('d-public-link-regenerate');
-  const meta = document.getElementById('d-public-link-meta');
+  const copyBtn = $('d-public-link-copy');
+  const openBtn = $('d-public-link-open');
+  const regenBtn = $('d-public-link-regenerate');
+  const meta = $('d-public-link-meta');
   copyBtn.onclick = () => copyText(url, '公开页链接已复制');
   openBtn.onclick = () => window.open(url, '_blank', 'noopener');
   regenBtn.onclick = () => regeneratePublicLink(c);
@@ -2420,7 +2441,7 @@ function renderWorkerSetup() {
 }
 
 function updateWorkerStatus(domain) {
-  const statusEl = document.getElementById('worker-deploy-status');
+  const statusEl = $('worker-deploy-status');
   if (!statusEl) return;
   if (domain) {
     statusEl.innerHTML = `<span style="color:#16a34a;">✓ 已配置 Worker 域名：<code>${escapeHtml(domain)}</code></span><br><span class="muted" style="font-size:13px;">QR 码和公开页链接将使用此域名。</span>`;
@@ -2440,10 +2461,10 @@ function copyWranglerToml() {
 
 function renderEsimDetail(customer) {
   const raw = (customer && customer.esim_raw_code) || '';
-  const textarea = document.getElementById('d-esim-raw');
-  const indicator = document.getElementById('d-esim-saved-indicator');
-  const container = document.getElementById('d-esim-qr-container');
-  const img = document.getElementById('d-esim-qr-img');
+  const textarea = $('d-esim-raw');
+  const indicator = $('d-esim-saved-indicator');
+  const container = $('d-esim-qr-container');
+  const img = $('d-esim-qr-img');
   if (textarea) textarea.value = raw;
   if (indicator) indicator.hidden = !raw;
   if (container) container.hidden = !raw;
@@ -2457,7 +2478,7 @@ async function generateEsimQr() {
     toast('请先打开客户详情', 'error');
     return;
   }
-  const raw = (document.getElementById('d-esim-raw').value || '').trim();
+  const raw = ($('d-esim-raw').value || '').trim();
   if (!raw) {
     toast('请先粘入激活码', 'error');
     return;
@@ -2482,10 +2503,10 @@ async function generateEsimQr() {
     }
     const lpa = qrRes.headers.get('X-LPA-String') || '';
     const blob = await qrRes.blob();
-    document.getElementById('d-esim-qr-img').src = URL.createObjectURL(blob);
-    document.getElementById('d-esim-lpa-text').textContent = lpa;
-    document.getElementById('d-esim-saved-indicator').hidden = false;
-    document.getElementById('d-esim-qr-container').hidden = false;
+    $('d-esim-qr-img').src = URL.createObjectURL(blob);
+    $('d-esim-lpa-text').textContent = lpa;
+    $('d-esim-saved-indicator').hidden = false;
+    $('d-esim-qr-container').hidden = false;
     toast('已生成二维码', 'success');
   } catch (err) {
     toast(err.message || String(err), 'error');
@@ -2493,9 +2514,9 @@ async function generateEsimQr() {
 }
 
 function renderVerificationCodeBox(c) {
-  const button = document.getElementById('d-code-refresh');
-  const value = document.getElementById('d-code-value');
-  const meta = document.getElementById('d-code-meta');
+  const button = $('d-code-refresh');
+  const value = $('d-code-value');
+  const meta = $('d-code-meta');
   button.disabled = !c.moemail_id;
   button.textContent = '刷新';
   value.className = 'code-value placeholder';
@@ -2509,8 +2530,8 @@ function renderVerificationCodeBox(c) {
 }
 
 function renderVerificationCodeResult(data) {
-  const value = document.getElementById('d-code-value');
-  const meta = document.getElementById('d-code-meta');
+  const value = $('d-code-value');
+  const meta = $('d-code-meta');
   if (data.found && data.code) {
     value.className = 'code-value';
     value.textContent = data.code;
@@ -2534,9 +2555,9 @@ async function openCodeForCustomer(id) {
 }
 
 function renderPaymentInfoBox(c) {
-  const button = document.getElementById('d-payment-refresh');
-  const value = document.getElementById('d-payment-value');
-  const meta = document.getElementById('d-payment-meta');
+  const button = $('d-payment-refresh');
+  const value = $('d-payment-value');
+  const meta = $('d-payment-meta');
   button.disabled = !c.moemail_id;
   button.textContent = '查询';
   value.className = 'code-value placeholder';
@@ -2550,8 +2571,8 @@ function renderPaymentInfoBox(c) {
 }
 
 function renderPaymentInfoResult(data) {
-  const value = document.getElementById('d-payment-value');
-  const meta = document.getElementById('d-payment-meta');
+  const value = $('d-payment-value');
+  const meta = $('d-payment-meta');
   if (data.changed_count > 0) {
     // 信用卡已解除（最关键的状态）
     value.className = 'code-value payment-changed';
@@ -2588,9 +2609,9 @@ async function openPaymentInfoForCustomer(id) {
 
 async function refreshPaymentInfoForActive() {
   if (!activeCustomer) return;
-  const button = document.getElementById('d-payment-refresh');
-  const value = document.getElementById('d-payment-value');
-  const meta = document.getElementById('d-payment-meta');
+  const button = $('d-payment-refresh');
+  const value = $('d-payment-value');
+  const meta = $('d-payment-meta');
   button.disabled = true;
   button.textContent = '查询中...';
   value.className = 'code-value placeholder';
@@ -2617,9 +2638,9 @@ async function refreshPaymentInfoForActive() {
 
 async function refreshVerificationCodeForActive() {
   if (!activeCustomer) return;
-  const button = document.getElementById('d-code-refresh');
-  const value = document.getElementById('d-code-value');
-  const meta = document.getElementById('d-code-meta');
+  const button = $('d-code-refresh');
+  const value = $('d-code-value');
+  const meta = $('d-code-meta');
   button.disabled = true;
   button.textContent = '刷新中...';
   value.className = 'code-value placeholder';
@@ -2642,14 +2663,14 @@ async function refreshVerificationCodeForActive() {
 }
 
 function closeDetail() {
-  document.getElementById('detail-panel').classList.remove('open');
+  $('detail-panel').classList.remove('open');
 }
 
 async function generateMoemailForActive() {
   if (!activeCustomer) return;
   await generateMoemail(activeCustomer.id);
   activeCustomer = await getCustomer(activeCustomer.id);
-  document.getElementById('d-email-line').textContent = activeCustomer.email || '—';
+  $('d-email-line').textContent = activeCustomer.email || '—';
   renderMoemailBox(activeCustomer);
   renderVerificationCodeBox(activeCustomer);
 }
@@ -2684,12 +2705,12 @@ async function deleteCustomer(id, phone) {
   }
 }
 
-document.getElementById('add-form').onsubmit = async (e) => {
+$('add-form').onsubmit = async (e) => {
   e.preventDefault();
-  const actDate = document.getElementById('act-date').value;
-  const useSimCode = document.getElementById('use-sim-code').value === 'true';
-  const autoRotate = document.getElementById('customer-auto-rotate').checked;
-  const providerPick = document.getElementById('customer-provider-pick');
+  const actDate = $('act-date').value;
+  const useSimCode = $('use-sim-code').value === 'true';
+  const autoRotate = $('customer-auto-rotate').checked;
+  const providerPick = $('customer-provider-pick');
   const manualProviderId = (!autoRotate && providerPick.value) ? parseInt(providerPick.value, 10) : null;
   // Form only ships activation_date / use_sim_code / email_provider_id / email_provider_domain;
   // phone/email/shipping/courier default to empty in the backend and are filled in later
@@ -2699,7 +2720,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
     use_sim_code: useSimCode,
   };
   if (manualProviderId) body.email_provider_id = manualProviderId;
-  const domainPick = document.getElementById('customer-domain-pick');
+  const domainPick = $('customer-domain-pick');
   if (domainPick && domainPick.value) body.email_provider_domain = domainPick.value;
 
   const btn = e.target.querySelector('button[type="submit"]');
@@ -2721,7 +2742,7 @@ document.getElementById('add-form').onsubmit = async (e) => {
 	    const detail = String(err.message || '');
 	    if (detail.includes('No email providers') || detail.includes('邮箱服务商')) {
 	      toast('请先在「邮箱服务商」标签里添加一个 provider', 'error');
-	      const tabBtn = document.getElementById('tab-btn-email-providers');
+	      const tabBtn = $('tab-btn-email-providers');
 	      if (tabBtn) tabBtn.click();
 	    } else {
 	      toast(detail, 'error');
@@ -2732,9 +2753,9 @@ document.getElementById('add-form').onsubmit = async (e) => {
 	  }
 	};
 
-document.getElementById('sim-code-form').onsubmit = async (e) => {
+$('sim-code-form').onsubmit = async (e) => {
   e.preventDefault();
-  const text = document.getElementById('sim-code-input').value.trim();
+  const text = $('sim-code-input').value.trim();
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '导入中...';
@@ -2747,7 +2768,7 @@ document.getElementById('sim-code-form').onsubmit = async (e) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '导入失败');
     toast(`已导入 ${data.imported} 个，重复 ${data.duplicates} 个`, 'success');
-    document.getElementById('sim-code-input').value = '';
+    $('sim-code-input').value = '';
     await loadSimCodes();
   } catch (err) {
     toast(err.message, 'error');
@@ -2757,10 +2778,10 @@ document.getElementById('sim-code-form').onsubmit = async (e) => {
   }
 };
 
-document.getElementById('phone-update-form').onsubmit = async (e) => {
+$('phone-update-form').onsubmit = async (e) => {
   e.preventDefault();
   if (!activeCustomer) return;
-  const phone = document.getElementById('d-phone-input').value.trim();
+  const phone = $('d-phone-input').value.trim();
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '保存中...';
@@ -2773,7 +2794,7 @@ document.getElementById('phone-update-form').onsubmit = async (e) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
     activeCustomer = await getCustomer(activeCustomer.id);
-    document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
+    $('d-phone-input').value = activeCustomer.phone_number || '';
     toast(phone ? '手机号已保存' : '手机号已清空', 'success');
     await loadCustomers();
     // 保存手机号后，如果客户满足「查解绑」条件则后台自动查询一次
@@ -2790,12 +2811,12 @@ document.getElementById('phone-update-form').onsubmit = async (e) => {
   }
 };
 
-document.getElementById('address-update-form').onsubmit = async (e) => {
+$('address-update-form').onsubmit = async (e) => {
   e.preventDefault();
   if (!activeCustomer) return;
-  const shippingAddress = document.getElementById('d-address-input').value.trim();
-  const courierCompany = document.getElementById('d-courier-company-input').value.trim();
-  const trackingNumber = document.getElementById('d-tracking-number-input').value.trim();
+  const shippingAddress = $('d-address-input').value.trim();
+  const courierCompany = $('d-courier-company-input').value.trim();
+  const trackingNumber = $('d-tracking-number-input').value.trim();
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '保存中...';
@@ -2823,10 +2844,10 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
   }
 };
 
-document.getElementById('phone-status-form').onsubmit = async (e) => {
+$('phone-status-form').onsubmit = async (e) => {
   e.preventDefault();
   if (!activeCustomer) return;
-  const phoneStatus = normalizePhoneStatus(document.getElementById('d-phone-status-input').value);
+  const phoneStatus = normalizePhoneStatus($('d-phone-status-input').value);
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '保存中...';
@@ -2866,15 +2887,15 @@ async function loadSettings() {
     const res = await fetch(API + '/settings');
     const s = await res.json();
 	    // moemail settings are now configured per-provider on the 邮箱服务商 tab; legacy fields are intentionally ignored
-	    document.getElementById('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-	    document.getElementById('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
-	    document.getElementById('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
-	    document.getElementById('s-public-page-markdown').value = s.public_page_markdown || '';
-	    document.getElementById('s-public-worker-domain').value = s.public_worker_domain || '';
+	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
+	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
+	    $('s-public-page-markdown').value = s.public_page_markdown || '';
+	    $('s-public-worker-domain').value = s.public_worker_domain || '';
 	    appSettings.public_worker_domain = s.public_worker_domain || null;
 	    updateWorkerStatus(s.public_worker_domain);
 	    for (const key of CAINIAO_SETTINGS) {
-	      const input = document.getElementById(SETTING_INPUT_IDS[key]);
+	      const input = $(SETTING_INPUT_IDS[key]);
 	      if (!input) continue;
 	      const value = s[key] || '';
 	      input.value = value === '***' ? '' : value;
@@ -2887,13 +2908,13 @@ async function loadSettings() {
 async function saveSettings() {
   const payload = {
     // moemail_url/api_key are now configured per-provider; legacy fields intentionally removed
-    giffgaff_download_url: document.getElementById('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
-    agent_api_token: document.getElementById('s-agent-token').value.trim() || null,
-    public_page_markdown: document.getElementById('s-public-page-markdown').value,
-    public_worker_domain: document.getElementById('s-public-worker-domain').value.trim(),
+    giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
+    agent_api_token: $('s-agent-token').value.trim() || null,
+    public_page_markdown: $('s-public-page-markdown').value,
+    public_worker_domain: $('s-public-worker-domain').value.trim(),
   };
 	  for (const key of CAINIAO_SETTINGS) {
-	    const input = document.getElementById(SETTING_INPUT_IDS[key]);
+	    const input = $(SETTING_INPUT_IDS[key]);
 	    if (input) payload[key] = input.value.trim();
 	  }
   try {
@@ -2917,8 +2938,8 @@ async function generateAgentToken() {
     const res = await fetch(API + '/settings/agent-token', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '生成 Token 失败');
-    document.getElementById('s-agent-token').value = data.token || '';
-    document.getElementById('s-agent-token-source').textContent = '已生成新 Token，请立即复制到 Windows 客户端。';
+    $('s-agent-token').value = data.token || '';
+    $('s-agent-token-source').textContent = '已生成新 Token，请立即复制到 Windows 客户端。';
     await copyText(data.token || '', 'Agent Token 已复制');
   } catch (err) {
     toast(err.message, 'error');
@@ -2926,7 +2947,7 @@ async function generateAgentToken() {
 }
 
 function copyAgentToken() {
-  const token = document.getElementById('s-agent-token').value.trim();
+  const token = $('s-agent-token').value.trim();
   if (!token) {
     toast('当前页面没有可复制的 Token；请点击生成/重置 Token', 'error');
     return;
@@ -2935,7 +2956,7 @@ function copyAgentToken() {
 }
 
 function openSettings() {
-  switchTab('settings', document.getElementById('tab-btn-settings'));
+  switchTab('settings', $('tab-btn-settings'));
   loadSettings();
 }
 
@@ -2994,38 +3015,38 @@ async function loadEmailProviders() {
 }
 
 function toggleEpFields() {
-  const t = document.getElementById('ep-type').value;
+  const t = $('ep-type').value;
   document.querySelector('[data-ep-fields="moemail"]').hidden = (t !== 'moemail');
   document.querySelector('[data-ep-fields="cloudmail"]').hidden = (t !== 'cloudmail');
 }
 
 function openEpDialog(id) {
-  const dlg = document.getElementById('ep-dialog');
-  document.getElementById('ep-dialog-title').textContent = id ? '编辑邮箱服务商' : '添加邮箱服务商';
-  document.getElementById('ep-name').value = '';
-  document.getElementById('ep-type').value = 'moemail';
-  document.getElementById('ep-type').disabled = !!id;  // type is immutable on edit
-  document.getElementById('ep-url').value = '';
-  document.getElementById('ep-key').value = '';
-  document.getElementById('ep-url-c').value = '';
-  document.getElementById('ep-email-c').value = '';
-  document.getElementById('ep-pass-c').value = '';
-  document.getElementById('ep-domain-c').value = '';
+  const dlg = $('ep-dialog');
+  $('ep-dialog-title').textContent = id ? '编辑邮箱服务商' : '添加邮箱服务商';
+  $('ep-name').value = '';
+  $('ep-type').value = 'moemail';
+  $('ep-type').disabled = !!id;  // type is immutable on edit
+  $('ep-url').value = '';
+  $('ep-key').value = '';
+  $('ep-url-c').value = '';
+  $('ep-email-c').value = '';
+  $('ep-pass-c').value = '';
+  $('ep-domain-c').value = '';
   if (id) {
     fetch(API + '/email-providers').then(r => r.json()).then(list => {
       const p = list.find(x => x.id === id);
       if (!p) return;
-      document.getElementById('ep-name').value = p.name;
-      document.getElementById('ep-url').value = (p.config.url || '');
+      $('ep-name').value = p.name;
+      $('ep-url').value = (p.config.url || '');
       if (p.provider_type === 'cloudmail') {
-        document.getElementById('ep-type').value = 'cloudmail';
-        document.getElementById('ep-url-c').value = (p.config.url || '');
-        document.getElementById('ep-email-c').value = (p.config.email || '');
-        document.getElementById('ep-domain-c').value = (p.config.domain || '');
+        $('ep-type').value = 'cloudmail';
+        $('ep-url-c').value = (p.config.url || '');
+        $('ep-email-c').value = (p.config.email || '');
+        $('ep-domain-c').value = (p.config.domain || '');
         // Don't pre-fill password; user re-enters to change
       } else {
-        document.getElementById('ep-key').value = (p.config.api_key || '');
-        if (p.config.expiry_time_ms != null) document.getElementById('ep-expiry').value = p.config.expiry_time_ms;
+        $('ep-key').value = (p.config.api_key || '');
+        if (p.config.expiry_time_ms != null) $('ep-expiry').value = p.config.expiry_time_ms;
       }
       toggleEpFields();
     });
@@ -3035,21 +3056,21 @@ function openEpDialog(id) {
 }
 
 function closeEpDialog() {
-  document.getElementById('ep-dialog').hidden = true;
-  document.getElementById('ep-expiry').value = '';
+  $('ep-dialog').hidden = true;
+  $('ep-expiry').value = '';
 }
 
 async function saveEp() {
-  const name = document.getElementById('ep-name').value.trim();
+  const name = $('ep-name').value.trim();
   if (!name) { toast('请输入名称', 'error'); return; }
-  const type = document.getElementById('ep-type').value;
+  const type = $('ep-type').value;
   let config;
   if (type === 'moemail') {
     config = {
-      url: document.getElementById('ep-url').value.trim(),
-      api_key: document.getElementById('ep-key').value,
+      url: $('ep-url').value.trim(),
+      api_key: $('ep-key').value,
     };
-    const expiryRaw = document.getElementById('ep-expiry').value.trim();
+    const expiryRaw = $('ep-expiry').value.trim();
     if (expiryRaw !== '') {
       const expiryNum = parseInt(expiryRaw, 10);
       if (!Number.isNaN(expiryNum) && expiryNum >= 0) {
@@ -3058,10 +3079,10 @@ async function saveEp() {
     }
   } else {
     config = {
-      url: document.getElementById('ep-url-c').value.trim(),
-      email: document.getElementById('ep-email-c').value.trim(),
-      password: document.getElementById('ep-pass-c').value,
-      domain: document.getElementById('ep-domain-c').value.trim(),
+      url: $('ep-url-c').value.trim(),
+      email: $('ep-email-c').value.trim(),
+      password: $('ep-pass-c').value,
+      domain: $('ep-domain-c').value.trim(),
     };
   }
   const r = await fetch(API + '/email-providers', {
@@ -3121,9 +3142,9 @@ async function toggleProviderDisabled(id, currentlyDisabled) {
 
 // Populate the add-customer form's provider picker
 async function loadCustomerProviderPicker() {
-  const sel = document.getElementById('customer-provider-pick');
-  const domainSel = document.getElementById('customer-domain-pick');
-  const emptyHint = document.getElementById('customer-provider-empty');
+  const sel = $('customer-provider-pick');
+  const domainSel = $('customer-domain-pick');
+  const emptyHint = $('customer-provider-empty');
   if (!sel) return;
   let list = [];
   try {
@@ -3179,10 +3200,10 @@ async function loadCustomerProviderPicker() {
 
 // Toggle visibility of provider picker based on auto-rotate checkbox
 document.addEventListener('DOMContentLoaded', () => {
-  const checkbox = document.getElementById('customer-auto-rotate');
-  const picker = document.getElementById('customer-provider-pick');
-  const domainSel = document.getElementById('customer-domain-pick');
-  const goLink = document.getElementById('customer-provider-go');
+  const checkbox = $('customer-auto-rotate');
+  const picker = $('customer-provider-pick');
+  const domainSel = $('customer-domain-pick');
+  const goLink = $('customer-provider-go');
   if (checkbox && picker) {
     function sync() {
       picker.hidden = checkbox.checked;
@@ -3194,7 +3215,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (goLink) {
     goLink.addEventListener('click', (e) => {
       e.preventDefault();
-      const tabBtn = document.getElementById('tab-btn-email-providers');
+      const tabBtn = $('tab-btn-email-providers');
       if (tabBtn) tabBtn.click();
     });
   }
@@ -3286,7 +3307,7 @@ function mergeDefaultTemplates(templates) {
 }
 
 function hydrateTemplateSelects() {
-  const templateSelect = document.getElementById('template-select');
+  const templateSelect = $('template-select');
   if (templateSelect) {
     templateSelect.replaceChildren(...labelConfig.templates.map(t => new Option(t.name, t.id)));
     templateSelect.value = selectedTemplateId;
@@ -3302,7 +3323,7 @@ function getPrintTemplates() {
 }
 
 function hydratePrintTemplateSelect() {
-  const select = document.getElementById('print-template-select');
+  const select = $('print-template-select');
   if (!select) return;
   const templates = getPrintTemplates();
   select.replaceChildren(...templates.map(t => new Option(t.name, t.id)));
@@ -3328,7 +3349,7 @@ function selectTemplate(id) {
 }
 
 async function saveLabelConfig(showToast=true) {
-  labelConfig.giffgaff_download_url = document.getElementById('s-giffgaff-url')?.value.trim() || labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
+  labelConfig.giffgaff_download_url = $('s-giffgaff-url')?.value.trim() || labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
   const res = await fetch(API + '/label-config', {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -3354,9 +3375,9 @@ async function resetTemplates() {
 function renderTemplateEditor() {
   const tpl = getTemplate();
   if (!tpl) return;
-  document.getElementById('template-select').value = tpl.id;
-  document.getElementById('template-size').textContent = `${tpl.width_mm} x ${tpl.height_mm} mm`;
-  renderTemplateCanvas(document.getElementById('label-canvas'), tpl, DEMO_CUSTOMER, true);
+  $('template-select').value = tpl.id;
+  $('template-size').textContent = `${tpl.width_mm} x ${tpl.height_mm} mm`;
+  renderTemplateCanvas($('label-canvas'), tpl, DEMO_CUSTOMER, true);
   renderPropertyPanel();
 }
 
@@ -3437,7 +3458,7 @@ function startDrag(e, id) {
   selectedElementId = id;
   const tpl = getTemplate();
   const el = tpl.elements.find(item => item.id === id);
-  const rect = document.getElementById('label-canvas').getBoundingClientRect();
+  const rect = $('label-canvas').getBoundingClientRect();
   dragging = { id, startX: e.clientX, startY: e.clientY, x: el.x, y: el.y, pxPerMm: rect.width / tpl.width_mm };
   document.addEventListener('pointermove', onDrag);
   document.addEventListener('pointerup', stopDrag, { once: true });
@@ -3452,7 +3473,7 @@ function onDrag(e) {
   const dy = (e.clientY - dragging.startY) / dragging.pxPerMm;
   el.x = clamp(roundHalf(dragging.x + dx), 0, tpl.width_mm - el.w);
   el.y = clamp(roundHalf(dragging.y + dy), 0, tpl.height_mm - el.h);
-  renderTemplateCanvas(document.getElementById('label-canvas'), tpl, DEMO_CUSTOMER, true);
+  renderTemplateCanvas($('label-canvas'), tpl, DEMO_CUSTOMER, true);
   renderPropertyPanel();
 }
 
@@ -3497,23 +3518,23 @@ function getSelectedElement() {
 
 function renderPropertyPanel() {
   const el = getSelectedElement();
-  document.getElementById('empty-props').style.display = el ? 'none' : 'block';
-  document.getElementById('prop-panel').style.display = el ? 'grid' : 'none';
+  $('empty-props').style.display = el ? 'none' : 'block';
+  $('prop-panel').style.display = el ? 'grid' : 'none';
   if (!el) return;
-  const sourceSelect = document.getElementById('prop-source');
+  const sourceSelect = $('prop-source');
   const sources = el.type === 'qr' ? QR_SOURCES : TEXT_SOURCES;
   sourceSelect.replaceChildren(...sources.map(source => new Option(source, source)));
   sourceSelect.value = el.source;
-  document.getElementById('prop-text').value = el.text || '';
-  document.getElementById('prop-text').disabled = el.source !== '固定文字';
-  document.getElementById('prop-x').value = el.x;
-  document.getElementById('prop-y').value = el.y;
-  document.getElementById('prop-w').value = el.w;
-  document.getElementById('prop-h').value = el.h;
-  document.getElementById('prop-font').value = el.fontSize || 7;
-  document.getElementById('prop-font').disabled = el.type === 'qr';
-  document.getElementById('prop-bold').checked = !!el.bold;
-  document.getElementById('prop-bold').disabled = el.type === 'qr';
+  $('prop-text').value = el.text || '';
+  $('prop-text').disabled = el.source !== '固定文字';
+  $('prop-x').value = el.x;
+  $('prop-y').value = el.y;
+  $('prop-w').value = el.w;
+  $('prop-h').value = el.h;
+  $('prop-font').value = el.fontSize || 7;
+  $('prop-font').disabled = el.type === 'qr';
+  $('prop-bold').checked = !!el.bold;
+  $('prop-bold').disabled = el.type === 'qr';
 }
 
 function updateSelectedElement(patch) {
@@ -3545,9 +3566,9 @@ async function openPrintPanel(id, templateId='') {
     printCustomer = await getCustomer(id);
     printMode = templateId === COURIER_TEMPLATE_ID ? 'courier' : 'label';
     printTemplateId = printMode === 'courier' ? COURIER_TEMPLATE_ID : '';
-    document.getElementById('print-panel').classList.add('open');
-    document.getElementById('print-panel-title').textContent = printMode === 'courier' ? '打印快递单' : '打印标签';
-    document.getElementById('print-template-field').style.display = printMode === 'courier' ? 'none' : '';
+    $('print-panel').classList.add('open');
+    $('print-panel-title').textContent = printMode === 'courier' ? '打印快递单' : '打印标签';
+    $('print-template-field').style.display = printMode === 'courier' ? 'none' : '';
     hydrateTemplateSelects();
     await renderPrintPreview();
   } catch (err) {
@@ -3556,7 +3577,7 @@ async function openPrintPanel(id, templateId='') {
 }
 
 function closePrintPanel() {
-  document.getElementById('print-panel').classList.remove('open');
+  $('print-panel').classList.remove('open');
   printCustomer = null;
   printMode = 'label';
   printTemplateId = '';
@@ -3566,16 +3587,16 @@ async function renderPrintPreview() {
   if (!printCustomer) return;
   const id = printMode === 'courier'
     ? COURIER_TEMPLATE_ID
-    : (document.getElementById('print-template-select').value || printTemplateId);
+    : ($('print-template-select').value || printTemplateId);
   printTemplateId = id;
-  await renderTemplateCanvas(document.getElementById('print-preview'), getTemplate(id), printCustomer, false);
+  await renderTemplateCanvas($('print-preview'), getTemplate(id), printCustomer, false);
 }
 
 async function printCurrentLabel() {
   if (!printCustomer) return;
   const id = printMode === 'courier'
     ? COURIER_TEMPLATE_ID
-    : (document.getElementById('print-template-select').value || printTemplateId);
+    : ($('print-template-select').value || printTemplateId);
   const tpl = getTemplate(id);
   const markup = await buildPrintableLabel(tpl, printCustomer);
   const printTitle = printMode === 'courier' ? '打印快递单' : '打印标签';
@@ -3644,13 +3665,13 @@ async function importData(input) {
   input.value = '';
 }
 
-document.getElementById('detail-panel').onclick = e => {
-  if (e.target === document.getElementById('detail-panel')) closeDetail();
+$('detail-panel').onclick = e => {
+  if (e.target === $('detail-panel')) closeDetail();
 };
-document.getElementById('print-panel').onclick = e => {
-  if (e.target === document.getElementById('print-panel')) closePrintPanel();
+$('print-panel').onclick = e => {
+  if (e.target === $('print-panel')) closePrintPanel();
 };
-document.getElementById('label-canvas').onclick = e => {
+$('label-canvas').onclick = e => {
   if (e.target.id === 'label-canvas') {
     selectedElementId = '';
     renderTemplateEditor();
