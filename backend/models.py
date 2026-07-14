@@ -35,6 +35,11 @@ class CustomerUpdate(BaseModel):
     activation_date: Optional[date] = None
     activation_status: Optional[ActivationStatus] = None
     activation_error: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
 
 
 class CustomerOut(BaseModel):
@@ -55,6 +60,11 @@ class CustomerOut(BaseModel):
     sim_activation_code: Optional[str] = None
     public_token: Optional[str] = None
     public_version: int = 1
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
     payment_changed_at: Optional[str] = None
     payment_updated_at: Optional[str] = None
     payment_last_checked_at: Optional[str] = None
@@ -84,6 +94,11 @@ class CustomerDetail(BaseModel):
     sim_activation_code: Optional[str] = None
     public_token: Optional[str] = None
     public_version: int = 1
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
     payment_changed_at: Optional[str] = None
     payment_updated_at: Optional[str] = None
     payment_last_checked_at: Optional[str] = None

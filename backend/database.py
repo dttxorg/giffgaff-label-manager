@@ -35,6 +35,11 @@ async def init_db():
                 payment_updated_at TEXT,
                 payment_last_checked_at TEXT,
                 activation_status TEXT NOT NULL DEFAULT '未开始',
+                first_name TEXT,
+                last_name TEXT,
+                address TEXT,
+                city TEXT,
+                postcode TEXT,
                 activation_error TEXT,
                 activated_at TEXT,
                 automation_lock_owner TEXT,
@@ -60,6 +65,11 @@ async def init_db():
         await _ensure_column(db, "customers", "email_account_id", "TEXT")
         await _ensure_column(db, "customers", "email_provider_domain", "TEXT")
         await _ensure_column(db, "customers", "public_token", "TEXT")
+        await _ensure_column(db, "customers", "first_name", "TEXT")
+        await _ensure_column(db, "customers", "last_name", "TEXT")
+        await _ensure_column(db, "customers", "address", "TEXT")
+        await _ensure_column(db, "customers", "city", "TEXT")
+        await _ensure_column(db, "customers", "postcode", "TEXT")
         await _ensure_column(
             db, "customers", "public_version", "INTEGER NOT NULL DEFAULT 1"
         )

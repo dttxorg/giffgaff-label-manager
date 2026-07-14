@@ -32,6 +32,7 @@ from crud import (
     update_customer_moemail,
     regenerate_public_link,
     save_payment_check_result,
+    regenerate_identity,
     get_public_email,
     get_settings, set_setting, fetch_one, normalize_optional_text
 )
@@ -652,6 +653,11 @@ async def list_customers(search: str = ""):
         sim_activation_code=r.get("sim_activation_code"),
         public_token=r.get("public_token"),
         public_version=int(r.get("public_version") or 1),
+        first_name=r.get("first_name"),
+        last_name=r.get("last_name"),
+        address=r.get("address"),
+        city=r.get("city"),
+        postcode=r.get("postcode"),
         payment_changed_at=r.get("payment_changed_at"),
         payment_updated_at=r.get("payment_updated_at"),
         payment_last_checked_at=r.get("payment_last_checked_at"),
@@ -687,6 +693,11 @@ async def get_customer_detail(customer_id: int):
         sim_activation_code=c.get("sim_activation_code"),
         public_token=c.get("public_token"),
         public_version=int(c.get("public_version") or 1),
+        first_name=c.get("first_name"),
+        last_name=c.get("last_name"),
+        address=c.get("address"),
+        city=c.get("city"),
+        postcode=c.get("postcode"),
         payment_changed_at=c.get("payment_changed_at"),
         payment_updated_at=c.get("payment_updated_at"),
         payment_last_checked_at=c.get("payment_last_checked_at"),
@@ -751,6 +762,9 @@ async def add_customer(data: CustomerCreate):
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("failed to record provider use after commit: %s", exc)
+    # 创建后自动生成英国人名 / 地址 / 邮编（占位用，运营可编辑或重新随机）
+    identity = await regenerate_identity(customer_id) or {}
+
     return {
         "customer_id": customer_id,
         "message": message,
@@ -759,6 +773,11 @@ async def add_customer(data: CustomerCreate):
         "email_provider_domain": email_bundle.get("email_provider_domain"),
         "sim_activation_code": sim_activation_code,
         "initial_password": initial_password,
+        "first_name": identity.get("first_name"),
+        "last_name": identity.get("last_name"),
+        "address": identity.get("address"),
+        "city": identity.get("city"),
+        "postcode": identity.get("postcode"),
     }
 
 
@@ -941,6 +960,16 @@ async def regenerate_public_link_route(customer_id: int):
     旧 token 在 DB 中立即失效（Worker 再回调 /api/public/{old}/version 会 404）。
     客户端用新 public_token 拼装新 QR。"""
     result = await regenerate_public_link(customer_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    return result
+
+
+@app.post("/api/customers/{customer_id}/identity/regenerate", status_code=200)
+async def regenerate_identity_route(customer_id: int):
+    """重新随机 first_name / last_name / address / city / postcode。
+    覆盖已存在的值，返回新的身份信息。"""
+    result = await regenerate_identity(customer_id)
     if not result:
         raise HTTPException(status_code=404, detail="客户不存在")
     return result

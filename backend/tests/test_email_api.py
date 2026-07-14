@@ -10,6 +10,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 import database
+import crud
 import main
 from fastapi.testclient import TestClient
 
@@ -18,15 +19,16 @@ from fastapi.testclient import TestClient
 def client():
     with tempfile.TemporaryDirectory() as td:
         db_path = str(Path(td) / "test.db")
-        original = (database.DATABASE_PATH, main.DATABASE_PATH)
+        original = (database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH)
         database.DATABASE_PATH = db_path
+        crud.DATABASE_PATH = db_path
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
         main.AGENT_API_TOKEN = ""
         c = TestClient(main.app)
         yield c
-        database.DATABASE_PATH = original[0]
+        database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH = original
 
 
 def test_list_email_providers_empty(client):

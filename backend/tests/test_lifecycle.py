@@ -28,6 +28,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 import database
+import crud
 import main
 from fastapi.testclient import TestClient
 
@@ -39,6 +40,7 @@ def client_with_two_providers():
         db_path = str(Path(td) / "test.db")
         original = (database.DATABASE_PATH, main.DATABASE_PATH)
         database.DATABASE_PATH = db_path
+        crud.DATABASE_PATH = db_path
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
@@ -195,6 +197,7 @@ def test_503_when_pool_empty():
         db_path = str(Path(td) / "test.db")
         original = (database.DATABASE_PATH, main.DATABASE_PATH)
         database.DATABASE_PATH = db_path
+        crud.DATABASE_PATH = db_path
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""

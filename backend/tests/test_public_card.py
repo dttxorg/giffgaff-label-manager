@@ -384,3 +384,119 @@ def test_save_payment_check_result_nonexistent_returns_false(client):
     import crud
     ok = asyncio.run(crud.save_payment_check_result(99999, None, None, "x"))
     assert ok is False
+
+
+# ── UK 随机身份（姓名 / 地址 / 邮编）──
+
+
+def test_uk_random_module_generates_valid_data():
+    """uk_random 模块的每个生成函数都返回非空字符串。"""
+    from uk_random import (
+        generate_first_name, generate_last_name, generate_address,
+        generate_postcode, generate_random_identity,
+    )
+    assert isinstance(generate_first_name(), str) and len(generate_first_name()) > 0
+    assert isinstance(generate_last_name(), str) and len(generate_last_name()) > 0
+    assert isinstance(generate_address(), str) and len(generate_address()) > 0
+    # UK postcode: 字母数字 + 空格 + 字母数字字母
+    pc = generate_postcode()
+    import re
+    assert re.match(r"^[A-Z]{1,2}\d{1,2} [A-Z]\d[A-Z]{2}$", pc), f"bad postcode: {pc!r}"
+    # 全套生成
+    identity = generate_random_identity()
+    assert set(identity.keys()) == {"first_name", "last_name", "address", "city", "postcode"}
+
+
+def test_customer_creation_auto_fills_identity(client):
+    """新建客户时自动填充 first_name / last_name / address / city / postcode。"""
+    body = {"email": "a@x.com", "activation_date": "2026-07-14", "use_sim_code": False}
+    r = client.post("/api/customers", json=body)
+    assert r.status_code == 201
+    cid = r.json()["customer_id"]
+
+    d = client.get(f"/api/customers/{cid}").json()
+    # regen_identity was called, so all 5 fields should be filled
+    for field in ("first_name", "last_name", "address", "city", "postcode"):
+        assert d.get(field), f"{field} should be auto-filled, got {d[field]!r}"
+
+
+def test_list_customers_includes_identity_fields(client):
+    _create("a@x.com")
+    lst = client.get("/api/customers").json()
+    assert all("first_name" in c for c in lst)
+    assert all("last_name" in c for c in lst)
+    assert all("address" in c for c in lst)
+    assert all("city" in c for c in lst)
+    assert all("postcode" in c for c in lst)
+
+
+def test_regenerate_identity_changes_values(client):
+    """POST /identity/regenerate 后 5 个字段都更新。"""
+    cid = _create("a@x.com")
+    d1 = client.get(f"/api/customers/{cid}").json()
+    # Run regenerate a few times and verify at least one field changes (statistical)
+    changed_any = False
+    for _ in range(5):
+        r = client.post(f"/api/customers/{cid}/identity/regenerate")
+        assert r.status_code == 200
+        d2 = client.get(f"/api/customers/{cid}").json()
+        if d2["address"] != d1["address"] or d2["city"] != d1["city"] or d2["postcode"] != d1["postcode"]:
+            changed_any = True
+            break
+        d1 = d2
+    assert changed_any, "regenerate should sometimes produce different values"
+
+
+def test_regenerate_identity_nonexistent_returns_404(client):
+    r = client.post("/api/customers/99999/identity/regenerate")
+    assert r.status_code == 404
+
+
+def test_customer_update_accepts_identity_fields(client):
+    """PATCH 可更新 5 个身份字段（运营手动编辑）。"""
+    cid = _create("a@x.com")
+    r = client.patch(f"/api/customers/{cid}", json={
+        "first_name": "Alice",
+        "last_name": "Smith",
+        "address": "10 Downing Street",
+        "city": "London",
+        "postcode": "SW1A 2AA",
+    })
+    assert r.status_code == 200
+    d = client.get(f"/api/customers/{cid}").json()
+    assert d["first_name"] == "Alice"
+    assert d["last_name"] == "Smith"
+    assert d["address"] == "10 Downing Street"
+    assert d["city"] == "London"
+    assert d["postcode"] == "SW1A 2AA"
+
+
+def test_customer_create_response_includes_identity(client):
+    """POST /api/customers 返回值里直接带 5 个身份字段（前端立即可显示可复制）。"""
+    body = {"email": "manual@x.com", "activation_date": "2026-07-14", "use_sim_code": False}
+    r = client.post("/api/customers", json=body)
+    assert r.status_code == 201
+    data = r.json()
+    for field in ("first_name", "last_name", "address", "city", "postcode"):
+        assert data.get(field), f"create response should include {field}"
+
+
+def test_random_identity_postcode_matches_city():
+    """邮编前缀必须对应城市——跑 100 次验证一致。"""
+    from uk_random import generate_random_identity, CITY_POSTCODES
+
+    for _ in range(100):
+        ident = generate_random_identity()
+        city = ident["city"]
+        postcode = ident["postcode"]
+        # 提取 postcode 前缀（第一个空格前的字母数字部分）
+        prefix = postcode.split(" ")[0]
+        # 提取真正的字母部分（去掉开头的数字）
+        prefix_letters = ""
+        for ch in prefix:
+            if ch.isalpha():
+                prefix_letters += ch
+            elif prefix_letters:
+                break
+        assert prefix_letters in CITY_POSTCODES[city], \
+            f"postcode {postcode!r} prefix {prefix_letters!r} 不在 {city!r} 的邮编区 {CITY_POSTCODES[city]}"

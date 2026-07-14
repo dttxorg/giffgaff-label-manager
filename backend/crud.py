@@ -105,6 +105,16 @@ async def update_customer(customer_id: int, data: CustomerUpdate):
         fields.append("activation_status = ?"); values.append(data.activation_status)
     if data.activation_error is not None:
         fields.append("activation_error = ?"); values.append(normalize_optional_text(data.activation_error))
+    if data.first_name is not None:
+        fields.append("first_name = ?"); values.append(data.first_name)
+    if data.last_name is not None:
+        fields.append("last_name = ?"); values.append(data.last_name)
+    if data.address is not None:
+        fields.append("address = ?"); values.append(data.address)
+    if data.city is not None:
+        fields.append("city = ?"); values.append(data.city)
+    if data.postcode is not None:
+        fields.append("postcode = ?"); values.append(data.postcode)
     if not fields:
         return True
     values.append(customer_id)
@@ -255,3 +265,20 @@ async def set_setting(key: str, value: str):
             (key, value),
         )
         await db.commit()
+
+
+async def regenerate_identity(customer_id: int) -> Optional[dict]:
+    """重新随机生成 first_name/last_name/address/city/postcode 并落库。
+    返回新的 {first_name, last_name, address, city, postcode}；客户不存在时返回 None。"""
+    from uk_random import generate_random_identity
+    identity = generate_random_identity()
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """UPDATE customers
+               SET first_name = ?, last_name = ?, address = ?, city = ?, postcode = ?
+               WHERE id = ?""",
+            (identity["first_name"], identity["last_name"], identity["address"],
+             identity["city"], identity["postcode"], customer_id),
+        )
+        await db.commit()
+        return identity if cursor.rowcount > 0 else None
