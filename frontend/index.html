@@ -2217,6 +2217,11 @@ function renderShippingDetail(customer) {
   document.getElementById('d-tracking-number-input').value = customer.tracking_number || '';
 }
 
+function renderPhoneStatusDetail(customer) {
+  const sel = document.getElementById('d-phone-status-input');
+  if (sel) sel.value = normalizePhoneStatus(customer.phone_status);
+}
+
 function renderActivationDetail(customer) {
   document.getElementById('d-sim-code').textContent = customer.sim_activation_code || '未分配';
   document.getElementById('d-activation-status').textContent = customer.activation_status || '未开始';
