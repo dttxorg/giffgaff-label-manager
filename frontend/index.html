@@ -1032,7 +1032,7 @@
               <th>支付</th>
               <th>SIM / 激活</th>
 	              <th>开通日期</th>
-              <th>发货状态 / 收货地址</th>
+              <th>号码状态 / 收货地址</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1105,7 +1105,7 @@
               <button type="button" onclick="addLabelElement('text', '邮箱')">邮箱</button>
               <button type="button" onclick="addLabelElement('text', '开通日期')">开通日期</button>
               <button type="button" onclick="addLabelElement('text', '收货地址')">收货地址</button>
-              <button type="button" onclick="addLabelElement('text', '发货状态')">发货状态</button>
+              
               <button type="button" onclick="addLabelElement('text', '快递公司')">快递公司</button>
               <button type="button" onclick="addLabelElement('text', '快递单号')">快递单号</button>
               <button type="button" onclick="addLabelElement('qr', '邮箱二维码')">邮箱二维码</button>
@@ -1338,7 +1338,7 @@ wrangler init --type javascript --no-git</pre>
       <div class="info-item"><label>手机号</label><p id="d-phone"></p></div>
       <div class="info-item"><label>邮箱</label><p id="d-email"></p></div>
       <div class="info-item"><label>开通日期</label><p id="d-act-date"></p></div>
-      <div class="info-item"><label>发货状态</label><p id="d-shipping-status"></p></div>
+      <div class="info-item"><label>号码状态</label><p id="d-phone-status"></p></div>
       <div class="info-item"><label>快递公司</label><p id="d-courier-company"></p></div>
       <div class="info-item"><label>快递单号</label><p id="d-tracking-number"></p></div>
       <div class="info-item"><label>SIM 激活码</label><p id="d-sim-code"></p></div>
@@ -1403,11 +1403,14 @@ wrangler init --type javascript --no-git</pre>
           <textarea id="d-address-input" rows="3" placeholder="成交后录入客户收货地址"></textarea>
         </div>
         <div>
-          <label>发货状态</label>
-          <select id="d-shipping-status-input">
-            <option value="未发货">未发货</option>
-            <option value="已发货">已发货</option>
-            <option value="已收货">已收货</option>
+          <label>号码状态</label>
+          <select id="d-phone-status-input">
+            <option value="激活">激活</option>
+            <option value="封号">封号</option>
+            <option value="投诉">投诉</option>
+            <option value="退款">退款</option>
+            <option value="丢失">丢失</option>
+            <option value="作废">作废</option>
           </select>
         </div>
         <div>
@@ -1467,14 +1470,14 @@ const DEMO_CUSTOMER = {
   public_token: 'demo-public-token-replace-with-real-one-after-deployment',
   is_moemail_auto: true,
   shipping_address: '张三 13800138000\n上海市浦东新区测试路 88 号 1 幢 101',
-  shipping_status: '未发货',
+  phone_status: '激活',
 	  courier_company: '顺丰速运',
 	  tracking_number: 'SF1234567890',
   sim_activation_code: '123456',
   initial_password: 'Gg-AB12cd34!',
   activation_status: '等待客户端领取',
 	};
-	const SHIPPING_STATUSES = ['未发货', '已发货', '已收货'];
+	const PHONE_STATUSES = ['激活', '封号', '投诉', '退款', '丢失', '作废'];
 const ACTIVATION_STATUSES = ['未开始', '已分配激活码', '等待客户端领取', '激活中', '等待人工支付', '等待转 eSIM', '已完成', '失败'];
 const SIM_CODE_STATUSES = ['未分配', '作废', '已分配', '激活中', '已使用', '失败'];
 const SIM_CODE_STATUS_LABELS = {
@@ -1485,7 +1488,7 @@ const SIM_CODE_STATUS_LABELS = {
   '已使用': '已使用',
   '失败': '失败',
 };
-	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '发货状态', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
+	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
 const CAINIAO_SETTINGS = [];
 const SETTING_INPUT_IDS = {
@@ -1877,14 +1880,18 @@ function makeButton(label, onClick, className='small', disabled=false) {
   return button;
 }
 
-function normalizeShippingStatus(value) {
-  return SHIPPING_STATUSES.includes(value) ? value : '未发货';
+function normalizePhoneStatus(value) {
+  return PHONE_STATUSES.includes(value) ? value : '激活';
 }
 
-function shippingStatusBadgeClass(status) {
-  switch (normalizeShippingStatus(status)) {
-    case '已发货': return 'badge-status-shipped';
-    case '已收货': return 'badge-status-received';
+function phoneStatusBadgeClass(status) {
+  switch (normalizePhoneStatus(status)) {
+    case '激活': return 'badge-status-received';
+    case '封号': return 'badge-activation-failed';
+    case '投诉': return 'badge-activation-waiting';
+    case '退款': return 'badge-danger';
+    case '丢失': return 'badge-warning';
+    case '作废': return 'badge-manual';
     default: return 'badge-status-pending';
   }
 }
@@ -2021,10 +2028,10 @@ function buildCustomerRow(c, index) {
 
   const addressCell = document.createElement('td');
   const hasAddress = !!(c.shipping_address || '').trim();
-  const shippingStatus = normalizeShippingStatus(c.shipping_status);
+  const phoneStatus = normalizePhoneStatus(c.phone_status);
   const statusBadge = document.createElement('span');
-  statusBadge.className = `badge ${shippingStatusBadgeClass(shippingStatus)}`;
-  statusBadge.textContent = shippingStatus;
+  statusBadge.className = `badge ${phoneStatusBadgeClass(phoneStatus)}`;
+  statusBadge.textContent = phoneStatus;
   addressCell.appendChild(statusBadge);
   const addressPreview = document.createElement('div');
   addressPreview.className = 'address-preview';
@@ -2087,7 +2094,7 @@ async function viewCustomer(id, focusTarget='') {
     document.getElementById('d-phone-input').value = activeCustomer.phone_number || '';
     document.getElementById('d-email').textContent = activeCustomer.email || '—';
     document.getElementById('d-act-date').textContent = activeCustomer.activation_date;
-    renderShippingDetail(activeCustomer);
+    renderPhoneStatusDetail(activeCustomer);
     renderActivationDetail(activeCustomer);
     renderMoemailBox(activeCustomer);
     renderPublicLinkBox(activeCustomer);
@@ -2105,8 +2112,6 @@ async function viewCustomer(id, focusTarget='') {
 
 function renderShippingDetail(customer) {
   document.getElementById('d-address-input').value = customer.shipping_address || '';
-  document.getElementById('d-shipping-status').textContent = normalizeShippingStatus(customer.shipping_status);
-  document.getElementById('d-shipping-status-input').value = normalizeShippingStatus(customer.shipping_status);
   document.getElementById('d-courier-company').textContent = customer.courier_company || '未填写';
   document.getElementById('d-courier-company-input').value = customer.courier_company || '';
   document.getElementById('d-tracking-number').textContent = customer.tracking_number || '未填写';
@@ -2644,7 +2649,7 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
   e.preventDefault();
   if (!activeCustomer) return;
   const shippingAddress = document.getElementById('d-address-input').value.trim();
-  const shippingStatus = normalizeShippingStatus(document.getElementById('d-shipping-status-input').value);
+  const phoneStatus = normalizePhoneStatus(document.getElementById('d-phone-status-input').value);
   const courierCompany = document.getElementById('d-courier-company-input').value.trim();
   const trackingNumber = document.getElementById('d-tracking-number-input').value.trim();
   const btn = e.target.querySelector('button[type="submit"]');
@@ -2656,7 +2661,7 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         shipping_address: shippingAddress,
-        shipping_status: shippingStatus,
+        phone_status: phoneStatus,
         courier_company: courierCompany,
         tracking_number: trackingNumber,
       }),
@@ -2664,7 +2669,7 @@ document.getElementById('address-update-form').onsubmit = async (e) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || '保存失败');
     activeCustomer = await getCustomer(activeCustomer.id);
-    renderShippingDetail(activeCustomer);
+    renderPhoneStatusDetail(activeCustomer);
     toast('地址和快递信息已保存', 'success');
     await loadCustomers();
   } catch (err) {
@@ -3095,7 +3100,6 @@ function fallbackTemplates() {
         {id:'courier-address', type:'text', source:'收货地址', text:'', x:3, y:16, w:44, h:13, fontSize:7, bold:true},
         {id:'courier-phone-label', type:'text', source:'固定文字', text:'SIM', x:3, y:30, w:7, h:4, fontSize:6, bold:true},
         {id:'courier-phone', type:'text', source:'手机号', text:'', x:11, y:29, w:36, h:6, fontSize:9, bold:true},
-        {id:'courier-status', type:'text', source:'发货状态', text:'', x:3, y:35, w:18, h:4, fontSize:5, bold:false},
         {id:'courier-date', type:'text', source:'开通日期', text:'', x:23, y:35, w:24, h:4, fontSize:5, bold:false},
       ],
     },
@@ -3230,7 +3234,7 @@ function resolveTextValue(el, customer) {
 	    case '邮箱': return customer.email || '';
     case '开通日期': return customer.activation_date || '';
     case '收货地址': return customer.shipping_address || '';
-    case '发货状态': return normalizeShippingStatus(customer.shipping_status);
+
     case '快递公司': return customer.courier_company || '';
     case '快递单号': return customer.tracking_number || '';
     case 'SIM激活码': return customer.sim_activation_code || '';

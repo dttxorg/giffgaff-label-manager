@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Response
-from fastapi import BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse, HTMLResponse
@@ -55,8 +54,8 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", "").strip()
 AUTH_COOKIE_NAME = "giffgaff_label_auth"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
-DEFAULT_SHIPPING_STATUS = "未发货"
-SHIPPING_STATUSES = {"未发货", "已发货", "已收货"}
+DEFAULT_PHONE_STATUS = "激活"
+PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
 ACTIVATION_STATUSES = {
     "未开始", "已分配激活码", "等待客户端领取", "激活中",
     "等待人工支付", "等待转 eSIM", "已完成", "失败",
@@ -205,7 +204,7 @@ def _normalize_share_link(value: Optional[str]) -> Optional[str]:
 def _customer_payload(row) -> dict:
     customer = dict(row)
     customer["share_link"] = _normalize_share_link(customer.get("share_link"))
-    customer["shipping_status"] = _normalize_shipping_status(customer.get("shipping_status"))
+    customer["phone_status"] = _normalize_phone_status(customer.get("phone_status"))
     customer["activation_status"] = _normalize_activation_status(customer.get("activation_status"))
     customer.pop("initial_password", None)
     customer.pop("automation_lock_owner", None)
@@ -213,9 +212,9 @@ def _customer_payload(row) -> dict:
     return customer
 
 
-def _normalize_shipping_status(value: Optional[str]) -> str:
+def _normalize_phone_status(value: Optional[str]) -> str:
     value = (value or "").strip()
-    return value if value in SHIPPING_STATUSES else DEFAULT_SHIPPING_STATUS
+    return value if value in PHONE_STATUSES else DEFAULT_PHONE_STATUS
 
 
 def _normalize_activation_status(value: Optional[str]) -> str:
@@ -538,16 +537,15 @@ async def _create_customer_without_activation(data: CustomerCreate, email_bundle
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO customers
-               (phone_number, email, shipping_address, shipping_status, courier_company,
+               (phone_number, email, shipping_address, courier_company,
                 tracking_number, courier_order_code, courier_print_data, activation_date,
                 moemail_id, moemail_address, share_link, is_moemail_auto,
                 email_provider_id, email_account_id, email_provider_domain, activation_status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 phone_number,
                 email_bundle.get("email", ""),
                 shipping_address,
-                data.shipping_status,
                 courier_company,
                 tracking_number,
                 courier_order_code,
@@ -586,17 +584,16 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                 raise HTTPException(status_code=400, detail="没有可用 SIM 激活码，请先导入激活码")
             cursor = await db.execute(
                 """INSERT INTO customers
-                   (phone_number, email, shipping_address, shipping_status, courier_company,
+                   (phone_number, email, shipping_address, courier_company,
                     tracking_number, courier_order_code, courier_print_data, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
                     sim_code_id, sim_activation_code, initial_password,
                     email_provider_id, email_account_id, email_provider_domain, activation_status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     phone_number,
                     email_bundle.get("email", ""),
                     shipping_address,
-                    data.shipping_status,
                     courier_company,
                     tracking_number,
                     courier_order_code,
@@ -642,7 +639,7 @@ async def list_customers(search: str = ""):
         phone_number=r["phone_number"],
         email=r["email"],
         shipping_address=r.get("shipping_address"),
-        shipping_status=_normalize_shipping_status(r.get("shipping_status")),
+        phone_status=_normalize_phone_status(r.get("phone_status")),
         courier_company=r.get("courier_company"),
         tracking_number=r.get("tracking_number"),
         courier_order_code=r.get("courier_order_code"),
@@ -676,7 +673,7 @@ async def get_customer_detail(customer_id: int):
         phone_number=c["phone_number"],
         email=c["email"],
         shipping_address=c.get("shipping_address"),
-        shipping_status=_normalize_shipping_status(c.get("shipping_status")),
+        phone_status=_normalize_phone_status(c.get("phone_status")),
         courier_company=c.get("courier_company"),
         tracking_number=c.get("tracking_number"),
         courier_order_code=c.get("courier_order_code"),
@@ -702,7 +699,7 @@ async def get_customer_detail(customer_id: int):
 
 
 @app.post("/api/customers", status_code=201)
-async def add_customer(data: CustomerCreate, background_tasks: BackgroundTasks = None):
+async def add_customer(data: CustomerCreate):
     phone_number = normalize_optional_text(data.phone_number)
     if phone_number:
         async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -736,10 +733,6 @@ async def add_customer(data: CustomerCreate, background_tasks: BackgroundTasks =
             customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
             message = "客户已录入，已分配激活码并创建激活任务"
             sim_activation_code = sim["code"]
-            # 后台验证 SIM 激活码是否有效（fire-and-forget，不阻塞响应）
-            # background_tasks=None 时为直接函数调用（测试），跳过
-            if background_tasks is not None:
-                background_tasks.add_task(_run_sim_code_validation, sim["id"], sim["code"])
         else:
             initial_password = None
             customer_id = await _create_customer_without_activation(data, email_bundle)
@@ -1224,24 +1217,8 @@ def _sim_code_out(row) -> SimCodeOut:
         notes=row["notes"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
-        last_validated_at=row["last_validated_at"] if "last_validated_at" in row.keys() else None,
-        last_validation_result=row["last_validation_result"] if "last_validation_result" in row.keys() else None,
-        last_validation_error=row["last_validation_error"] if "last_validation_error" in row.keys() else None,
     )
 
-
-async def _run_sim_code_validation(sim_code_id: int, code_value: str) -> None:
-    """后台任务：调用 Playwright 验证激活码，写回 DB。
-    出任何异常都吞掉（fire-and-forget），避免污染主请求响应。"""
-    try:
-        from activation_validator import validate_activation_code, save_validation_result
-        result = await validate_activation_code(code_value)
-        await save_validation_result(DATABASE_PATH, sim_code_id, result)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "Background SIM code validation failed (sim_id=%s)", sim_code_id
-        )
 
 
 async def _detach_sim_code_from_customer(
@@ -1301,11 +1278,7 @@ async def import_sim_codes(data: SimCodeImport):
 
 
 @app.patch("/api/sim-codes/{sim_code_id}", response_model=SimCodeOut)
-async def update_sim_code(
-    sim_code_id: int,
-    data: SimCodeUpdate,
-    background_tasks: BackgroundTasks = None,
-):
+async def update_sim_code(sim_code_id: int, data: SimCodeUpdate):
     status = _normalize_sim_code_status(data.status)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -1314,7 +1287,6 @@ async def update_sim_code(
             row = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
             if not row:
                 raise HTTPException(status_code=404, detail="激活码不存在")
-            old_status = row["status"]
             customer_id = row["customer_id"]
             if customer_id:
                 customer = await fetch_one(
@@ -1353,9 +1325,6 @@ async def update_sim_code(
             )
             updated = await fetch_one(db, "SELECT * FROM sim_codes WHERE id = ?", (sim_code_id,))
             await db.commit()
-            # 状态从未分配 → 已分配 时触发后台验证
-            if old_status == "未分配" and status == "已分配" and background_tasks is not None:
-                background_tasks.add_task(_run_sim_code_validation, sim_code_id, updated["code"])
             return _sim_code_out(updated)
         except HTTPException:
             await db.rollback()
@@ -1364,18 +1333,6 @@ async def update_sim_code(
             await db.rollback()
             raise
 
-
-@app.post("/api/sim-codes/{sim_code_id}/validate", status_code=200)
-async def trigger_sim_code_validation(sim_code_id: int, background_tasks: BackgroundTasks = None):
-    """手动重新验证激活码。后台异步执行，返回立即。"""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        row = await fetch_one(db, "SELECT id, code FROM sim_codes WHERE id = ?", (sim_code_id,))
-        if not row:
-            raise HTTPException(status_code=404, detail="激活码不存在")
-        if background_tasks is not None:
-            background_tasks.add_task(_run_sim_code_validation, row["id"], row["code"])
-    return {"ok": True, "message": "已加入后台验证队列"}
 
 
 @app.delete("/api/sim-codes/{sim_code_id}", status_code=200)
@@ -1516,14 +1473,13 @@ async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) 
                 raise HTTPException(status_code=409, detail="该 SIM 激活码当前不可分配，可能已被使用、作废或分配给其他客户")
             cursor = await db.execute(
                 """INSERT INTO customers
-                   (phone_number, email, shipping_address, shipping_status, activation_date,
+                   (phone_number, email, shipping_address, activation_date,
                     moemail_id, moemail_address, share_link, is_moemail_auto,
                     sim_code_id, sim_activation_code, initial_password,
                     email_provider_id, email_account_id, email_provider_domain, activation_status)
-                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     email_bundle.get("email", ""),
-                    DEFAULT_SHIPPING_STATUS,
                     activation_date,
                     email_bundle.get("moemail_id"),
                     email_bundle.get("moemail_address"),
@@ -2139,7 +2095,7 @@ async def _restore_backup_payload(data: dict) -> dict:
             for c in customers:
                 await db.execute(
                     """INSERT INTO customers
-                       (id, phone_number, email, shipping_address, shipping_status, courier_company,
+                       (id, phone_number, email, shipping_address, courier_company,
                         tracking_number, courier_order_code, courier_print_data, activation_date,
                         moemail_id, moemail_address, share_link, is_moemail_auto,
                         sim_code_id, sim_activation_code, activation_status, activation_error, activated_at,
@@ -2147,7 +2103,7 @@ async def _restore_backup_payload(data: dict) -> dict:
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (c["id"], normalize_optional_text(c.get("phone_number")), c["email"],
                      normalize_optional_text(c.get("shipping_address")),
-                     _normalize_shipping_status(c.get("shipping_status")),
+                     _normalize_phone_status(c.get("phone_status") or c.get("shipping_status")),
                      normalize_optional_text(c.get("courier_company")),
                      normalize_optional_text(c.get("tracking_number")),
                      normalize_optional_text(c.get("courier_order_code")),

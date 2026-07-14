@@ -6,6 +6,3 @@ aiosqlite==0.20.0
 python-multipart==0.0.9
 httpx>=0.27.0
 qrcode[pil]>=7.0
-# 可选：激活码在线验证（pip install playwright && playwright install chromium）
-# 没装也能跑，只是验证步骤会跳过（UI 上显示「未验证（缺依赖）」）
-playwright>=1.40

@@ -3,7 +3,7 @@ from datetime import date
 from typing import Any, Literal, Optional
 
 
-ShippingStatus = Literal["未发货", "已发货", "已收货"]
+PhoneStatus = Literal["激活", "封号", "投诉", "退款", "丢失", "作废"]
 ActivationStatus = Literal["未开始", "已分配激活码", "等待客户端领取", "激活中", "等待人工支付", "等待转 eSIM", "已完成", "失败"]
 SimCodeStatus = Literal["未分配", "已分配", "激活中", "已使用", "失败", "作废"]
 
@@ -12,7 +12,7 @@ class CustomerCreate(BaseModel):
     phone_number: Optional[str] = None
     email: str = ""
     shipping_address: Optional[str] = None
-    shipping_status: ShippingStatus = "未发货"
+    phone_status: PhoneStatus = "激活"
     courier_company: Optional[str] = None
     tracking_number: Optional[str] = None
     courier_order_code: Optional[str] = None
@@ -27,7 +27,7 @@ class CustomerUpdate(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
     shipping_address: Optional[str] = None
-    shipping_status: Optional[ShippingStatus] = None
+    phone_status: Optional[PhoneStatus] = None
     courier_company: Optional[str] = None
     tracking_number: Optional[str] = None
     courier_order_code: Optional[str] = None
@@ -42,7 +42,7 @@ class CustomerOut(BaseModel):
     phone_number: Optional[str]
     email: str
     shipping_address: Optional[str]
-    shipping_status: ShippingStatus
+    phone_status: PhoneStatus
     courier_company: Optional[str]
     tracking_number: Optional[str]
     courier_order_code: Optional[str]
@@ -70,7 +70,7 @@ class CustomerDetail(BaseModel):
     phone_number: Optional[str]
     email: str
     shipping_address: Optional[str]
-    shipping_status: ShippingStatus
+    phone_status: PhoneStatus
     courier_company: Optional[str]
     tracking_number: Optional[str]
     courier_order_code: Optional[str]
@@ -127,9 +127,6 @@ class SimCodeOut(BaseModel):
     notes: Optional[str] = None
     created_at: str
     updated_at: str
-    last_validated_at: Optional[str] = None
-    last_validation_result: Optional[str] = None  # 'valid' | 'invalid' | 'error' | 'skipped'
-    last_validation_error: Optional[str] = None
 
 
 class ActivationLogIn(BaseModel):

@@ -30,6 +30,7 @@ async def init_db():
                 email_provider_domain TEXT,
                 public_token TEXT,
                 public_version INTEGER NOT NULL DEFAULT 1,
+                phone_status TEXT NOT NULL DEFAULT '激活',
                 payment_changed_at TEXT,
                 payment_updated_at TEXT,
                 payment_last_checked_at TEXT,
@@ -62,6 +63,9 @@ async def init_db():
         await _ensure_column(
             db, "customers", "public_version", "INTEGER NOT NULL DEFAULT 1"
         )
+        await _ensure_column(
+            db, "customers", "phone_status", "TEXT NOT NULL DEFAULT '激活'"
+        )
         await _ensure_column(db, "customers", "payment_changed_at", "TEXT")
         await _ensure_column(db, "customers", "payment_updated_at", "TEXT")
         await _ensure_column(db, "customers", "payment_last_checked_at", "TEXT")
@@ -74,7 +78,6 @@ async def init_db():
         await _ensure_column(db, "customers", "activated_at", "TEXT")
         await _ensure_column(db, "customers", "automation_lock_owner", "TEXT")
         await _ensure_column(db, "customers", "automation_locked_at", "TEXT")
-        await _ensure_shipping_status_values(db)
         await _ensure_activation_status_values(db)
         await _ensure_nullable_phone_number(db)
         await db.execute("""
@@ -88,9 +91,6 @@ async def init_db():
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        await _ensure_column(db, "sim_codes", "last_validated_at", "TEXT")
-        await _ensure_column(db, "sim_codes", "last_validation_result", "TEXT")
-        await _ensure_column(db, "sim_codes", "last_validation_error", "TEXT")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS activation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,16 +196,6 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
         FROM customers_old
     """)
     await db.execute("DROP TABLE customers_old")
-
-
-async def _ensure_shipping_status_values(db: aiosqlite.Connection):
-    await db.execute("""
-        UPDATE customers
-        SET shipping_status = '未发货'
-        WHERE shipping_status IS NULL
-           OR shipping_status = ''
-           OR shipping_status NOT IN ('未发货', '已发货', '已收货')
-    """)
 
 
 async def _ensure_activation_status_values(db: aiosqlite.Connection):
