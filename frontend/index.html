@@ -1252,7 +1252,36 @@
         </div>
         <div id="worker-deploy-status" style="margin-top:8px;padding:8px 12px;background:#f9fafb;border-radius:6px;"></div>
 
-        <h3 style="margin-top:32px;">② 部署步骤</h3>
+        <h3 style="margin-top:32px;">② 部署方式（推荐 GitHub 自动部署）</h3>
+        <p class="muted">本仓库的 <code>worker-src/</code> 目录已经包含部署所需的所有文件（Worker 代码 + wrangler.toml + package.json + README）。</p>
+
+        <h4 style="margin-top:14px;font-size:14px;">方式 A：GitHub 自动部署（推荐）</h4>
+        <ol class="deploy-steps" style="line-height:1.9;">
+          <li>Cloudflare 控制台 → <a href="https://dash.cloudflare.com/?to=/:account/workers" target="_blank" rel="noopener">Workers &amp; Pages</a> → <strong>Create</strong> → <strong>Pages</strong> → <strong>Connect to Git</strong></li>
+          <li>选择仓库 <code>dttxorg/giffgaff-label-manager</code></li>
+          <li>配置：
+            <ul style="margin:4px 0;">
+              <li>Production branch: <code>main</code></li>
+              <li>Build command: <em>留空</em></li>
+              <li>Build output directory: <em>留空</em></li>
+              <li>Root directory (advanced): <code>worker-src</code></li>
+            </ul>
+          </li>
+          <li>点 <strong>Save and Deploy</strong>（首次会失败因为没设环境变量）</li>
+          <li>进项目 <strong>Settings</strong> → <strong>Environment variables</strong> → 加：
+            <ul style="margin:4px 0;">
+              <li>Key: <code>API_BASE</code> · Value: <code>https://label.example.com</code>（你 admin 的实际 URL，<strong>不要带尾部斜杠</strong>）</li>
+            </ul>
+          </li>
+          <li>回到 <strong>Deployments</strong> → <strong>Retry deployment</strong></li>
+          <li>部署成功后，去 <strong>Settings</strong> → <strong>Triggers</strong> → <strong>Custom Domains</strong> → <strong>Add Custom Domain</strong> → 填 <code>card.example.com</code>（或你想用的子域）</li>
+          <li>回到本页面顶部「① Worker 域名」填 <code>https://card.example.com</code>，点保存</li>
+          <li>以后改代码 <code>git push</code> 到 main，Cloudflare 自动部署新版本</li>
+        </ol>
+
+        <h4 style="margin-top:24px;font-size:14px;">方式 B：手动 wrangler CLI</h4>
+        <p class="muted">如果你想完全手动控制部署：</p>
+        <ol class="deploy-steps" style="line-height:1.9;">
         <ol class="deploy-steps" style="line-height:1.9;">
           <li>本机安装 <a href="https://developers.cloudflare.com/workers/wrangler/install-and-update/" target="_blank" rel="noopener">wrangler</a>（Cloudflare 官方 CLI）：
             <pre class="cmd">npm install -g wrangler</pre>
@@ -1343,7 +1372,23 @@ wrangler init --type javascript --no-git</pre>
           <div class="setting-item wide">
             <label>扫码页底部说明</label>
             <textarea id="s-public-page-markdown" rows="6" placeholder="例如：&#10;## 如何使用这个邮箱&#10;&#10;这是 Giffgaff 注册用的临时邮箱，请妥善保存。&#10;&#10;注册入口：<https://www.giffgaff.com>"></textarea>
-            <span class="setting-hint">客户扫码后展示在邮箱下方的提示文字。支持 Markdown 语法（段落、**粗体**、`行内代码`、[链接](https://...)）；HTML 标签会被自动转义，不会执行。</span>
+            <span class="setting-hint">客户扫码后展示在邮箱下方的提示文字。支持 Markdown 语法（段落、**粗体**、`行内代码`、## 标题、[链接](https://...)）。HTML 标签会被自动转义。</span>
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">支持的变量（点击展开）</summary>
+              <div class="code-block" style="margin-top:6px;font-size:12px;">
+                <code>{phone_number} {email} {first_name} {last_name} {full_name}<br>
+{address} {city} {postcode} {full_address}<br>
+{moemail_address} {sim_activation_code} {initial_password}<br>
+{activation_date} {phone_status} {shipping_address}<br>
+{share_link}</code>
+                <p style="margin:8px 0 0 0;">在 markdown 文本里写 <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;">{phone_number}</code>，会自动替换成该客户的手机号。未填写的字段替换为空字符串。</p>
+              </div>
+            </details>
+          </div>
+          <div class="setting-item wide">
+            <label>扫码页全局变量（JSON）</label>
+            <textarea id="s-custom-public-vars" rows="3" placeholder='例如：{"support_phone": "400-123-4567", "telegram": "@myname"}'></textarea>
+            <span class="setting-hint">在「扫码页底部说明」里可以用 <code>{support_phone}</code> 这种写法引用这些变量。变量名只允许字母数字下划线。优先级低于客户字段——同名变量客户值会覆盖这里的值。</span>
           </div>
 	          <div class="setting-item wide">
 	            <label>桌面客户端 Agent Token</label>
@@ -2890,8 +2935,9 @@ async function loadSettings() {
 	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
 	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
 	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
-	    $('s-public-page-markdown').value = s.public_page_markdown || '';
-	    $('s-public-worker-domain').value = s.public_worker_domain || '';
+    $('s-public-page-markdown').value = s.public_page_markdown || '';
+    $('s-custom-public-vars').value = s.custom_public_vars || '';
+    $('s-public-worker-domain').value = s.public_worker_domain || '';
 	    appSettings.public_worker_domain = s.public_worker_domain || null;
 	    updateWorkerStatus(s.public_worker_domain);
 	    for (const key of CAINIAO_SETTINGS) {
@@ -2911,6 +2957,7 @@ async function saveSettings() {
     giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
     agent_api_token: $('s-agent-token').value.trim() || null,
     public_page_markdown: $('s-public-page-markdown').value,
+    custom_public_vars: $('s-custom-public-vars').value,
     public_worker_domain: $('s-public-worker-domain').value.trim(),
   };
 	  for (const key of CAINIAO_SETTINGS) {

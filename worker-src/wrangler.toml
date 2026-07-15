@@ -1,0 +1,8 @@
+name = "public-card"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# 从 Cloudflare 控制台 / 部署时设置 API_BASE 变量。
+# 它应该是你 admin 后台（如 label.example.com）的完整 URL，不带尾部斜杠。
+[vars]
+API_BASE = "https://label.example.com"

@@ -418,6 +418,7 @@ async def get_sys_settings():
         agent_api_token_source=_agent_token_source(rows),
         public_page_markdown=rows.get("public_page_markdown", ""),
         public_worker_domain=rows.get("public_worker_domain"),
+        custom_public_vars=rows.get("custom_public_vars", "") or "",
     )
 
 
@@ -436,6 +437,24 @@ async def update_settings(data: SystemSettings):
         # 去掉尾部斜杠
         v = v.rstrip("/")
         await set_setting("public_worker_domain", v)
+    if data.custom_public_vars is not None:
+        # 校验是合法 JSON object
+        import json as _json
+        raw = data.custom_public_vars.strip()
+        if raw:
+            try:
+                parsed = _json.loads(raw)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"自定义变量必须是合法 JSON：{exc}")
+            if not isinstance(parsed, dict):
+                raise HTTPException(status_code=400, detail="自定义变量必须是 JSON object（key: value 形式）")
+            for k in parsed.keys():
+                if not isinstance(k, str) or not re.match(r"^[a-zA-Z0-9_]+$", k):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"变量名 {k!r} 非法：只允许字母数字下划线",
+                    )
+        await set_setting("custom_public_vars", raw)
     return {"ok": True}
 
 

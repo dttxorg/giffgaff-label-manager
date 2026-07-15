@@ -2,14 +2,14 @@
 路径前缀 /p/，不挂在 /api/* 下，自动绕过后台口令鉴权。
 """
 import html
+import json
 import os
 import re
 from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from fastapi.responses import JSONResponse
 import crud
 from database import DATABASE_PATH
 
@@ -45,18 +45,33 @@ def _security_headers() -> dict:
     }
 
 
+# Markdown 里的 {var_name} 占位符。客户字段优先，没有的留空。
+# 用户也可以在 system_settings.custom_public_vars 里定义全局变量（JSON 格式），
+# 优先级低于客户字段（防止全局变量覆盖客户数据）。
+def _substitute_variables(text: str, vars: dict) -> str:
+    if not text or "{" not in text:
+        return text
+    def _repl(m):
+        key = m.group(1).strip()
+        if key not in vars:
+            return ""  # 未知变量留空（不显示 {xxx}）
+        v = vars[key]
+        return str(v) if v is not None else ""
+    return re.sub(r"\{([a-zA-Z0-9_]+)\}", _repl, text)
+
+
 def _markdown_to_safe_html(text: str) -> str:
-    """极简 Markdown 渲染：段落 / 行内 code / **加粗** / [text](url)。
+    """极简 Markdown 渲染：段落 / 行内 code / **加粗** / ## 标题 / [text](url)。
     全部 HTML 实体先转义，再做白名单替换，避免 XSS。"""
     if not text or not text.strip():
         return '<p class="empty">（运营尚未填写提示内容）</p>'
     out = []
     for raw_line in text.replace("\r\n", "\n").split("\n"):
         line = html.escape(raw_line)
-        # 标题：## xxx / ### xxx → h3 / h4（不暴露 h1/h2，避免与页面主标题竞争）
+        # 标题：## xxx / ### xxx → h3 / h4
         h_match = re.match(r"^(#{1,3})\s+(.+)$", raw_line)
         if h_match:
-            level = min(len(h_match.group(1)) + 1, 6)  # #->h2, ##->h3, ###->h4
+            level = min(len(h_match.group(1)) + 1, 6)
             content = html.escape(h_match.group(2))
             tag = f"h{level}"
             out.append(f"<{tag}>{content}</{tag}>")
@@ -73,7 +88,6 @@ def _markdown_to_safe_html(text: str) -> str:
                     f'<a href="{html.escape(url)}" target="_blank" '
                     f'rel="noopener noreferrer">{label}</a>'
                 )
-            # 非法 scheme：丢弃 URL，只保留 label 作为纯文本（防钓鱼）
             return html.escape(label)
 
         line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_repl, line)
@@ -94,11 +108,70 @@ def _markdown_to_safe_html(text: str) -> str:
     return body or '<p class="empty">（运营尚未填写提示内容）</p>'
 
 
-def _render_card(email: Optional[str], hint_markdown: str) -> str:
+def _build_substitution_vars(customer_row: dict) -> dict:
+    """从客户行 + 系统设置里组装变量字典（供 markdown 替换用）。"""
+    # 客户字段
+    vars_ = {
+        "phone_number": customer_row.get("phone_number") or "",
+        "email": customer_row.get("email") or "",
+        "moemail_address": customer_row.get("moemail_address") or "",
+        "first_name": customer_row.get("first_name") or "",
+        "last_name": customer_row.get("last_name") or "",
+        "full_name": (
+            f"{customer_row.get('last_name') or ''} "
+            f"{customer_row.get('first_name') or ''}"
+        ).strip(),
+        "address": customer_row.get("address") or "",
+        "city": customer_row.get("city") or "",
+        "postcode": customer_row.get("postcode") or "",
+        "full_address": ", ".join(
+            filter(None, [
+                customer_row.get("address") or "",
+                customer_row.get("city") or "",
+                customer_row.get("postcode") or "",
+            ])
+        ),
+        "sim_activation_code": customer_row.get("sim_activation_code") or "",
+        "initial_password": customer_row.get("initial_password") or "",
+        "share_link": customer_row.get("share_link") or "",
+        "activation_date": customer_row.get("activation_date") or "",
+        "phone_status": customer_row.get("phone_status") or "激活",
+        "shipping_address": customer_row.get("shipping_address") or "",
+    }
+    # 全局自定义变量（来自 system_settings.custom_public_vars，JSON 格式）
+    # 优先级低于客户字段（不覆盖客户数据）
+    import sqlite3 as _sqlite3
+    from database import DATABASE_PATH as DB_PATH
+    # 全局自定义变量（来自 system_settings.custom_public_vars，JSON 格式）
+    # 优先级低于客户字段（不覆盖客户数据）
+    try:
+        with _sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key = 'custom_public_vars'"
+            ).fetchone()
+        custom_raw = row[0] if row and row[0] else ""
+        if custom_raw.strip():
+            parsed = json.loads(custom_raw)
+            if isinstance(parsed, dict):
+                for k, v in parsed.items():
+                    if k not in vars_ or not vars_[k]:
+                        vars_[k] = str(v) if v is not None else ""
+    except Exception:
+        pass
+    return vars_
+
+
+def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     tpl = _load_template()
     safe_email = html.escape(email) if email else ""
-    display = html.escape(email) if email else '<span class="empty">（暂未配置）</span>'
-    hint_html = _markdown_to_safe_html(hint_markdown)
+    if email:
+        display = html.escape(email)
+    else:
+        display = '<span class="empty">（暂未配置）</span>'
+    # 1) 变量替换（先于 markdown 渲染）
+    hint_md = _substitute_variables(hint_markdown, vars_)
+    # 2) markdown → html
+    hint_html = _markdown_to_safe_html(hint_md)
     return (
         tpl
         .replace("__EMAIL__", safe_email)
@@ -111,23 +184,24 @@ def _render_card(email: Optional[str], hint_markdown: str) -> str:
 async def public_card_page(token: str):
     if not token or len(token) > 128:
         return HTMLResponse(
-            _render_card(None, ""),
+            _render_card(None, "", {}),
             status_code=404,
             headers=_security_headers(),
         )
     card = await crud.get_public_card(token)
     if not card:
         return HTMLResponse(
-            _render_card(None, ""),
+            _render_card(None, "", {}),
             status_code=404,
             headers=_security_headers(),
         )
+    # 读取设置 + 组装变量
     settings_rows = await crud.get_settings()
     hint_md = settings_rows.get("public_page_markdown", "") or ""
+    vars_ = _build_substitution_vars(card)
     headers = _security_headers()
-    # 给 Worker / CDN 提供版本号，方便做版本化缓存（token 重新生成时自动失效）
     headers["X-Cache-Version"] = str(card["public_version"])
-    return HTMLResponse(_render_card(card["email"], hint_md), headers=headers)
+    return HTMLResponse(_render_card(card["email"], hint_md, vars_), headers=headers)
 
 
 @router.get("/api/public/{token}/version")

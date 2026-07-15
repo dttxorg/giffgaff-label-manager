@@ -500,3 +500,148 @@ def test_random_identity_postcode_matches_city():
                 break
         assert prefix_letters in CITY_POSTCODES[city], \
             f"postcode {postcode!r} prefix {prefix_letters!r} 不在 {city!r} 的邮编区 {CITY_POSTCODES[city]}"
+
+
+# ── Markdown 变量替换 ──
+
+
+def test_substitute_simple_var():
+    from public_routes import _substitute_variables
+    assert _substitute_variables("Hello {name}", {"name": "Alice"}) == "Hello Alice"
+    assert _substitute_variables("Phone: {phone}", {"phone": "447400123456"}) == "Phone: 447400123456"
+
+
+def test_substitute_missing_var_replaced_with_empty():
+    from public_routes import _substitute_variables
+    assert _substitute_variables("Phone: {phone}", {}) == "Phone: "
+
+
+def test_substitute_multiple_vars_in_one_line():
+    from public_routes import _substitute_variables
+    out = _substitute_variables(
+        "{first_name} {last_name} 在 {city} {postcode}",
+        {"first_name": "Emma", "last_name": "Smith", "city": "London", "postcode": "NW1 6XE"},
+    )
+    assert out == "Emma Smith 在 London NW1 6XE"
+
+
+def test_substitute_unknown_var_returns_empty():
+    from public_routes import _substitute_variables
+    # {xxx} 不在 vars 里，替换为空（不显示 {xxx}）
+    assert _substitute_variables("Test {unknown}", {}) == "Test "
+
+
+def test_substitute_escapes_braces_correctly():
+    from public_routes import _substitute_variables
+    # 含连字符的「变量名」不匹配正则（要求字母数字下划线），所以原样保留
+    assert _substitute_variables("Test {a-b}", {"a-b": "x"}) == "Test {a-b}"
+
+
+def test_substitute_none_values():
+    from public_routes import _substitute_variables
+    assert _substitute_variables("Phone: {x}", {"x": None}) == "Phone: "
+
+
+def test_build_substitution_vars_includes_customer_fields():
+    """客户字段（phone/email/name/address/...）都能被引用。"""
+    from public_routes import _build_substitution_vars
+    row = {
+        "email": "alice@x.com", "phone_number": "447400123456",
+        "first_name": "Emma", "last_name": "Smith",
+        "address": "42 Baker Street", "city": "London", "postcode": "NW1 6XE",
+        "sim_activation_code": "ABC123", "initial_password": "Pwd123",
+        "share_link": "https://share", "activation_date": "2026-07-14",
+        "phone_status": "激活", "shipping_address": "上海",
+        "moemail_address": "alice@x.com",
+    }
+    vars_ = _build_substitution_vars(row)
+    assert vars_["phone_number"] == "447400123456"
+    assert vars_["first_name"] == "Emma"
+    assert vars_["last_name"] == "Smith"
+    assert vars_["full_name"] == "Smith Emma"
+    assert vars_["email"] == "alice@x.com"
+    assert vars_["full_address"] == "42 Baker Street, London, NW1 6XE"
+    assert vars_["sim_activation_code"] == "ABC123"
+    assert vars_["phone_status"] == "激活"
+
+
+def test_custom_public_vars_round_trip(client):
+    """全局自定义变量可以保存和读取。"""
+    r = client.patch("/api/settings", json={
+        "custom_public_vars": '{"support_phone": "400-123-4567", "telegram": "@myname"}'
+    })
+    assert r.status_code == 200
+    s = client.get("/api/settings").json()
+    assert "support_phone" in s["custom_public_vars"]
+    assert "400-123-4567" in s["custom_public_vars"]
+
+
+def test_custom_public_vars_invalid_json_rejected(client):
+    r = client.patch("/api/settings", json={"custom_public_vars": "{bad json"})
+    assert r.status_code == 400
+
+
+def test_custom_public_vars_not_object_rejected(client):
+    r = client.patch("/api/settings", json={"custom_public_vars": "[1, 2, 3]"})
+    assert r.status_code == 400
+
+
+def test_custom_public_vars_invalid_name_rejected(client):
+    r = client.patch("/api/settings", json={
+        "custom_public_vars": '{"bad-name": "x"}'  # 含连字符
+    })
+    assert r.status_code == 400
+
+
+def test_public_page_substitutes_customer_vars(client):
+    """完整的端到端：客户字段被替换到 markdown 里。"""
+    import crud
+    from models import CustomerCreate
+    cid = asyncio.run(crud.create_customer(CustomerCreate(
+        email="a@x.com",
+        activation_date="2026-07-14",
+    )))
+    # 手工设字段（绕开 regenerate_identity 的随机）
+    asyncio.run(crud.update_customer(cid, type("U", (), {
+        "phone_number": None, "email": None, "shipping_address": None,
+        "phone_status": None, "courier_company": None, "tracking_number": None,
+        "courier_order_code": None, "courier_print_data": None,
+        "activation_date": None, "activation_status": None, "activation_error": None,
+        "first_name": "Emma", "last_name": "Smith", "address": "42 Baker Street",
+        "city": "London", "postcode": "NW1 6XE",
+    })()))
+
+    # 设置 markdown 模板
+    client.patch("/api/settings", json={
+        "public_page_markdown": "**Name**: {first_name} {last_name}\n\n**Address**: {full_address}\n\n**Phone**: {phone_number}"
+    })
+
+    # 获取 token
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    r = client.get(f"/p/{token}")
+    assert r.status_code == 200
+    body = r.text
+    assert "<strong>Name</strong>: Emma Smith" in body or "**Name**: Emma Smith" in body
+    assert "42 Baker Street, London, NW1 6XE" in body
+    assert "447400123456" not in body  # phone_number 是 None，没设就不应出现
+    # 没填的字段应该替换为空
+    assert "{phone_number}" not in body
+
+
+def test_public_page_substitutes_custom_vars(client):
+    """全局自定义变量也被替换。"""
+    import crud
+    from models import CustomerCreate
+    cid = asyncio.run(crud.create_customer(CustomerCreate(
+        email="a@x.com", activation_date="2026-07-14",
+    )))
+    client.patch("/api/settings", json={
+        "custom_public_vars": '{"support_phone": "400-123-4567", "telegram": "@myname"}',
+        "public_page_markdown": "**客服**: {support_phone}\n\n**TG**: {telegram}",
+    })
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    r = client.get(f"/p/{token}")
+    assert r.status_code == 200
+    body = r.text
+    assert "400-123-4567" in body
+    assert "@myname" in body

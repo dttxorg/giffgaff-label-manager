@@ -1,0 +1,8 @@
+{
+  "name": "public-card-worker",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

@@ -174,15 +174,19 @@ async def get_public_email(token: str) -> Optional[str]:
 
 
 async def get_public_card(token: str) -> Optional[dict]:
-    """公开页面所需的最少字段：email + public_version。
-    绝不返回手机号、地址、激活码等敏感字段。"""
+    """扫码公开页面所需的客户字段：用于渲染 email + 替换 markdown 里的 {var}。
+    仍然只返回「已配置好」的客户记录——没有有效 token 返 None。"""
     if not token or len(token) > 128:
         return None
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         row = await fetch_one(
             db,
-            "SELECT email, public_version FROM customers WHERE public_token = ?",
+            """SELECT email, public_version, phone_number, moemail_address,
+                      first_name, last_name, address, city, postcode,
+                      sim_activation_code, initial_password, share_link,
+                      activation_date, phone_status, shipping_address
+               FROM customers WHERE public_token = ?""",
             (token,),
         )
         if not row:
@@ -193,6 +197,19 @@ async def get_public_card(token: str) -> Optional[dict]:
         return {
             "email": email,
             "public_version": int(row["public_version"] or 1),
+            "phone_number": row["phone_number"],
+            "moemail_address": row["moemail_address"],
+            "first_name": row["first_name"],
+            "last_name": row["last_name"],
+            "address": row["address"],
+            "city": row["city"],
+            "postcode": row["postcode"],
+            "sim_activation_code": row["sim_activation_code"],
+            "initial_password": row["initial_password"],
+            "share_link": row["share_link"],
+            "activation_date": row["activation_date"],
+            "phone_status": row["phone_status"],
+            "shipping_address": row["shipping_address"],
         }
 
 
