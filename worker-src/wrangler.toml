@@ -7,4 +7,4 @@ compatibility_date = "2025-01-01"
 # 也就是说，wrangler.toml 改了不会影响 Cloudflare Dashboard 已经配的 API_BASE。
 # 本地调试（wrangler dev）时直接修改下面这一行即可。
 [vars]
-API_BASE = "https://label.example.com"
+API_BASE = "https://gg.6667766.xyz"
