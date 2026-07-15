@@ -64,16 +64,27 @@ http://localhost:8000
 
 首次启动会自动创建数据库。旧数据库如果缺少 MoEmail 字段，或手机号字段仍是必填约束，也会在启动时自动补齐/迁移。
 
-### 3. 设置访问口令
+### 3. 设置隐藏管理入口和访问口令
 
-如果部署到公网，建议配置一个访问口令：
+如果部署到公网，配置随机隐藏入口和独立访问口令：
 
 ```bash
+export ADMIN_ENTRY_PATH="$(python3 -c 'import secrets; print("/" + secrets.token_urlsafe(32))')"
 export APP_PASSWORD="换成你的强口令"
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-设置后，访问页面会先要求输入口令，所有 API 也会被同一个口令保护。未设置 `APP_PASSWORD` 时，系统默认不启用登录保护，适合本地开发。
+请把生成的 `ADMIN_ENTRY_PATH` 安全保存到密码管理器，不要提交到 GitHub、聊天记录或公开文档。部署后只能先访问：
+
+```text
+https://你的后台域名/<ADMIN_ENTRY_PATH 的随机路径>
+```
+
+入口会写入带 HMAC 签名的 `HttpOnly`、`Secure`、`SameSite=Lax` 会话 Cookie，然后跳转到登录页面。没有入口 Cookie 时，管理页面、静态资源和普通管理 API 都只返回统一的 `404 Not found`；通过入口后仍必须输入 `APP_PASSWORD`，隐藏路径不能替代密码。
+
+由于入口 Cookie 强制使用 `Secure`，生产后台必须使用 HTTPS。`ADMIN_ENTRY_PATH` 必须是以 `/` 开头、至少 32 位的单段 URL-safe 随机路径；配置弱路径或只配置入口但不配置 `APP_PASSWORD` 时，服务会拒绝启动。本地 HTTP 开发可以同时不设置这两个变量，沿用原来的开发模式。
+
+公开联系方式页面 `/p/*`、Worker 回调 `/api/public/*` 不受隐藏入口影响。桌面客户端 `/api/agent/*` 也不使用浏览器入口 Cookie，继续由独立的 `AGENT_API_TOKEN` 保护。
 
 桌面客户端 API 使用独立 Token：
 

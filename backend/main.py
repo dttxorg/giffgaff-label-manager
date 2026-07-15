@@ -53,7 +53,9 @@ app = FastAPI(title="giffgaff-label-manager API")
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", "").strip()
+ADMIN_ENTRY_PATH = os.getenv("ADMIN_ENTRY_PATH", "").strip()
 AUTH_COOKIE_NAME = "giffgaff_label_auth"
+ADMIN_ENTRY_COOKIE_NAME = "giffgaff_admin_entry"
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_PHONE_STATUS = "激活"
 PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
@@ -149,6 +151,81 @@ def _is_authenticated(request: Request) -> bool:
         return True
     cookie = request.cookies.get(AUTH_COOKIE_NAME, "")
     return hmac.compare_digest(cookie, _auth_token())
+
+
+def _validated_admin_entry_path() -> str:
+    """返回规范化后的隐藏入口；空值表示本地开发时不启用入口门禁。"""
+    value = (ADMIN_ENTRY_PATH or "").strip()
+    if not value:
+        return ""
+    # 只接受单段、至少 32 位的 URL-safe 随机路径，避免误配为 /admin 等弱入口。
+    if not re.fullmatch(r"/[A-Za-z0-9_-]{32,128}", value):
+        raise ValueError(
+            "ADMIN_ENTRY_PATH must be one URL-safe path segment with at least 32 characters"
+        )
+    return value
+
+
+def _validate_admin_entry_config() -> str:
+    path = _validated_admin_entry_path()
+    if path and not APP_PASSWORD:
+        raise ValueError("APP_PASSWORD is required when ADMIN_ENTRY_PATH is configured")
+    return path
+
+
+def _admin_entry_signing_key(path: str) -> bytes:
+    material = f"{path}\0{APP_PASSWORD}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def _new_admin_entry_cookie(path: str) -> str:
+    payload = secrets.token_urlsafe(32)
+    signature = hmac.new(
+        _admin_entry_signing_key(path),
+        payload.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def _has_admin_entry_cookie(request: Request, path: str) -> bool:
+    value = request.cookies.get(ADMIN_ENTRY_COOKIE_NAME, "")
+    if not value or len(value) > 256 or "." not in value:
+        return False
+    payload, supplied_signature = value.rsplit(".", 1)
+    if not payload or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", payload):
+        return False
+    expected_signature = hmac.new(
+        _admin_entry_signing_key(path),
+        payload.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(supplied_signature, expected_signature)
+
+
+def _hidden_admin_not_found() -> Response:
+    return Response(
+        content="Not found",
+        status_code=404,
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+        },
+    )
+
+
+def _admin_config_error() -> Response:
+    return Response(
+        content="Server configuration error",
+        status_code=500,
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 async def _agent_api_tokens() -> list[str]:
@@ -358,14 +435,46 @@ def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
 
 @app.middleware("http")
 async def require_app_password(request, call_next):
+    path = request.url.path
+
+    # 二维码公开页与桌面客户端 API 不依赖隐藏管理入口。后者继续使用独立
+    # AGENT_API_TOKEN 鉴权，不属于浏览器管理界面。
+    entry_gate_exempt = (
+        path.startswith("/p/")
+        or path.startswith("/api/public/")
+        or path.startswith("/api/agent/")
+    )
+    if not entry_gate_exempt:
+        try:
+            admin_entry_path = _validate_admin_entry_config()
+        except ValueError:
+            return _admin_config_error()
+
+        if admin_entry_path:
+            if request.method == "GET" and path == admin_entry_path:
+                response = RedirectResponse(url="/index.html", status_code=302)
+                response.set_cookie(
+                    ADMIN_ENTRY_COOKIE_NAME,
+                    _new_admin_entry_cookie(admin_entry_path),
+                    path="/",
+                    httponly=True,
+                    secure=True,
+                    samesite="lax",
+                )
+                response.headers["Cache-Control"] = "no-store, max-age=0"
+                response.headers["Referrer-Policy"] = "no-referrer"
+                return response
+            if not _has_admin_entry_cookie(request, admin_entry_path):
+                return _hidden_admin_not_found()
+
     public_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/logout"}
     protected_prefixes = ("/api", "/docs", "/redoc", "/openapi.json")
-    if request.url.path.startswith("/api/agent"):
+    if path.startswith("/api/agent"):
         return await call_next(request)
     # /api/public/* 是 Cloudflare Worker 在边缘节点回调的，绕过后台口令鉴权
-    if request.url.path.startswith("/api/public/"):
+    if path.startswith("/api/public/"):
         return await call_next(request)
-    if _auth_enabled() and request.url.path not in public_paths and request.url.path.startswith(protected_prefixes):
+    if _auth_enabled() and path not in public_paths and path.startswith(protected_prefixes):
         if not _is_authenticated(request):
             return JSONResponse({"detail": "需要登录"}, status_code=401)
     return await call_next(request)
@@ -373,6 +482,7 @@ async def require_app_password(request, call_next):
 
 @app.on_event("startup")
 async def startup():
+    _validate_admin_entry_config()
     await init_db()
 
 
