@@ -1371,6 +1371,16 @@ wrangler init --type javascript --no-git</pre>
           </div>
           <div class="setting-item wide">
             <label>扫码页底部说明</label>
+            <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">
+              <button type="button" class="small ghost quick-insert" data-insert="📱 手机：{phone_number}">📱 手机</button>
+              <button type="button" class="small ghost quick-insert" data-insert="📧 邮箱：{email}">📧 邮箱</button>
+              <button type="button" class="small ghost quick-insert" data-insert="👤 姓名：{full_name}">👤 姓名</button>
+              <button type="button" class="small ghost quick-insert" data-insert="🏠 地址：{full_address}">🏠 地址</button>
+              <button type="button" class="small ghost quick-insert" data-insert="📅 开通：{activation_date}">📅 开通</button>
+              <button type="button" class="small ghost quick-insert" data-insert="💼 SIM：{sim_activation_code}">💼 SIM</button>
+              <button type="button" class="small ghost quick-insert" data-insert="✉️ 收件：{moemail_address}">✉️ 收件</button>
+              <button type="button" class="small ghost quick-insert" data-insert="🔗 分享：{share_link}">🔗 分享</button>
+            </div>
             <textarea id="s-public-page-markdown" rows="6" placeholder="例如：&#10;## 如何使用这个邮箱&#10;&#10;这是 Giffgaff 注册用的临时邮箱，请妥善保存。&#10;&#10;注册入口：<https://www.giffgaff.com>"></textarea>
             <span class="setting-hint">客户扫码后展示在邮箱下方的提示文字。支持 Markdown 语法（段落、**粗体**、`行内代码`、## 标题、[链接](https://...)）。HTML 标签会被自动转义。</span>
             <details style="margin-top:6px;">
@@ -1387,6 +1397,11 @@ wrangler init --type javascript --no-git</pre>
           </div>
           <div class="setting-item wide">
             <label>扫码页全局变量（JSON）</label>
+            <div style="margin-bottom:6px;display:flex;gap:6px;align-items:center;">
+              <input type="text" id="s-custom-var-name" placeholder="变量名（如 support_phone）" style="width:200px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+              <input type="text" id="s-custom-var-value" placeholder="值（如 400-123-4567）" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+              <button type="button" class="small blue" id="s-custom-var-add">＋ 添加</button>
+            </div>
             <textarea id="s-custom-public-vars" rows="3" placeholder='例如：{"support_phone": "400-123-4567", "telegram": "@myname"}'></textarea>
             <span class="setting-hint">在「扫码页底部说明」里可以用 <code>{support_phone}</code> 这种写法引用这些变量。变量名只允许字母数字下划线。优先级低于客户字段——同名变量客户值会覆盖这里的值。</span>
           </div>
@@ -2372,6 +2387,61 @@ function copyElText(elementId, message) {
     return;
   }
   copyText(value, message);
+}
+
+// 扫码页底部说明：在光标处插入文本（按钮 data-insert 属性提供片段）
+function bindQuickInsertButtons() {
+  document.querySelectorAll('.quick-insert').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const snippet = btn.dataset.insert;
+      const ta = $('s-public-page-markdown');
+      if (!ta || !snippet) return;
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const before = ta.value.slice(0, start);
+      const after = ta.value.slice(end);
+      // 智能加换行：如果前面没换行就加一个
+      const prefix = before.length && !before.endsWith('\n') ? '\n' : '';
+      ta.value = before + prefix + snippet + after;
+      const cursorPos = (before + prefix + snippet).length;
+      ta.focus();
+      ta.setSelectionRange(cursorPos, cursorPos);
+      toast(`已插入：${snippet}`, '');
+    });
+  });
+}
+
+// 扫码页全局变量 JSON：解析 + 添加 + 序列化
+function bindCustomVarAdd() {
+  const btn = $('s-custom-var-add');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const nameEl = $('s-custom-var-name');
+    const valueEl = $('s-custom-var-value');
+    const name = (nameEl.value || '').trim();
+    const value = valueEl.value || '';
+    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+      toast('变量名只能包含字母、数字、下划线', 'error');
+      nameEl.focus();
+      return;
+    }
+    const ta = $('s-custom-public-vars');
+    let parsed = {};
+    const raw = (ta.value || '').trim();
+    if (raw) {
+      try { parsed = JSON.parse(raw); }
+      catch (e) { toast('当前 JSON 格式错误，先修好再加', 'error'); ta.focus(); return; }
+      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+        toast('JSON 必须是 object 形式', 'error'); ta.focus(); return;
+      }
+    }
+    parsed[name] = value;
+    ta.value = JSON.stringify(parsed, null, 2);
+    nameEl.value = '';
+    valueEl.value = '';
+    nameEl.focus();
+    toast(`已添加变量：${name}`, 'success');
+  });
 }
 
 function renderIdentityFields(c) {
@@ -3731,6 +3801,8 @@ async function initApp() {
   resetAddFormDefaults();
   bindCustomerSearch();
   bindDetailTabs();
+  bindQuickInsertButtons();
+  bindCustomVarAdd();
   await Promise.all([loadCustomers(), loadSimCodes(), loadSettings(), loadLabelConfig()]);
   renderWorkerSetup();
 }
