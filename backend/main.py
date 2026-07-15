@@ -13,6 +13,10 @@ import html
 import re
 import secrets
 import string
+import threading
+import time
+import ipaddress
+from collections import deque
 from copy import deepcopy
 from typing import Optional
 
@@ -54,8 +58,14 @@ app = FastAPI(title="giffgaff-label-manager API")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", "").strip()
 ADMIN_ENTRY_PATH = os.getenv("ADMIN_ENTRY_PATH", "").strip()
-AUTH_COOKIE_NAME = "giffgaff_label_auth"
-ADMIN_ENTRY_COOKIE_NAME = "giffgaff_admin_entry"
+AUTH_COOKIE_NAME = "__Host-giffgaff_label_auth"
+ADMIN_ENTRY_COOKIE_NAME = "__Host-giffgaff_admin_entry"
+ADMIN_ENTRY_TTL_SECONDS = 12 * 60 * 60
+ADMIN_ENTRY_CLOCK_SKEW_SECONDS = 5 * 60
+LOGIN_FAILURE_WINDOW_SECONDS = 10 * 60
+LOGIN_FAILURE_LIMIT = 5
+_LOGIN_FAILURES: dict[str, deque[float]] = {}
+_LOGIN_FAILURES_LOCK = threading.Lock()
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_PHONE_STATUS = "激活"
 PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
@@ -178,8 +188,10 @@ def _admin_entry_signing_key(path: str) -> bytes:
     return hashlib.sha256(material).digest()
 
 
-def _new_admin_entry_cookie(path: str) -> str:
-    payload = secrets.token_urlsafe(32)
+def _new_admin_entry_cookie(path: str, issued_at: Optional[int] = None) -> str:
+    issued_at = int(time.time()) if issued_at is None else int(issued_at)
+    nonce = secrets.token_urlsafe(32)
+    payload = f"v1.{issued_at}.{nonce}"
     signature = hmac.new(
         _admin_entry_signing_key(path),
         payload.encode("ascii"),
@@ -188,19 +200,79 @@ def _new_admin_entry_cookie(path: str) -> str:
     return f"{payload}.{signature}"
 
 
-def _has_admin_entry_cookie(request: Request, path: str) -> bool:
+def _has_admin_entry_cookie(
+    request: Request,
+    path: str,
+    now: Optional[int] = None,
+) -> bool:
     value = request.cookies.get(ADMIN_ENTRY_COOKIE_NAME, "")
-    if not value or len(value) > 256 or "." not in value:
+    if not value or len(value) > 320:
         return False
-    payload, supplied_signature = value.rsplit(".", 1)
-    if not payload or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", payload):
+    parts = value.split(".")
+    if len(parts) != 4:
         return False
+    version, issued_at_raw, nonce, supplied_signature = parts
+    if version != "v1" or not issued_at_raw.isdigit():
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", nonce):
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", supplied_signature):
+        return False
+    payload = f"{version}.{issued_at_raw}.{nonce}"
     expected_signature = hmac.new(
         _admin_entry_signing_key(path),
         payload.encode("ascii"),
         hashlib.sha256,
     ).hexdigest()
-    return hmac.compare_digest(supplied_signature, expected_signature)
+    if not hmac.compare_digest(supplied_signature, expected_signature):
+        return False
+
+    issued_at = int(issued_at_raw)
+    current = int(time.time()) if now is None else int(now)
+    if issued_at > current + ADMIN_ENTRY_CLOCK_SKEW_SECONDS:
+        return False
+    return current - issued_at < ADMIN_ENTRY_TTL_SECONDS
+
+
+def _login_client_ip(request: Request) -> str:
+    """优先使用 Cloudflare 写入的真实客户端 IP，否则使用 ASGI client。"""
+    cf_ip = (request.headers.get("CF-Connecting-IP") or "").strip()
+    if cf_ip:
+        try:
+            return str(ipaddress.ip_address(cf_ip))
+        except ValueError:
+            pass
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _register_login_failure(client_ip: str, now: Optional[float] = None) -> tuple[bool, int]:
+    """登记一次失败；返回 (是否仍允许普通 401, Retry-After 秒数)。"""
+    current = time.monotonic() if now is None else float(now)
+    cutoff = current - LOGIN_FAILURE_WINDOW_SECONDS
+    with _LOGIN_FAILURES_LOCK:
+        attempts = _LOGIN_FAILURES.setdefault(client_ip, deque())
+        while attempts and attempts[0] <= cutoff:
+            attempts.popleft()
+        if not attempts:
+            _LOGIN_FAILURES[client_ip] = attempts
+        if len(attempts) >= LOGIN_FAILURE_LIMIT:
+            retry_after = max(1, int(LOGIN_FAILURE_WINDOW_SECONDS - (current - attempts[0])) + 1)
+            return False, retry_after
+        attempts.append(current)
+        return True, 0
+
+
+def _clear_login_failures(client_ip: str) -> None:
+    with _LOGIN_FAILURES_LOCK:
+        _LOGIN_FAILURES.pop(client_ip, None)
+
+
+def _reset_login_failure_state() -> None:
+    """测试和进程维护使用；不暴露为 HTTP 接口。"""
+    with _LOGIN_FAILURES_LOCK:
+        _LOGIN_FAILURES.clear()
 
 
 def _hidden_admin_not_found() -> Response:
@@ -460,6 +532,11 @@ async def require_app_password(request, call_next):
                     httponly=True,
                     secure=True,
                     samesite="lax",
+                    max_age=ADMIN_ENTRY_TTL_SECONDS,
+                    expires=(
+                        datetime.datetime.now(datetime.timezone.utc)
+                        + datetime.timedelta(seconds=ADMIN_ENTRY_TTL_SECONDS)
+                    ),
                 )
                 response.headers["Cache-Control"] = "no-store, max-age=0"
                 response.headers["Referrer-Policy"] = "no-referrer"
@@ -497,18 +574,28 @@ async def auth_status(request: Request):
 
 
 @app.post("/api/auth/login")
-async def auth_login(data: AuthLoginRequest):
+async def auth_login(data: AuthLoginRequest, request: Request):
     if not _auth_enabled():
         return {"ok": True}
+    client_ip = _login_client_ip(request)
     if not hmac.compare_digest(data.password, APP_PASSWORD):
+        allowed, retry_after = _register_login_failure(client_ip)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="登录失败次数过多，请稍后再试",
+                headers={"Retry-After": str(retry_after)},
+            )
         raise HTTPException(status_code=401, detail="口令错误")
+    _clear_login_failures(client_ip)
     response = JSONResponse({"ok": True})
     response.set_cookie(
         AUTH_COOKIE_NAME,
         _auth_token(),
+        path="/",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=True,
     )
     return response
 
@@ -516,7 +603,13 @@ async def auth_login(data: AuthLoginRequest):
 @app.post("/api/auth/logout")
 async def auth_logout():
     response = JSONResponse({"ok": True})
-    response.delete_cookie(AUTH_COOKIE_NAME)
+    response.delete_cookie(
+        AUTH_COOKIE_NAME,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
     return response
 
 

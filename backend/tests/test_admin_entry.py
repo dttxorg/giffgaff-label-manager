@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -44,6 +44,7 @@ def hidden_admin_client():
         main.APP_PASSWORD = "test-password-that-remains-required"
         main.AGENT_API_TOKEN = ""
         main.ADMIN_ENTRY_PATH = SECRET_PATH
+        main._reset_login_failure_state()
         asyncio.run(database.init_db())
 
         async def _seed_public_customer():
@@ -62,6 +63,7 @@ def hidden_admin_client():
             yield client
         finally:
             client.close()
+            main._reset_login_failure_state()
             database.DATABASE_PATH = original["database_path"]
             crud.DATABASE_PATH = original["crud_path"]
             main.DATABASE_PATH = original["main_path"]
@@ -108,9 +110,17 @@ def test_secret_entry_sets_secure_signed_cookie_then_shows_password_login(hidden
     assert "Secure" in set_cookie
     assert "SameSite=lax" in set_cookie
     assert "Path=/" in set_cookie
+    assert f"Max-Age={main.ADMIN_ENTRY_TTL_SECONDS}" in set_cookie
+    assert "expires=" in set_cookie.lower()
+    assert "Domain=" not in set_cookie
+    assert main.ADMIN_ENTRY_COOKIE_NAME.startswith("__Host-")
     cookie_value = hidden_admin_client.cookies.get(main.ADMIN_ENTRY_COOKIE_NAME)
     assert cookie_value not in (None, "", "true")
-    assert "." in cookie_value
+    version, issued_at, nonce, signature = cookie_value.split(".")
+    assert version == "v1"
+    assert abs(int(issued_at) - int(time.time())) <= 5
+    assert len(nonce) >= 32
+    assert len(signature) == 64
 
     page = hidden_admin_client.get("/index.html")
     assert page.status_code == 200
@@ -124,6 +134,14 @@ def test_secret_entry_sets_secure_signed_cookie_then_shows_password_login(hidden
         json={"password": "test-password-that-remains-required"},
     )
     assert login.status_code == 200
+    auth_set_cookie = login.headers["set-cookie"]
+    assert main.AUTH_COOKIE_NAME.startswith("__Host-")
+    assert main.AUTH_COOKIE_NAME in auth_set_cookie
+    assert "HttpOnly" in auth_set_cookie
+    assert "Secure" in auth_set_cookie
+    assert "SameSite=lax" in auth_set_cookie
+    assert "Path=/" in auth_set_cookie
+    assert "Domain=" not in auth_set_cookie
     assert hidden_admin_client.get("/api/customers").status_code == 200
 
 
@@ -141,6 +159,7 @@ def test_public_qr_routes_work_without_admin_entry_cookie(hidden_admin_client):
     "true",
     "forged-payload.invalid-signature",
     "A" * 43 + "." + "0" * 64,
+    "v1.1700000000." + "A" * 43 + "." + "0" * 64,
 ])
 def test_forged_admin_entry_cookie_is_rejected(hidden_admin_client, forged):
     response = hidden_admin_client.get(
@@ -166,6 +185,114 @@ def test_tampering_with_a_real_cookie_invalidates_it(hidden_admin_client):
     )
 
     assert response.status_code == 404
+
+
+def test_admin_entry_cookie_expires_after_twelve_hours(hidden_admin_client):
+    now = int(time.time())
+    still_valid = main._new_admin_entry_cookie(
+        SECRET_PATH,
+        issued_at=now - main.ADMIN_ENTRY_TTL_SECONDS + 60,
+    )
+    expired = main._new_admin_entry_cookie(
+        SECRET_PATH,
+        issued_at=now - main.ADMIN_ENTRY_TTL_SECONDS - 1,
+    )
+
+    valid_response = hidden_admin_client.get(
+        "/index.html",
+        headers={"Cookie": f"{main.ADMIN_ENTRY_COOKIE_NAME}={still_valid}"},
+    )
+    expired_response = hidden_admin_client.get(
+        "/index.html",
+        headers={"Cookie": f"{main.ADMIN_ENTRY_COOKIE_NAME}={expired}"},
+    )
+
+    assert valid_response.status_code == 200
+    assert expired_response.status_code == 404
+
+
+def test_login_failures_are_rate_limited_per_ip_and_success_clears_them(hidden_admin_client):
+    hidden_admin_client.get(SECRET_PATH, follow_redirects=False)
+    ip_header = {"CF-Connecting-IP": "203.0.113.10"}
+
+    for _ in range(main.LOGIN_FAILURE_LIMIT):
+        response = hidden_admin_client.post(
+            "/api/auth/login",
+            json={"password": "wrong-password"},
+            headers=ip_header,
+        )
+        assert response.status_code == 401
+
+    limited = hidden_admin_client.post(
+        "/api/auth/login",
+        json={"password": "wrong-password"},
+        headers=ip_header,
+    )
+    assert limited.status_code == 429
+    assert 1 <= int(limited.headers["Retry-After"]) <= main.LOGIN_FAILURE_WINDOW_SECONDS
+
+    # 限制按 IP 隔离，另一个地址仍有自己的失败额度。
+    other_ip = hidden_admin_client.post(
+        "/api/auth/login",
+        json={"password": "wrong-password"},
+        headers={"CF-Connecting-IP": "203.0.113.11"},
+    )
+    assert other_ip.status_code == 401
+
+    # 正确密码仍可验证，并清除该 IP 的失败记录。
+    success = hidden_admin_client.post(
+        "/api/auth/login",
+        json={"password": "test-password-that-remains-required"},
+        headers=ip_header,
+    )
+    assert success.status_code == 200
+    after_success = hidden_admin_client.post(
+        "/api/auth/login",
+        json={"password": "wrong-password"},
+        headers=ip_header,
+    )
+    assert after_success.status_code == 401
+
+
+def test_login_failure_window_expires_after_ten_minutes():
+    client_ip = "198.51.100.25"
+    main._reset_login_failure_state()
+    try:
+        for offset in range(main.LOGIN_FAILURE_LIMIT):
+            allowed, _ = main._register_login_failure(client_ip, now=1000 + offset)
+            assert allowed is True
+        allowed, retry_after = main._register_login_failure(client_ip, now=1005)
+        assert allowed is False
+        assert retry_after > 0
+
+        allowed_after_window, retry_after = main._register_login_failure(
+            client_ip,
+            now=1000 + main.LOGIN_FAILURE_WINDOW_SECONDS + 1,
+        )
+        assert allowed_after_window is True
+        assert retry_after == 0
+    finally:
+        main._reset_login_failure_state()
+
+
+def test_logout_deletes_host_auth_cookie_with_matching_security_attributes(hidden_admin_client):
+    hidden_admin_client.get(SECRET_PATH, follow_redirects=False)
+    hidden_admin_client.post(
+        "/api/auth/login",
+        json={"password": "test-password-that-remains-required"},
+    )
+
+    logout = hidden_admin_client.post("/api/auth/logout")
+
+    assert logout.status_code == 200
+    set_cookie = logout.headers["set-cookie"]
+    assert main.AUTH_COOKIE_NAME in set_cookie
+    assert "Max-Age=0" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Path=/" in set_cookie
+    assert "Domain=" not in set_cookie
 
 
 @pytest.mark.parametrize("weak_path", [

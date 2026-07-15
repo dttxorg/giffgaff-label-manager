@@ -80,7 +80,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 https://你的后台域名/<ADMIN_ENTRY_PATH 的随机路径>
 ```
 
-入口会写入带 HMAC 签名的 `HttpOnly`、`Secure`、`SameSite=Lax` 会话 Cookie，然后跳转到登录页面。没有入口 Cookie 时，管理页面、静态资源和普通管理 API 都只返回统一的 `404 Not found`；通过入口后仍必须输入 `APP_PASSWORD`，隐藏路径不能替代密码。
+入口会写入带 HMAC 签名和签发时间的 `__Host-` Cookie（`HttpOnly`、`Secure`、`SameSite=Lax`、`Path=/`），然后跳转到登录页面。入口授权有效期为 12 小时，过期后必须重新访问秘密路径。没有入口 Cookie 时，管理页面、静态资源和普通管理 API 都只返回统一的 `404 Not found`；通过入口后仍必须输入 `APP_PASSWORD`，隐藏路径不能替代密码。密码登录 Cookie 同样使用 `__Host-` 前缀和上述安全属性。
+
+同一客户端 IP 在 10 分钟内最多允许 5 次密码失败；继续输错会返回 `429`，正确登录后会清除该 IP 的失败记录。
 
 由于入口 Cookie 强制使用 `Secure`，生产后台必须使用 HTTPS。`ADMIN_ENTRY_PATH` 必须是以 `/` 开头、至少 32 位的单段 URL-safe 随机路径；配置弱路径或只配置入口但不配置 `APP_PASSWORD` 时，服务会拒绝启动。本地 HTTP 开发可以同时不设置这两个变量，沿用原来的开发模式。
 
