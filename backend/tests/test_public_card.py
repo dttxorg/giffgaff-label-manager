@@ -645,3 +645,46 @@ def test_public_page_substitutes_custom_vars(client):
     body = r.text
     assert "400-123-4567" in body
     assert "@myname" in body
+
+
+def test_public_page_shows_phone_when_set(client):
+    """客户有手机号时，公开页面应显示手机号行。"""
+    import crud
+    from models import CustomerCreate, CustomerUpdate
+    cid = asyncio.run(crud.create_customer(CustomerCreate(email='a@x.com', activation_date='2026-07-14')))
+    asyncio.run(crud.update_customer(cid, CustomerUpdate(phone_number='447400123456')))
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    r = client.get(f"/p/{token}")
+    assert r.status_code == 200
+    body = r.text
+    assert 'id="phone-row"' in body
+    assert 'data-phone="447400123456"' in body
+    assert '已复制手机号' in body
+
+
+def test_public_page_hides_phone_when_empty(client):
+    """客户没手机号时，phone-row 整段不渲染。"""
+    import crud
+    from models import CustomerCreate
+    cid = asyncio.run(crud.create_customer(CustomerCreate(email='a@x.com', activation_date='2026-07-14')))
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    r = client.get(f"/p/{token}")
+    assert r.status_code == 200
+    body = r.text
+    # phone-row 整段被替换为空字符串
+    assert 'id="phone-row"' not in body
+    assert 'data-phone=' not in body
+    # 模板里有 '已复制手机号' 的 inline script 字符串，但 phone-row 相关的 button 应不存在
+    assert 'id="phone-copy-btn"' not in body
+
+
+def test_public_page_email_still_shown(client):
+    """回归：email 仍正常显示。"""
+    import crud
+    from models import CustomerCreate
+    cid = asyncio.run(crud.create_customer(CustomerCreate(email='a@x.com', activation_date='2026-07-14')))
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    r = client.get(f"/p/{token}")
+    body = r.text
+    assert 'data-email="a@x.com"' in body
+    assert '已复制邮箱' in body

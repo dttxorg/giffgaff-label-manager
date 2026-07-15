@@ -1144,6 +1144,7 @@
               <button type="button" onclick="addLabelElement('text', '快递公司')">快递公司</button>
               <button type="button" onclick="addLabelElement('text', '快递单号')">快递单号</button>
               <button type="button" onclick="addLabelElement('qr', '邮箱二维码')">邮箱二维码</button>
+              <button type="button" onclick="addLabelElement('qr', '联系方式二维码')">联系方式二维码</button>
               <button type="button" onclick="addLabelElement('qr', 'Giffgaff下载二维码')">下载二维码</button>
             </div>
           </aside>
@@ -1636,6 +1637,7 @@ const SIM_CODE_STATUS_LABELS = {
 };
 	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
 const QR_SOURCES = ['邮箱二维码', 'Giffgaff下载二维码'];
+const QR_SOURCES = ['邮箱二维码', '联系方式二维码', 'Giffgaff下载二维码'];
 const CAINIAO_SETTINGS = [];
 const SETTING_INPUT_IDS = {
 };
@@ -3556,6 +3558,11 @@ function resolveTextValue(el, customer) {
 function resolveQrValue(source, customer) {
   if (source === 'Giffgaff下载二维码') return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
   if (source === '邮箱二维码') {
+    if (!customer.public_token) return '';
+    return `${getPublicBaseUrl()}/p/${customer.public_token}`;
+  }
+  if (source === '联系方式二维码') {
+    // 和「邮箱二维码」指向同一个公开页面（页面里现在显示邮箱 + 手机号 + 复制按钮）
     if (!customer.public_token) return '';
     return `${getPublicBaseUrl()}/p/${customer.public_token}`;
   }

@@ -16,15 +16,13 @@ from database import DATABASE_PATH
 router = APIRouter()
 
 _TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "public_card.html")
-_template_cache: Optional[str] = None
 
 
 def _load_template() -> str:
-    global _template_cache
-    if _template_cache is None:
-        with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
-            _template_cache = f.read()
-    return _template_cache
+    # 不缓存：模板小（<10KB），且开发期间常改；测试也用同一个 main.app 实例，
+    # 模块级缓存会一直返回第一次的版本。
+    with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 def _security_headers() -> dict:
@@ -163,6 +161,7 @@ def _build_substitution_vars(customer_row: dict) -> dict:
 
 def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     tpl = _load_template()
+    phone = (vars_ or {}).get("phone_number") or ""
     safe_email = html.escape(email) if email else ""
     if email:
         display = html.escape(email)
@@ -172,10 +171,23 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     hint_md = _substitute_variables(hint_markdown, vars_)
     # 2) markdown → html
     hint_html = _markdown_to_safe_html(hint_md)
+    # 3) 手机号：有值才显示整行（替换时已经做了安全转义）
+    if phone:
+        phone_row = (
+            f'<div class="contact-row" id="phone-row">'
+            f'<span class="contact-label">📱 手机</span>'
+            f'<code id="phone" data-phone="{html.escape(phone)}" class="contact-val">{html.escape(phone)}</code>'
+            f'<button class="copy-btn" type="button" '
+            f'onclick="copyFromEl(\'phone\', \'已复制手机号\')" id="phone-copy-btn">复制</button>'
+            f'</div>'
+        )
+    else:
+        phone_row = ''  # 模板里默认 hidden，赋空字符串让占位符消失
     return (
         tpl
         .replace("__EMAIL__", safe_email)
         .replace("__EMAIL_DISPLAY__", display)
+        .replace("__PHONE_ROW__", phone_row)
         .replace("__HINT_HTML__", hint_html)
     )
 

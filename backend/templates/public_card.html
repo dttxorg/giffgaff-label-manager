@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
-<title>您的临时邮箱</title>
+<title>您的联系方式</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -20,24 +20,41 @@
     border-radius: 16px; padding: 28px 20px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   }
-  .label { font-size: 13px; color: #6b7280; margin: 0 0 8px; letter-spacing: 0.02em; }
-  .email {
-    font-size: 18px; font-weight: 600; word-break: break-all;
-    background: #f3f4f6; border-radius: 10px; padding: 14px 14px;
-    margin: 0; line-height: 1.4; color: #111827;
+  .label { font-size: 13px; color: #6b7280; margin: 0 0 12px; letter-spacing: 0.02em; font-weight: 600; }
+  .contact-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px 0;
+  }
+  .contact-row + .contact-row { border-top: 1px dashed #e5e7eb; }
+  .contact-label {
+    flex: 0 0 56px;
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 600;
+  }
+  .contact-val {
+    flex: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 14px;
+    background: #f3f4f6;
+    padding: 10px 12px;
+    border-radius: 8px;
+    word-break: break-all;
+    user-select: all;
+    color: #111827;
   }
   .copy-btn {
-    margin-top: 12px; width: 100%; height: 48px;
-    border: 0; border-radius: 10px; cursor: pointer;
-    font-size: 16px; font-weight: 600; color: #fff;
-    background: #2563eb; transition: background 0.15s;
+    flex: 0 0 auto;
+    height: 36px;
+    border: 0; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: #fff;
+    background: #2563eb; padding: 0 14px;
+    transition: background 0.15s;
     -webkit-tap-highlight-color: transparent;
   }
   .copy-btn:active { background: #1d4ed8; }
   .copy-btn.copied { background: #16a34a; }
-  .copy-btn.failed { background: #dc2626; }
   .copy-btn:disabled { cursor: not-allowed; background: #9ca3af; }
-  .divider { height: 1px; background: #e5e7eb; margin: 24px 0 16px; }
+  .divider { height: 1px; background: #e5e7eb; margin: 20px 0 14px; }
   .hint { font-size: 14px; line-height: 1.7; color: #374151; }
   .hint p { margin: 0 0 12px; }
   .hint p:last-child { margin-bottom: 0; }
@@ -45,12 +62,15 @@
   .hint h3 { font-size: 17px; }
   .hint h4 { font-size: 15px; }
   .hint code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  .hint a { color: #2563eb; }
+  .empty { color: #6b7280; font-style: italic; }
   .footer { margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center; }
   @media (prefers-color-scheme: dark) {
     body { background: #111827; color: #e5e7eb; }
     .card { background: #1f2937; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-    .label { color: #9ca3af; }
-    .email { background: #111827; color: #f3f4f6; }
+    .label, .empty { color: #9ca3af; }
+    .contact-val { background: #111827; color: #f3f4f6; }
+    .contact-row + .contact-row { border-top-color: #374151; }
     .divider { background: #374151; }
     .hint { color: #d1d5db; }
     .hint h3, .hint h4 { color: #f3f4f6; }
@@ -60,59 +80,57 @@
 </head>
 <body>
   <main class="card" role="main">
-    <p class="label">您的临时邮箱</p>
-    <p class="email" id="email" data-email="__EMAIL__">__EMAIL_DISPLAY__</p>
-    <button class="copy-btn" id="copy-btn" type="button" aria-label="复制邮箱">复制邮箱</button>
+    <p class="label">联系方式</p>
+
+    <div class="contact-row" id="email-row">
+      <span class="contact-label">📧 邮箱</span>
+      <code id="email" data-email="__EMAIL__" class="contact-val">__EMAIL_DISPLAY__</code>
+      <button class="copy-btn" type="button" onclick="copyFromEl('email', '已复制邮箱')" id="email-copy-btn">复制</button>
+    </div>
+
+    __PHONE_ROW__
 
     <div class="divider"></div>
     <div class="hint" id="hint">__HINT_HTML__</div>
   </main>
-  <p class="footer">此页面仅展示邮箱，不包含任何账户信息。</p>
+  <p class="footer">本页面仅展示联系方式，不含任何账户信息。</p>
 
 <script>
-(function () {
-  var btn = document.getElementById('copy-btn');
-  var el = document.getElementById('email');
-  var email = el.getAttribute('data-email') || '';
-  if (!email) {
-    btn.disabled = true;
-    btn.textContent = '邮箱未配置';
+function copyFromEl(elementId, message) {
+  const el = document.getElementById(elementId);
+  const value = el ? (el.dataset[elementId === 'email' ? 'email' : 'phone'] || el.textContent.trim()) : '';
+  if (!value || value === '—') {
+    alert('内容为空');
     return;
   }
-  function flash(cls, text) {
-    btn.classList.add(cls);
-    var orig = btn.textContent;
-    btn.textContent = text;
-    setTimeout(function () {
-      btn.classList.remove(cls);
-      btn.textContent = orig;
-    }, 1400);
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(value).then(() => {
+      flashBtn(elementId + '-copy-btn', '已复制');
+    }).catch(() => fallbackCopy(value, elementId + '-copy-btn'));
+  } else {
+    fallbackCopy(value, elementId + '-copy-btn');
   }
-  btn.addEventListener('click', function () {
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(email).then(function () {
-        flash('copied', '已复制');
-      }).catch(function () {
-        if (!fallbackCopy(email)) flash('failed', '复制失败，请长按邮箱手动复制');
-      });
-    } else {
-      if (!fallbackCopy(email)) flash('failed', '复制失败，请长按邮箱手动复制');
-    }
-  });
-  function fallbackCopy(text) {
-    try {
-      var ta = document.createElement('textarea');
-      ta.value = text; ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select(); ta.setSelectionRange(0, 99999);
-      var ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) flash('copied', '已复制');
-      return ok;
-    } catch (e) { return false; }
-  }
-})();
+}
+function fallbackCopy(text, btnId) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, 99999);
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    flashBtn(btnId, '已复制');
+  } catch (e) { alert('复制失败，请长按手动复制'); }
+}
+function flashBtn(btnId, text) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.classList.add('copied');
+  btn.textContent = text;
+  setTimeout(() => { btn.classList.remove('copied'); btn.textContent = orig; }, 1400);
+}
 </script>
 </body>
 </html>
