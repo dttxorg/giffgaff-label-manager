@@ -362,6 +362,9 @@ async def require_app_password(request, call_next):
     protected_prefixes = ("/api", "/docs", "/redoc", "/openapi.json")
     if request.url.path.startswith("/api/agent"):
         return await call_next(request)
+    # /api/public/* 是 Cloudflare Worker 在边缘节点回调的，绕过后台口令鉴权
+    if request.url.path.startswith("/api/public/"):
+        return await call_next(request)
     if _auth_enabled() and request.url.path not in public_paths and request.url.path.startswith(protected_prefixes):
         if not _is_authenticated(request):
             return JSONResponse({"detail": "需要登录"}, status_code=401)
