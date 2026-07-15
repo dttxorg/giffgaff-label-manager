@@ -30,7 +30,7 @@ from crud import (
     get_all_customers, get_customer, search_customers,
     update_customer, delete_customer,
     update_customer_moemail,
-    regenerate_public_link,
+    regenerate_public_link, ensure_public_link,
     save_payment_check_result,
     regenerate_identity,
     get_public_email,
@@ -982,6 +982,15 @@ async def regenerate_public_link_route(customer_id: int):
     旧 token 在 DB 中立即失效（Worker 再回调 /api/public/{old}/version 会 404）。
     客户端用新 public_token 拼装新 QR。"""
     result = await regenerate_public_link(customer_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    return result
+
+
+@app.post("/api/customers/{customer_id}/public-link/ensure", status_code=200)
+async def ensure_public_link_route(customer_id: int):
+    """只为尚无 token 的旧客户按需生成公开链接；已有链接保持不变。"""
+    result = await ensure_public_link(customer_id)
     if not result:
         raise HTTPException(status_code=404, detail="客户不存在")
     return result

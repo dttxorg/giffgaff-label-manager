@@ -49,6 +49,17 @@ def _create(email: str) -> int:
     )))
 
 
+async def _clear_public_token(customer_id: int) -> None:
+    """模拟新增公开页功能之前创建、尚无 token 的存量客户。"""
+    import aiosqlite
+    async with aiosqlite.connect(database.DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE customers SET public_token = NULL, public_version = 1 WHERE id = ?",
+            (customer_id,),
+        )
+        await db.commit()
+
+
 def test_create_customer_auto_generates_token(client):
     cid = _create("alice@giffgaff.example")
     detail = client.get(f"/api/customers/{cid}").json()
@@ -234,6 +245,32 @@ def test_regenerate_invalidates_old_token_immediately(client):
 def test_regenerate_nonexistent_customer_returns_404(client):
     r = client.post("/api/customers/999999/public-link/regenerate")
     assert r.status_code == 404
+
+
+def test_ensure_public_link_lazily_fills_legacy_customer(client):
+    cid = _create("legacy@x.com")
+    asyncio.run(_clear_public_token(cid))
+
+    r = client.post(f"/api/customers/{cid}/public-link/ensure")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["public_token"]
+    assert len(body["public_token"]) >= 30
+    assert body["public_version"] == 1
+    assert client.get(f"/p/{body['public_token']}").status_code == 200
+
+
+def test_ensure_public_link_does_not_rotate_existing_token(client):
+    cid = _create("existing@x.com")
+    before = client.get(f"/api/customers/{cid}").json()
+
+    first = client.post(f"/api/customers/{cid}/public-link/ensure").json()
+    second = client.post(f"/api/customers/{cid}/public-link/ensure").json()
+
+    assert first == second
+    assert first["public_token"] == before["public_token"]
+    assert first["public_version"] == before["public_version"]
 
 
 def test_public_token_version_endpoint(client):

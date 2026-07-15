@@ -252,6 +252,48 @@ async def regenerate_public_link(customer_id: int) -> Optional[dict]:
         return {"public_token": new_token, "public_version": new_version}
 
 
+async def ensure_public_link(customer_id: int) -> Optional[dict]:
+    """按需为旧客户补一个公开链接，但绝不旋转已经存在的 token。
+
+    只在用户实际预览/打印含公开页二维码的标签时调用，因此不会批量补齐
+    存量客户。并发调用时用条件 UPDATE，避免同一客户生成多个生效 token。
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetch_one(
+            db,
+            "SELECT public_token, public_version FROM customers WHERE id = ?",
+            (customer_id,),
+        )
+        if not row:
+            return None
+        if row["public_token"]:
+            return {
+                "public_token": row["public_token"],
+                "public_version": int(row["public_version"] or 1),
+            }
+
+        new_token = secrets.token_urlsafe(32)
+        await db.execute(
+            """UPDATE customers
+               SET public_token = ?
+               WHERE id = ? AND (public_token IS NULL OR public_token = '')""",
+            (new_token, customer_id),
+        )
+        await db.commit()
+
+        # 如果另一个请求抢先写入，返回数据库中最终生效的 token。
+        current = await fetch_one(
+            db,
+            "SELECT public_token, public_version FROM customers WHERE id = ?",
+            (customer_id,),
+        )
+        return {
+            "public_token": current["public_token"],
+            "public_version": int(current["public_version"] or 1),
+        }
+
+
 async def save_payment_check_result(
     customer_id: int,
     changed_at: Optional[str],

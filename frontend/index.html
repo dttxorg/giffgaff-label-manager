@@ -3569,10 +3569,13 @@ function resolveQrValue(source, customer) {
 }
 
 async function qrDataUrl(value) {
+  if (!value) {
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="white"/><text x="60" y="64" text-anchor="middle" font-size="12" fill="#777">未配置</text></svg>`);
+  }
   if (!window.QRCode) {
     return 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="white"/><text x="12" y="64" font-size="12">QR</text></svg>`);
   }
-  return await QRCode.toDataURL(value || 'demo', { width: 256, margin: 0 });
+  return await QRCode.toDataURL(value, { width: 256, margin: 0 });
 }
 
 function startDrag(e, id) {
@@ -3706,13 +3709,38 @@ function closePrintPanel() {
   printTemplateId = '';
 }
 
+function templateNeedsPublicToken(tpl) {
+  return !!tpl?.elements?.some(el =>
+    el.type === 'qr' && (el.source === '邮箱二维码' || el.source === '联系方式二维码')
+  );
+}
+
+async function ensurePrintCustomerPublicToken(tpl) {
+  if (!printCustomer || !templateNeedsPublicToken(tpl) || printCustomer.public_token) return;
+  const res = await fetch(`${API}/customers/${printCustomer.id}/public-link/ensure`, {
+    method: 'POST',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.public_token) {
+    throw new Error(data.detail || '无法生成联系方式二维码');
+  }
+  printCustomer.public_token = data.public_token;
+  printCustomer.public_version = data.public_version || 1;
+}
+
 async function renderPrintPreview() {
   if (!printCustomer) return;
   const id = printMode === 'courier'
     ? COURIER_TEMPLATE_ID
     : ($('print-template-select').value || printTemplateId);
   printTemplateId = id;
-  await renderTemplateCanvas($('print-preview'), getTemplate(id), printCustomer, false);
+  const tpl = getTemplate(id);
+  try {
+    await ensurePrintCustomerPublicToken(tpl);
+    await renderTemplateCanvas($('print-preview'), tpl, printCustomer, false);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 async function printCurrentLabel() {
@@ -3721,7 +3749,14 @@ async function printCurrentLabel() {
     ? COURIER_TEMPLATE_ID
     : ($('print-template-select').value || printTemplateId);
   const tpl = getTemplate(id);
-  const markup = await buildPrintableLabel(tpl, printCustomer);
+  let markup;
+  try {
+    await ensurePrintCustomerPublicToken(tpl);
+    markup = await buildPrintableLabel(tpl, printCustomer);
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
   const printTitle = printMode === 'courier' ? '打印快递单' : '打印标签';
   const win = window.open('', '_blank');
   if (!win) {
