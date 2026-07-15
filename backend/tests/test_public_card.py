@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -725,3 +726,39 @@ def test_public_page_email_still_shown(client):
     body = r.text
     assert 'data-email="a@x.com"' in body
     assert '已复制邮箱' in body
+
+
+def test_public_page_disables_cloudflare_email_obfuscation(client):
+    """主邮箱和 Markdown 邮箱都必须避开 Cloudflare Email Obfuscation。"""
+    cid = _create("real.customer@example.com")
+    client.patch("/api/settings", json={
+        "public_page_markdown": "联系支持：support@example.net",
+    })
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+
+    response = client.get(f"/p/{token}")
+
+    assert response.status_code == 200
+    body = response.text
+    main_email = re.search(
+        r'<!--email_off-->\s*'
+        r'<code id="email" data-email="real\.customer@example\.com"[^>]*>'
+        r'real\.customer@example\.com</code>\s*'
+        r'<!--/email_off-->',
+        body,
+    )
+    assert main_email, "主邮箱元素必须由 email_off 标记完整包裹"
+
+    hint = re.search(
+        r'<div class="hint" id="hint">\s*<!--email_off-->(.*?)<!--/email_off-->\s*</div>',
+        body,
+        re.DOTALL,
+    )
+    assert hint, "Markdown 渲染区域必须由 email_off 标记完整包裹"
+    assert "support@example.net" in hint.group(1)
+
+    assert body.count("<!--email_off-->") == 2
+    assert body.count("<!--/email_off-->") == 2
+    assert 'data-email="real.customer@example.com"' in body
+    assert "copyFromEl('email', '已复制邮箱')" in body
+    assert "navigator.clipboard.writeText(value)" in body

@@ -84,14 +84,20 @@
 
     <div class="contact-row" id="email-row">
       <span class="contact-label">📧 邮箱</span>
+      <!--email_off-->
       <code id="email" data-email="__EMAIL__" class="contact-val">__EMAIL_DISPLAY__</code>
+      <!--/email_off-->
       <button class="copy-btn" type="button" onclick="copyFromEl('email', '已复制邮箱')" id="email-copy-btn">复制</button>
     </div>
 
     __PHONE_ROW__
 
     <div class="divider"></div>
-    <div class="hint" id="hint">__HINT_HTML__</div>
+    <div class="hint" id="hint">
+      <!--email_off-->
+      __HINT_HTML__
+      <!--/email_off-->
+    </div>
   </main>
   <p class="footer">本页面仅展示联系方式，不含任何账户信息。</p>
 
