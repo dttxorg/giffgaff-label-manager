@@ -1145,7 +1145,6 @@
               <button type="button" onclick="addLabelElement('text', '快递单号')">快递单号</button>
               <button type="button" onclick="addLabelElement('qr', '号码资料二维码')">号码资料二维码</button>
               <button type="button" onclick="addLabelElement('qr', 'Giffgaff下载二维码')">下载二维码</button>
-              <button type="button" onclick="addLabelElement('text', '激活教程地址')">教程地址</button>
               <button type="button" onclick="addLabelElement('qr', '激活教程二维码')">教程二维码</button>
             </div>
           </aside>
@@ -1372,9 +1371,8 @@ wrangler init --type javascript --no-git</pre>
             <span class="setting-hint">用于模板里的 Giffgaff 下载二维码</span>
           </div>
           <div class="setting-item">
-            <label>未激活卡教程地址</label>
-            <input type="url" id="s-activation-tutorial-url" placeholder="https://gg.681218.xyz/activation.html">
-            <span class="setting-hint">客户扫码后会在独立页面中看到这个地址，并可一键复制。页面说明与运营内容固定在代码中。</span>
+            <label>未激活卡扫码教程</label>
+            <span class="setting-hint">12 步教程和截图已经直接嵌入扫码页，不需要配置教程地址，也不会再二次跳转。</span>
             <div class="button-row" style="margin-top:8px;">
               <button type="button" class="small ghost" onclick="openActivationGuidePage()">打开教程扫码页</button>
             </div>
@@ -1581,7 +1579,7 @@ const API = '/api';
 const DEFAULT_GIFFGAFF_URL = 'https://www.giffgaff.com/mobile-app';
 const DEFAULT_ACTIVATION_TUTORIAL_URL = 'https://gg.681218.xyz/activation.html';
 const ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page';
-const PUBLIC_PAGE_VIEW_VERSION = '5';
+const PUBLIC_PAGE_VIEW_VERSION = '6';
 const COURIER_TEMPLATE_ID = 'courier-50x40';
 const DEMO_CUSTOMER = {
   id: 0,
@@ -1611,7 +1609,7 @@ const SIM_CODE_STATUS_LABELS = {
   '已使用': '已使用',
   '失败': '失败',
 };
-	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接', '激活教程地址'];
+	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
 const PUBLIC_ACCOUNT_QR_SOURCE = '号码资料二维码';
 const LEGACY_PUBLIC_ACCOUNT_QR_SOURCES = new Set(['邮箱二维码', '联系方式二维码']);
 const QR_SOURCES = [PUBLIC_ACCOUNT_QR_SOURCE, 'Giffgaff下载二维码', '激活教程二维码'];
@@ -2944,7 +2942,6 @@ async function loadSettings() {
     const s = await res.json();
 	    // moemail settings are now configured per-provider on the 邮箱服务商 tab; legacy fields are intentionally ignored
 	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-	    $('s-activation-tutorial-url').value = s.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;
 	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
 	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
     $('s-public-worker-domain').value = s.public_worker_domain || '';
@@ -2965,7 +2962,6 @@ async function saveSettings() {
   const payload = {
     // moemail_url/api_key are now configured per-provider; legacy fields intentionally removed
     giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
-    activation_tutorial_url: $('s-activation-tutorial-url').value.trim() || DEFAULT_ACTIVATION_TUTORIAL_URL,
     agent_api_token: $('s-agent-token').value.trim() || null,
     public_worker_domain: $('s-public-worker-domain').value.trim(),
   };
@@ -2981,7 +2977,6 @@ async function saveSettings() {
     });
     if (!res.ok) throw new Error('保存失败');
     labelConfig.giffgaff_download_url = payload.giffgaff_download_url;
-    labelConfig.activation_tutorial_url = payload.activation_tutorial_url;
     await saveLabelConfig(false);
     toast('设置已保存', 'success');
   } catch(err) {
@@ -3298,6 +3293,11 @@ async function loadLabelConfig() {
   for (const template of labelConfig.templates) {
     for (const element of template.elements || []) {
       if (element.type === 'qr') element.source = normalizeQrSource(element.source);
+      if (template.id === 'activation-guide-50x40' && element.source === '激活教程地址') {
+        element.source = '固定文字';
+        element.text = 'giffgaff 12 步激活教程';
+        element.fontSize = Math.max(Number(element.fontSize) || 0, 8);
+      }
     }
   }
   selectedTemplateId = labelConfig.templates[0].id;
@@ -3349,9 +3349,9 @@ function fallbackTemplates() {
       width_mm: 50,
       height_mm: 40,
       elements: [
-        {id:'activation-url', type:'text', source:'激活教程地址', text:'', x:3, y:3, w:44, h:6, fontSize:6, bold:true},
-        {id:'activation-qr', type:'qr', source:'激活教程二维码', text:'', x:13, y:10, w:24, h:24, fontSize:8, bold:false},
-        {id:'activation-tip', type:'text', source:'固定文字', text:'扫码查看 giffgaff 激活教程', x:5, y:35, w:40, h:4, fontSize:6, bold:true},
+        {id:'activation-url', type:'text', source:'固定文字', text:'giffgaff 12 步激活教程', x:3, y:3, w:44, h:6, fontSize:8, bold:true},
+        {id:'activation-qr', type:'qr', source:'激活教程二维码', text:'', x:13, y:9, w:24, h:24, fontSize:8, bold:false},
+        {id:'activation-tip', type:'text', source:'固定文字', text:'扫码后直接查看，无需二次跳转', x:5, y:34, w:40, h:4, fontSize:6, bold:true},
       ],
     },
     {
@@ -3425,7 +3425,6 @@ function selectTemplate(id) {
 
 async function saveLabelConfig(showToast=true) {
   labelConfig.giffgaff_download_url = $('s-giffgaff-url')?.value.trim() || labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-  labelConfig.activation_tutorial_url = $('s-activation-tutorial-url')?.value.trim() || labelConfig.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;
   const res = await fetch(API + '/label-config', {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},

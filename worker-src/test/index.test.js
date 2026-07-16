@@ -84,7 +84,7 @@ for (const apiBase of [
       `https://gg.6667766.xyz/p/${TOKEN}`,
     ]);
     assert.ok(calls.every((url) => !new URL(url).pathname.startsWith("//")));
-    assert.equal(response.headers.get("X-Public-Card-Worker"), "5");
+    assert.equal(response.headers.get("X-Public-Card-Worker"), "6");
     assert.equal(response.headers.get("X-Origin-Stage"), "page");
     assert.equal(response.headers.get("X-Origin-Status"), "200");
   });
@@ -102,7 +102,7 @@ test("missing API_BASE returns an explicit configuration error", async () => {
   assert.equal(response.status, 500);
   assert.equal(await response.text(), "Worker configuration error");
   assert.equal(response.headers.get("X-Worker-Error"), "api-base");
-  assert.equal(response.headers.get("X-Public-Card-Worker"), "5");
+  assert.equal(response.headers.get("X-Public-Card-Worker"), "6");
   assert.equal(fetchCalled, false);
 });
 
@@ -183,9 +183,9 @@ test("first page request is MISS and the next request is HIT", async () => {
   assert.equal(second.headers.get("X-Cache"), "HIT");
   assert.equal(first.headers.get("Cache-Control"), "no-store, max-age=0");
   assert.equal(second.headers.get("Cache-Control"), "no-store, max-age=0");
-  assert.equal(second.headers.get("X-Public-Card-Worker"), "5");
+  assert.equal(second.headers.get("X-Public-Card-Worker"), "6");
   const [storedUrl, storedResponse] = [...cacheEntries.entries()][0];
-  assert.ok(storedUrl.includes("&worker=5"));
+  assert.ok(storedUrl.includes("&worker=6"));
   assert.equal(storedResponse.headers.get("Cache-Control"), "public, max-age=2592000");
   assert.equal(versionCalls, 2);
   assert.equal(pageCalls, 1);

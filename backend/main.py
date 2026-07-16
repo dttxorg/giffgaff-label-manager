@@ -127,9 +127,9 @@ DEFAULT_LABEL_TEMPLATES = [
         "width_mm": 50,
         "height_mm": 40,
         "elements": [
-            {"id": "activation-url", "type": "text", "source": "激活教程地址", "text": "", "x": 3, "y": 3, "w": 44, "h": 6, "fontSize": 6, "bold": True},
-            {"id": "activation-qr", "type": "qr", "source": "激活教程二维码", "text": "", "x": 13, "y": 10, "w": 24, "h": 24, "fontSize": 8, "bold": False},
-            {"id": "activation-tip", "type": "text", "source": "固定文字", "text": "扫码查看 giffgaff 激活教程", "x": 5, "y": 35, "w": 40, "h": 4, "fontSize": 6, "bold": True},
+            {"id": "activation-url", "type": "text", "source": "固定文字", "text": "giffgaff 12 步激活教程", "x": 3, "y": 3, "w": 44, "h": 6, "fontSize": 8, "bold": True},
+            {"id": "activation-qr", "type": "qr", "source": "激活教程二维码", "text": "", "x": 13, "y": 9, "w": 24, "h": 24, "fontSize": 8, "bold": False},
+            {"id": "activation-tip", "type": "text", "source": "固定文字", "text": "扫码后直接查看，无需二次跳转", "x": 5, "y": 34, "w": 40, "h": 4, "fontSize": 6, "bold": True},
         ],
     },
     {

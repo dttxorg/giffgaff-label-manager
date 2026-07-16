@@ -1,9 +1,11 @@
 """公开页面路由：扫码后展示已激活号码资料或未激活卡教程。
 路径前缀 /p/，不挂在 /api/* 下，自动绕过后台口令鉴权。
 """
+import base64
 import html
 import os
 import re
+from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter
@@ -17,11 +19,41 @@ _TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "public_ca
 _ACTIVATION_TEMPLATE_PATH = os.path.join(
     os.path.dirname(__file__), "templates", "activation_card.html"
 )
+_ACTIVATION_ASSET_DIR = os.path.join(
+    os.path.dirname(__file__), "assets", "public_activation"
+)
 ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
-DEFAULT_ACTIVATION_TUTORIAL_URL = "https://gg.681218.xyz/activation.html"
+
+SIM_INSERT_WARNING_CONTENT = """:::warning 插卡前重要提醒
+如果准备把 giffgaff 作为手机主卡使用，请在插卡前关闭 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
+**iPhone**：设置 → 信息 → 关闭 iMessage；同时关闭 RCS 信息（如有）。
+**安卓手机**：短信 App → 设置 → 关闭 RCS 聊天、聊天功能、增强短信或智能短信。
+:::
+"""
+
+ACTIVATION_STEPS = (
+    ("account", "打开官方激活入口", "打开 [giffgaff 官方激活页](https://www.giffgaff.com/activate)，点击 **Activate your SIM**，输入卡片上 Your Activation Code 下方的 6 位激活码，再次点击 Activate your SIM。", "step1.png"),
+    ("account", "填写初始邮箱", "输入准备绑定到 giffgaff 账户的邮箱地址，然后点击 **Next**。请确保可以正常收取邮件。", "step2.png"),
+    ("account", "确认邮箱验证码", "打开邮箱，找到 giffgaff 发来的验证码，填入页面后点击 **Confirm**。", "step3.png"),
+    ("account", "设置登录密码", "为 giffgaff 账户设置密码，然后点击 **Register**。请单独保存好这个密码。", "step4.png"),
+    ("account", "关闭促销订阅", "页面询问是否接收促销信息时，选择 **No, thanks**，再点击 **Continue**。", "step5.png"),
+    ("payment", "选择 Pay as you go", "点击 **Pay as you go** 标签，向下滑到页面底部，再次选择 Pay as you go，点击 **Continue**。", "step6.png"),
+    ("payment", "选择 10 英镑", "选择 **£10** 充值金额，然后点击 **Pay now**。没有合适的海外支付方式时，可联系客服办理代充值。", "step7.jpeg"),
+    ("payment", "填写英国地址", "按页面要求填写英国地址，国家务必选择 **United Kingdom**，确认后点击 **Continue**。", "step8.png"),
+    ("payment", "填写银行卡并付款", "使用带有 **VISA 或 MasterCard** 标志且可进行海外支付的银行卡，填写卡号、持卡人姓名、有效期和安全码；勾选 I understand and agree 后点击 **Place order**。", "step9.png"),
+    ("payment", "等待激活完成", "付款成功后页面会提示 SIM 已激活并可能直接显示号码；也可能需要等待 30 分钟到 24 小时。等待期间 **不要重复点击 Place order**，避免重复扣款。", "step10.png"),
+    ("finish", "核对账户资料", "返回 giffgaff 主页查看电话号码和余额。激活完成后，请第一时间修改密码，并绑定或核对账户邮箱。", None),
+    ("finish", "保存手机号码", "欢迎短信会附上分配的手机号码，请立即保存。以后忘记号码时，可发送 `NUMBER` 到 `43430` 免费查询。", None),
+)
+
+ACTIVATION_PHASES = {
+    "account": ("PHASE 01", "创建账户", "激活码 · 邮箱 · 密码"),
+    "payment": ("PHASE 02", "充值并激活", "PAYG · £10 · 银行卡"),
+    "finish": ("PHASE 03", "完成并保存", "核对资料 · 保存号码"),
+}
 
 # 扫码页运营内容固定在代码中，避免后台自由排版导致视觉失控。
-ACTIVATION_PAGE_CONTENT = """# 📱 giffgaff 英国电话卡使用说明
+ACTIVATION_PAGE_CONTENT = """# ✅ 激活完成后
 
 :::tip giffgaff 套餐充值服务
 无需海外支付方式，支持 **giffgaff 账户代充值**。
@@ -33,33 +65,6 @@ ACTIVATION_PAGE_CONTENT = """# 📱 giffgaff 英国电话卡使用说明
 ✨ ChatGPT Plus　⚡ ChatGPT 5x Pro　🔥 ChatGPT 20x Pro
 适用于学习、办公、编程和 AI 创作，如需服务可联系客服咨询。
 :::
-
----
-
-## ⚠️ 插卡前重要提醒
-
-如果您准备将 giffgaff 作为手机主卡使用，请在插卡前关闭手机的 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
-
-## 🍎 iPhone 用户
-
-请关闭 **iMessage**：
-
-1. 设置 → 信息 → iMessage → 关闭
-2. 设置 → 信息 → RCS 信息 → 关闭（如有）
-
-避免手机自动进行号码验证或启用增强通信服务。
-
-## 🤖 安卓手机用户
-
-不同品牌名称可能不同，请关闭以下短信增强功能：
-
-- 智能短信 / 增强短信
-- RCS 聊天 / 聊天功能
-- 高级短信 / 富媒体消息
-
-常见路径：**短信 App → 设置 → 聊天功能 / RCS → 关闭**
-
-> 华为、小米、OPPO、vivo、三星等手机的设置名称可能有所不同。
 
 ---
 
@@ -112,6 +117,12 @@ ACTIVATED_PAGE_CONTENT = """# 📱 giffgaff 已激活号码使用说明
 如需 AI 服务，可联系客服咨询。
 :::
 
+:::warning 插卡前重要提醒
+如果准备把 giffgaff 作为手机主卡使用，请在插卡前关闭 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
+**iPhone**：设置 → 信息 → 关闭 iMessage；同时关闭 RCS 信息（如有）。
+**安卓手机**：短信 App → 设置 → 关闭 RCS 聊天、聊天功能、增强短信或智能短信。
+:::
+
 ---
 
 ## 🌐 官方网站
@@ -130,7 +141,6 @@ ACTIVATED_PAGE_CONTENT = """# 📱 giffgaff 已激活号码使用说明
 登录官网后即可：
 
 - 查看余额
-- 充值套餐
 - 修改邮箱绑定
 - 修改账户密码
 
@@ -338,6 +348,69 @@ def _markdown_to_safe_html(text: str) -> str:
     return "".join(out)
 
 
+@lru_cache(maxsize=16)
+def _activation_image_data_uri(filename: str) -> str:
+    """把教程截图嵌入 HTML，避免公开页依赖外部图片域名。"""
+    safe_name = os.path.basename(filename)
+    if safe_name != filename:
+        raise ValueError("invalid activation image filename")
+    path = os.path.join(_ACTIVATION_ASSET_DIR, safe_name)
+    with open(path, "rb") as image_file:
+        encoded = base64.b64encode(image_file.read()).decode("ascii")
+    mime = "image/jpeg" if safe_name.lower().endswith((".jpg", ".jpeg")) else "image/png"
+    return f"data:{mime};base64,{encoded}"
+
+
+def _render_activation_steps() -> str:
+    """渲染固定的 12 步教程；文字默认展开，截图在当前页按需展开。"""
+    out: list[str] = []
+    active_phase = None
+    for step_number, (phase, title, description, image_name) in enumerate(
+        ACTIVATION_STEPS,
+        start=1,
+    ):
+        if phase != active_phase:
+            if active_phase is not None:
+                out.append("</div>")
+            phase_index, phase_title, phase_note = ACTIVATION_PHASES[phase]
+            out.append(
+                '<div class="tutorial-phase">'
+                '<div class="phase-heading">'
+                f'<span>{html.escape(phase_index)}</span>'
+                f'<div><h3>{html.escape(phase_title)}</h3>'
+                f'<p>{html.escape(phase_note)}</p></div>'
+                '</div>'
+            )
+            active_phase = phase
+
+        screenshot = ""
+        if image_name:
+            open_attr = " open" if step_number == 1 else ""
+            screenshot = (
+                f'<details class="step-shot"{open_attr}>'
+                '<summary><span>查看步骤截图</span><span aria-hidden="true">＋</span></summary>'
+                f'<img src="{_activation_image_data_uri(image_name)}" '
+                f'alt="giffgaff 激活步骤 {step_number} 截图" loading="lazy">'
+                '</details>'
+            )
+
+        out.append(
+            '<article class="tutorial-step">'
+            '<div class="step-number" aria-hidden="true">'
+            f'{step_number:02d}'
+            '</div>'
+            '<div class="step-body">'
+            f'<h4>{html.escape(title)}</h4>'
+            f'<p>{_markdown_inline(description)}</p>'
+            f'{screenshot}'
+            '</div>'
+            '</article>'
+        )
+    if active_phase is not None:
+        out.append("</div>")
+    return "".join(out)
+
+
 def _build_substitution_vars(customer_row: dict) -> dict:
     """从客户行组装公开页显示所需字段。"""
     return {
@@ -402,17 +475,14 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     )
 
 
-def _render_activation_card(tutorial_url: str, hint_markdown: str) -> str:
-    safe_url = html.escape(tutorial_url)
-    hint_md = _substitute_variables(
-        hint_markdown,
-        {"activation_tutorial_url": tutorial_url},
-    )
-    hint_html = _markdown_to_safe_html(hint_md)
+def _render_activation_card() -> str:
+    warning_html = _markdown_to_safe_html(SIM_INSERT_WARNING_CONTENT)
+    steps_html = _render_activation_steps()
+    hint_html = _markdown_to_safe_html(ACTIVATION_PAGE_CONTENT)
     return (
         _load_activation_template()
-        .replace("__TUTORIAL_URL__", safe_url)
-        .replace("__TUTORIAL_URL_DISPLAY__", safe_url)
+        .replace("__INSERT_WARNING_HTML__", warning_html)
+        .replace("__TUTORIAL_STEPS_HTML__", steps_html)
         .replace("__HINT_HTML__", hint_html)
     )
 
@@ -421,10 +491,6 @@ def _render_activation_card(tutorial_url: str, hint_markdown: str) -> str:
 async def public_card_page(token: str):
     if token == ACTIVATION_GUIDE_PUBLIC_TOKEN:
         settings = await crud.get_settings()
-        tutorial_url = (
-            settings.get("activation_tutorial_url") or DEFAULT_ACTIVATION_TUTORIAL_URL
-        )
-        hint_md = ACTIVATION_PAGE_CONTENT
         try:
             version = max(1, int(settings.get("activation_page_version") or 1))
         except (TypeError, ValueError):
@@ -432,7 +498,7 @@ async def public_card_page(token: str):
         headers = _security_headers()
         headers["X-Cache-Version"] = str(version)
         return HTMLResponse(
-            _render_activation_card(tutorial_url, hint_md),
+            _render_activation_card(),
             headers=headers,
         )
     if not token or len(token) > 128:

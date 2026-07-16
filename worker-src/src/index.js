@@ -2,7 +2,7 @@
 // 部署说明见 worker-src/README.md
 // 代码与 frontend/worker_setup.js 保持同步，并由测试强制校验。
 
-const WORKER_VERSION = "5";
+const WORKER_VERSION = "6";
 const PUBLIC_TOKEN_PATTERN = /^\/p\/([A-Za-z0-9_-]{20,128})$/;
 
 export function getApiBase(env) {

@@ -63,8 +63,11 @@ def test_default_label_config_includes_activation_tutorial_template(client):
     template = _tutorial_template(config)
     assert template["name"] == "未激活卡教程 50x40"
     sources = [element["source"] for element in template["elements"]]
-    assert "激活教程地址" in sources
+    assert "激活教程地址" not in sources
     assert "激活教程二维码" in sources
+    title = next(element for element in template["elements"] if element["id"] == "activation-url")
+    assert title["source"] == "固定文字"
+    assert title["text"] == "giffgaff 12 步激活教程"
     assert "手机号" not in sources
     assert "邮箱" not in sources
 
@@ -109,7 +112,7 @@ def test_system_settings_exposes_tutorial_url(client):
     assert settings["activation_tutorial_url"] == "https://example.com/tutorial.html"
 
 
-def test_shared_tutorial_qr_page_shows_copyable_url_and_fixed_content(client):
+def test_shared_tutorial_qr_page_embeds_complete_guide_without_second_jump(client):
     client.patch("/api/settings", json={
         "activation_tutorial_url": "https://gg.681218.xyz/activation.html",
         "activation_page_markdown": "LEGACY_ACTIVATION_CONTENT",
@@ -120,9 +123,20 @@ def test_shared_tutorial_qr_page_shows_copyable_url_and_fixed_content(client):
 
     assert response.status_code == 200
     body = response.text
-    assert 'data-url="https://gg.681218.xyz/activation.html"' in body
-    assert "copyTutorialUrl()" in body
-    assert "navigator.clipboard.writeText(value)" in body
+    assert 'data-url=' not in body
+    assert "copyTutorialUrl" not in body
+    assert "tutorial-copy-btn" not in body
+    assert "https://gg.681218.xyz/activation.html" not in body
+    assert 'href="https://www.giffgaff.com/activate"' in body
+    assert "12 步完成激活" in body
+    assert body.count('class="tutorial-step"') == 12
+    assert body.count('class="step-shot"') == 10
+    assert body.count("data:image/") == 10
+    assert "打开官方激活入口" in body
+    assert "填写初始邮箱" in body
+    assert "选择 Pay as you go" in body
+    assert "不要重复点击 Place order" in body
+    assert "发送 <code>NUMBER</code> 到 <code>43430</code>" in body
     assert "LEGACY_ACTIVATION_CONTENT" not in body
     assert "LEGACY_ACTIVATED_CONTENT" not in body
     assert "giffgaff 套餐充值服务" in body
@@ -135,7 +149,8 @@ def test_shared_tutorial_qr_page_shows_copyable_url_and_fixed_content(client):
     assert "号码保号提醒服务" in body
     assert "<!--email_off-->" in body
     assert 'class="route-strip"' in body
-    assert "三步开始用" in body
+    assert "扫码一次" in body
+    assert "激活到底" in body
 
 
 def test_both_public_pages_ignore_legacy_markdown_settings(client):
@@ -155,7 +170,9 @@ def test_both_public_pages_ignore_legacy_markdown_settings(client):
     assert "LEGACY_TUTORIAL_TEXT" not in activated_page
     assert "LEGACY_ACTIVATED_TEXT" not in activated_page
     assert "插卡前重要提醒" in tutorial_page
+    assert "插卡前重要提醒" in activated_page
     assert "账号登录信息" in activated_page
+    assert "<li>充值套餐</li>" not in activated_page
 
 
 def test_activation_page_version_increments_to_invalidate_worker_cache(client):
@@ -196,12 +213,13 @@ def test_tutorial_url_rejects_non_http_schemes(client, endpoint, payload):
 def test_frontend_has_selectable_tutorial_sources_and_template():
     html = (ROOT_DIR / "frontend" / "index.html").read_text(encoding="utf-8")
 
-    assert "const DEFAULT_ACTIVATION_TUTORIAL_URL = 'https://gg.681218.xyz/activation.html';" in html
     assert "onclick=\"addLabelElement('qr', '激活教程二维码')\"" in html
+    assert "onclick=\"addLabelElement('text', '激活教程地址')\"" not in html
+    assert 'id="s-activation-tutorial-url"' not in html
     assert "case '激活教程地址':" in html
     assert "source === '激活教程二维码'" in html
     assert "ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page'" in html
-    assert "const PUBLIC_PAGE_VIEW_VERSION = '5';" in html
+    assert "const PUBLIC_PAGE_VIEW_VERSION = '6';" in html
     assert "return getPublicPageUrl(ACTIVATION_GUIDE_PUBLIC_TOKEN);" in html
     assert "?view=${PUBLIC_PAGE_VIEW_VERSION}" in html
     assert "onclick=\"addLabelElement('qr', '号码资料二维码')\"" in html
