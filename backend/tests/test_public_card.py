@@ -570,8 +570,9 @@ def test_random_identity_uses_verified_location_as_an_indivisible_tuple():
         (item["address"], item["city"], item["postcode"])
         for item in REAL_UK_ADDRESSES
     }
-    assert len(verified) >= 50
+    assert len(verified) >= 500
     assert len(verified) == len(REAL_UK_ADDRESSES)
+    assert len({item["city"] for item in REAL_UK_ADDRESSES}) >= 25
 
     for _ in range(500):
         ident = generate_random_identity()
@@ -586,13 +587,53 @@ def test_verified_postcode_pool_uses_real_uk_format_and_prefix_filter():
     postcode_pattern = re.compile(r"^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$")
     assert all(postcode_pattern.fullmatch(item["postcode"]) for item in REAL_UK_ADDRESSES)
 
-    sw7_postcodes = {
+    ec2_postcodes = {
         item["postcode"] for item in REAL_UK_ADDRESSES
-        if item["postcode"].startswith("SW7")
+        if item["postcode"].startswith("EC2")
     }
-    assert generate_postcode(" sw7 ") in sw7_postcodes
+    assert generate_postcode(" ec2 ") in ec2_postcodes
     with pytest.raises(ValueError):
         generate_postcode("ZZ99")
+
+
+def test_address_pool_csv_has_unique_official_source_ids():
+    """生成数据必须可追溯到唯一 FHRS 记录，不能退化成人工拼接列表。"""
+    import csv
+    from uk_random import ADDRESS_DATA_PATH
+
+    with ADDRESS_DATA_PATH.open(encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert len(rows) >= 500
+    assert len({row["source_id"] for row in rows}) == len(rows)
+    assert all(row["source_id"].isdigit() for row in rows)
+
+
+def test_fhrs_builder_normalizes_and_filters_public_premises():
+    """构建器只接收有完整邮编和门牌号的公开营业场所。"""
+    scripts_dir = BACKEND_DIR.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    from build_uk_address_pool import establishment_to_row
+
+    sample = {
+        "FHRSID": 123456,
+        "BusinessType": "Restaurant/Cafe/Canteen",
+        "AddressLine1": "10 - 12 Market Street",
+        "AddressLine2": "Leicester",
+        "AddressLine3": "",
+        "AddressLine4": "",
+        "PostCode": "le1 6dp ",
+    }
+    assert establishment_to_row(sample, "Leicester", ("Leicester",)) == {
+        "address": "10 - 12 Market Street",
+        "city": "Leicester",
+        "postcode": "LE1 6DP",
+        "source_id": "123456",
+    }
+
+    mobile = dict(sample, BusinessType="Mobile caterer")
+    assert establishment_to_row(mobile, "Leicester", ("Leicester",)) is None
+    no_house_number = dict(sample, AddressLine1="Market Street")
+    assert establishment_to_row(no_house_number, "Leicester", ("Leicester",)) is None
 
 
 # ── Markdown 变量替换 ──
