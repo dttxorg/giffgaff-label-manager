@@ -67,6 +67,7 @@ LOGIN_FAILURE_LIMIT = 5
 _LOGIN_FAILURES: dict[str, deque[float]] = {}
 _LOGIN_FAILURES_LOCK = threading.Lock()
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
+DEFAULT_ACTIVATION_TUTORIAL_URL = "https://gg.681218.xyz/activation.html"
 DEFAULT_PHONE_STATUS = "激活"
 PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
 ACTIVATION_STATUSES = {
@@ -117,6 +118,17 @@ DEFAULT_LABEL_TEMPLATES = [
             {"id": "appqr", "type": "qr", "source": "Giffgaff下载二维码", "text": "", "x": 29, "y": 8, "w": 16, "h": 16, "fontSize": 8, "bold": False},
             {"id": "phone", "type": "text", "source": "手机号", "text": "", "x": 4, "y": 28, "w": 42, "h": 5, "fontSize": 9, "bold": True},
             {"id": "email", "type": "text", "source": "邮箱", "text": "", "x": 4, "y": 34, "w": 42, "h": 4, "fontSize": 5, "bold": False},
+        ],
+    },
+    {
+        "id": "activation-guide-50x40",
+        "name": "未激活卡教程 50x40",
+        "width_mm": 50,
+        "height_mm": 40,
+        "elements": [
+            {"id": "activation-url", "type": "text", "source": "激活教程地址", "text": "", "x": 3, "y": 3, "w": 44, "h": 6, "fontSize": 6, "bold": True},
+            {"id": "activation-qr", "type": "qr", "source": "激活教程二维码", "text": "", "x": 13, "y": 10, "w": 24, "h": 24, "fontSize": 8, "bold": False},
+            {"id": "activation-tip", "type": "text", "source": "固定文字", "text": "扫码查看 giffgaff 激活教程", "x": 5, "y": 35, "w": 40, "h": 4, "fontSize": 6, "bold": True},
         ],
     },
     {
@@ -620,6 +632,9 @@ async def get_sys_settings():
     rows = await get_settings()
     return SystemSettings(
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+        activation_tutorial_url=rows.get(
+            "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
+        ),
         agent_api_token="***" if rows.get("agent_api_token") else "",
         agent_api_token_source=_agent_token_source(rows),
         public_page_markdown=rows.get("public_page_markdown", ""),
@@ -632,6 +647,11 @@ async def get_sys_settings():
 async def update_settings(data: SystemSettings):
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
+    if data.activation_tutorial_url is not None:
+        tutorial_url = data.activation_tutorial_url.strip() or DEFAULT_ACTIVATION_TUTORIAL_URL
+        if not tutorial_url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="激活教程地址必须以 http:// 或 https:// 开头")
+        await set_setting("activation_tutorial_url", tutorial_url)
     if data.agent_api_token not in (None, "***", ""):
         await set_setting("agent_api_token", data.agent_api_token.strip())
     if data.public_page_markdown is not None:
@@ -2255,13 +2275,20 @@ async def get_label_config():
     rows = await get_settings()
     return LabelConfig(
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+        activation_tutorial_url=rows.get(
+            "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
+        ),
         templates=_load_label_templates(rows.get("label_templates", "")),
     )
 
 
 @app.put("/api/label-config")
 async def update_label_config(data: LabelConfig):
+    tutorial_url = data.activation_tutorial_url.strip() or DEFAULT_ACTIVATION_TUTORIAL_URL
+    if not tutorial_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="激活教程地址必须以 http:// 或 https:// 开头")
     await set_setting("giffgaff_download_url", data.giffgaff_download_url)
+    await set_setting("activation_tutorial_url", tutorial_url)
     await set_setting("label_templates", json.dumps(data.templates, ensure_ascii=False))
     return {"ok": True}
 
@@ -2286,6 +2313,9 @@ async def _export_backup_payload() -> dict:
         "settings": {
             "moemail_url": _normalize_base_url(rows.get("moemail_url", "")),
             "giffgaff_download_url": rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
+            "activation_tutorial_url": rows.get(
+                "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
+            ),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
         },
     }
@@ -2329,6 +2359,10 @@ async def _restore_backup_payload(data: dict) -> dict:
         safe_settings["moemail_url"] = _normalize_base_url(settings["moemail_url"])
     if isinstance(settings.get("giffgaff_download_url"), str):
         safe_settings["giffgaff_download_url"] = settings["giffgaff_download_url"]
+    if isinstance(settings.get("activation_tutorial_url"), str):
+        tutorial_url = settings["activation_tutorial_url"].strip()
+        if tutorial_url.startswith(("http://", "https://")):
+            safe_settings["activation_tutorial_url"] = tutorial_url
     if "label_templates" in settings:
         label_templates = settings["label_templates"]
         if not isinstance(label_templates, list):

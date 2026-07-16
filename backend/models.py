@@ -111,6 +111,7 @@ class CustomerDetail(BaseModel):
 
 class SystemSettings(BaseModel):
     giffgaff_download_url: Optional[str] = None
+    activation_tutorial_url: Optional[str] = None
     agent_api_token: Optional[str] = None
     agent_api_token_source: Optional[str] = None
     public_page_markdown: str = ""
@@ -215,6 +216,7 @@ class DomainInfo(BaseModel):
 
 class LabelConfig(BaseModel):
     giffgaff_download_url: str
+    activation_tutorial_url: str = "https://gg.681218.xyz/activation.html"
     templates: list[dict[str, Any]]
 
 
