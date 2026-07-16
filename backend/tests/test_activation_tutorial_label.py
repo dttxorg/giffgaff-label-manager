@@ -109,15 +109,11 @@ def test_system_settings_exposes_tutorial_url(client):
     assert settings["activation_tutorial_url"] == "https://example.com/tutorial.html"
 
 
-def test_shared_tutorial_qr_page_shows_copyable_url_and_independent_markdown(client):
+def test_shared_tutorial_qr_page_shows_copyable_url_and_fixed_content(client):
     client.patch("/api/settings", json={
         "activation_tutorial_url": "https://gg.681218.xyz/activation.html",
-        "activation_page_markdown": (
-            "## 未激活卡专属说明\n\n"
-            "这里可以放宣传、介绍和注意事项。\n\n"
-            "教程：{activation_tutorial_url}"
-        ),
-        "public_page_markdown": "联系方式页面独有说明",
+        "activation_page_markdown": "LEGACY_ACTIVATION_CONTENT",
+        "public_page_markdown": "LEGACY_ACTIVATED_CONTENT",
     })
 
     response = client.get("/p/activation-guide-public-page")
@@ -127,17 +123,24 @@ def test_shared_tutorial_qr_page_shows_copyable_url_and_independent_markdown(cli
     assert 'data-url="https://gg.681218.xyz/activation.html"' in body
     assert "copyTutorialUrl()" in body
     assert "navigator.clipboard.writeText(value)" in body
-    assert "未激活卡专属说明" in body
-    assert "这里可以放宣传、介绍和注意事项" in body
-    assert "联系方式页面独有说明" not in body
+    assert "LEGACY_ACTIVATION_CONTENT" not in body
+    assert "LEGACY_ACTIVATED_CONTENT" not in body
+    assert "giffgaff 套餐充值服务" in body
+    assert "ChatGPT Plus" in body
+    assert "ChatGPT 5x Pro" in body
+    assert "ChatGPT 20x Pro" in body
+    assert "iMessage" in body
+    assert "RCS" in body
+    assert "请勿在京东咨询" in body
+    assert "号码保号提醒服务" in body
     assert "<!--email_off-->" in body
     assert 'class="route-strip"' in body
     assert "三步开始用" in body
 
 
-def test_activation_page_markdown_is_independent_from_contact_page_markdown(client):
-    asyncio.run(crud.set_setting("activation_page_markdown", "教程页面独立内容"))
-    asyncio.run(crud.set_setting("public_page_markdown", "联系方式页面内容"))
+def test_both_public_pages_ignore_legacy_markdown_settings(client):
+    asyncio.run(crud.set_setting("activation_page_markdown", "LEGACY_TUTORIAL_TEXT"))
+    asyncio.run(crud.set_setting("public_page_markdown", "LEGACY_ACTIVATED_TEXT"))
     customer_id = asyncio.run(crud.create_customer(main.CustomerCreate(
         email="contact@example.com",
         activation_date="2026-07-16",
@@ -145,12 +148,14 @@ def test_activation_page_markdown_is_independent_from_contact_page_markdown(clie
     customer_token = client.get(f"/api/customers/{customer_id}").json()["public_token"]
 
     tutorial_page = client.get("/p/activation-guide-public-page").text
-    contact_page = client.get(f"/p/{customer_token}").text
+    activated_page = client.get(f"/p/{customer_token}").text
 
-    assert "教程页面独立内容" in tutorial_page
-    assert "联系方式页面内容" not in tutorial_page
-    assert "联系方式页面内容" in contact_page
-    assert "教程页面独立内容" not in contact_page
+    assert "LEGACY_TUTORIAL_TEXT" not in tutorial_page
+    assert "LEGACY_ACTIVATED_TEXT" not in tutorial_page
+    assert "LEGACY_TUTORIAL_TEXT" not in activated_page
+    assert "LEGACY_ACTIVATED_TEXT" not in activated_page
+    assert "插卡前重要提醒" in tutorial_page
+    assert "账号登录信息" in activated_page
 
 
 def test_activation_page_version_increments_to_invalidate_worker_cache(client):
@@ -197,7 +202,11 @@ def test_frontend_has_selectable_tutorial_sources_and_template():
     assert "source === '激活教程二维码'" in html
     assert "ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page'" in html
     assert "`${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`" in html
-    assert 'id="s-activation-page-markdown"' in html
-    assert 'data-target="s-activation-page-markdown"' in html
-    assert ":::promo 推荐内容" in html
+    assert "onclick=\"addLabelElement('qr', '号码资料二维码')\"" in html
+    assert "const PUBLIC_ACCOUNT_QR_SOURCE = '号码资料二维码';" in html
+    assert 'id="s-activation-page-markdown"' not in html
+    assert 'id="s-public-page-markdown"' not in html
+    assert 'id="s-custom-public-vars"' not in html
+    assert "bindQuickInsertButtons" not in html
+    assert "bindCustomVarAdd" not in html
     assert "id: 'activation-guide-50x40'" in html

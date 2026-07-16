@@ -220,6 +220,31 @@
   }
   .copy-btn:active { transform: translate(3px, 3px); box-shadow: none; }
   .copy-btn.copied { background: #285dff; }
+  .service-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 16px;
+  }
+  .service-pill {
+    min-width: 0;
+    padding: 13px 12px;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+  .service-pill:first-child { background: var(--lime); }
+  .service-pill:last-child { background: var(--blue); }
+  .service-pill small {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 750;
+    opacity: 0.72;
+  }
   .content-panel {
     margin: 34px 10px 0;
     padding: 26px 20px 22px;
@@ -345,6 +370,7 @@
     .route-step { padding-inline: 5px; }
     .tutorial-row { grid-template-columns: minmax(0, 1fr) 76px; }
     .copy-btn { min-width: 76px; padding-inline: 10px; }
+    .service-strip { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: no-preference) {
     .hero, .route-strip, .link-panel, .content-panel {
@@ -393,6 +419,10 @@
         <span class="tutorial-label">Activation tutorial URL</span>
         <code id="tutorial-url" data-url="__TUTORIAL_URL__" class="tutorial-val">__TUTORIAL_URL_DISPLAY__</code>
         <button class="copy-btn" type="button" onclick="copyTutorialUrl()" id="tutorial-copy-btn">复制网址</button>
+      </div>
+      <div class="service-strip" aria-label="可联系客服办理的服务">
+        <div class="service-pill">💳 giffgaff 套餐代充值<small>无需海外支付方式</small></div>
+        <div class="service-pill">🤖 ChatGPT Plus / Pro<small>AI 订阅服务</small></div>
       </div>
     </section>
 

@@ -1,8 +1,7 @@
-"""公开页面路由：扫码后展示的邮箱复制页。
+"""公开页面路由：扫码后展示已激活号码资料或未激活卡教程。
 路径前缀 /p/，不挂在 /api/* 下，自动绕过后台口令鉴权。
 """
 import html
-import json
 import os
 import re
 from typing import Optional
@@ -11,7 +10,6 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
 
 import crud
-from database import DATABASE_PATH
 
 router = APIRouter()
 
@@ -21,6 +19,167 @@ _ACTIVATION_TEMPLATE_PATH = os.path.join(
 )
 ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
 DEFAULT_ACTIVATION_TUTORIAL_URL = "https://gg.681218.xyz/activation.html"
+
+# 扫码页运营内容固定在代码中，避免后台自由排版导致视觉失控。
+ACTIVATION_PAGE_CONTENT = """# 📱 giffgaff 英国电话卡使用说明
+
+:::tip giffgaff 套餐充值服务
+无需海外支付方式，支持 **giffgaff 账户代充值**。
+续费套餐、充值余额都可以联系客服办理。
+:::
+
+:::promo AI 服务推荐
+本站同时提供 **ChatGPT Plus / Pro 订阅服务**。
+✨ ChatGPT Plus　⚡ ChatGPT 5x Pro　🔥 ChatGPT 20x Pro
+适用于学习、办公、编程和 AI 创作，如需服务可联系客服咨询。
+:::
+
+---
+
+## ⚠️ 插卡前重要提醒
+
+如果您准备将 giffgaff 作为手机主卡使用，请在插卡前关闭手机的 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
+
+## 🍎 iPhone 用户
+
+请关闭 **iMessage**：
+
+1. 设置 → 信息 → iMessage → 关闭
+2. 设置 → 信息 → RCS 信息 → 关闭（如有）
+
+避免手机自动进行号码验证或启用增强通信服务。
+
+## 🤖 安卓手机用户
+
+不同品牌名称可能不同，请关闭以下短信增强功能：
+
+- 智能短信 / 增强短信
+- RCS 聊天 / 聊天功能
+- 高级短信 / 富媒体消息
+
+常见路径：**短信 App → 设置 → 聊天功能 / RCS → 关闭**
+
+> 华为、小米、OPPO、vivo、三星等手机的设置名称可能有所不同。
+
+---
+
+## 🌐 官方网站
+
+[访问 giffgaff 官方网站](https://www.giffgaff.com)
+
+:::warning 请认准官方地址
+请避免进入非官方网站，不要向陌生人提供验证码或账户密码。
+:::
+
+## 💬 售后咨询
+
+如遇到以下问题，请联系卡片上的客服微信：
+
+- 无网络
+- 套餐问题
+- 账户问题
+- 使用疑问
+
+:::warning 售后渠道提醒
+请勿在京东咨询海外卡激活、网络配置等问题。京东客服无法处理 giffgaff 海外账户相关服务。
+:::
+
+## ⭐ 售后福利
+
+1. 完成使用后给出五星好评 ⭐⭐⭐⭐⭐
+2. 截图发送客服
+3. 免费领取 **号码保号提醒服务**
+
+帮助您定期维护号码状态，避免因长期闲置导致号码失效。
+
+:::info 一站式全球数字服务
+📱 giffgaff 英国电话卡
+💳 giffgaff 套餐充值服务
+🤖 ChatGPT AI 订阅服务
+感谢支持 ❤️
+:::
+"""
+
+ACTIVATED_PAGE_CONTENT = """# 📱 giffgaff 已激活号码使用说明
+
+:::tip giffgaff 套餐充值服务
+无需海外支付方式，可联系客服办理 **套餐续费、余额充值和账户代充值**。
+:::
+
+:::promo AI 服务推荐
+本站提供 **ChatGPT Plus / Pro 订阅服务**，适用于学习、办公、编程、写作和图片创作。
+✨ ChatGPT Plus　⚡ ChatGPT 5x Pro　🔥 ChatGPT 20x Pro
+如需 AI 服务，可联系客服咨询。
+:::
+
+---
+
+## 🌐 官方网站
+
+[访问 giffgaff 官方网站](https://www.giffgaff.com)
+
+:::warning 请认准官方地址
+请避免进入非官方网站，不要向陌生人提供验证码或账户密码。
+:::
+
+## 🔐 账号登录信息
+
+- **账号：您的 giffgaff 手机号码**
+- **密码：注册邮箱密码**
+
+登录官网后即可：
+
+- 查看余额
+- 充值套餐
+- 修改邮箱绑定
+- 修改账户密码
+
+## 💬 售后咨询
+
+如遇到激活、网络设置或账户使用问题，请联系卡片上的客服微信。
+
+:::warning 售后渠道提醒
+请勿在京东咨询海外卡激活、网络配置等问题。京东客服无法处理 giffgaff 海外账户相关服务。
+:::
+
+## ⭐ 售后福利
+
+1. 完成使用后给出五星好评 ⭐⭐⭐⭐⭐
+2. 截图发送客服
+3. 免费领取 **号码保号提醒服务**
+
+帮助您定期维护号码状态，避免因长期闲置导致号码失效。
+
+---
+
+## 🤖 ChatGPT 订阅服务
+
+### ⭐ ChatGPT Plus
+
+- 学习辅助
+- 办公提效
+- AI 写作
+- 图片创作
+
+### ⚡ 5x Pro
+
+- 更复杂任务处理
+- 编程辅助
+- 高频内容创作
+
+### 🔥 20x Pro
+
+- 长时间使用
+- 专业创作
+- 高强度任务
+
+:::info 一站式全球数字服务
+📱 giffgaff 英国电话卡
+💳 giffgaff 套餐充值服务
+🤖 ChatGPT AI 服务
+感谢支持 ❤️
+:::
+"""
 
 
 def _load_template() -> str:
@@ -53,9 +212,7 @@ def _security_headers() -> dict:
     }
 
 
-# Markdown 里的 {var_name} 占位符。客户字段优先，没有的留空。
-# 用户也可以在 system_settings.custom_public_vars 里定义全局变量（JSON 格式），
-# 优先级低于客户字段（防止全局变量覆盖客户数据）。
+# Markdown 里的 {var_name} 占位符，没有的留空。
 def _substitute_variables(text: str, vars: dict) -> str:
     if not text or "{" not in text:
         return text
@@ -182,9 +339,8 @@ def _markdown_to_safe_html(text: str) -> str:
 
 
 def _build_substitution_vars(customer_row: dict) -> dict:
-    """从客户行 + 系统设置里组装变量字典（供 markdown 替换用）。"""
-    # 客户字段
-    vars_ = {
+    """从客户行组装公开页显示所需字段。"""
+    return {
         "phone_number": customer_row.get("phone_number") or "",
         "email": customer_row.get("email") or "",
         "moemail_address": customer_row.get("moemail_address") or "",
@@ -211,27 +367,6 @@ def _build_substitution_vars(customer_row: dict) -> dict:
         "phone_status": customer_row.get("phone_status") or "激活",
         "shipping_address": customer_row.get("shipping_address") or "",
     }
-    # 全局自定义变量（来自 system_settings.custom_public_vars，JSON 格式）
-    # 优先级低于客户字段（不覆盖客户数据）
-    import sqlite3 as _sqlite3
-    from database import DATABASE_PATH as DB_PATH
-    # 全局自定义变量（来自 system_settings.custom_public_vars，JSON 格式）
-    # 优先级低于客户字段（不覆盖客户数据）
-    try:
-        with _sqlite3.connect(DB_PATH) as conn:
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key = 'custom_public_vars'"
-            ).fetchone()
-        custom_raw = row[0] if row and row[0] else ""
-        if custom_raw.strip():
-            parsed = json.loads(custom_raw)
-            if isinstance(parsed, dict):
-                for k, v in parsed.items():
-                    if k not in vars_ or not vars_[k]:
-                        vars_[k] = str(v) if v is not None else ""
-    except Exception:
-        pass
-    return vars_
 
 
 def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
@@ -250,10 +385,10 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     if phone:
         phone_row = (
             f'<div class="contact-row" id="phone-row">'
-            f'<span class="contact-label">Phone number</span>'
+            f'<span class="contact-label">giffgaff 手机号码</span>'
             f'<code id="phone" data-phone="{html.escape(phone)}" class="contact-val">{html.escape(phone)}</code>'
             f'<button class="copy-btn" type="button" '
-            f'onclick="copyFromEl(\'phone\', \'已复制手机号\')" id="phone-copy-btn">复制</button>'
+            f'onclick="copyFromEl(\'phone\', \'已复制手机号码\')" id="phone-copy-btn">复制</button>'
             f'</div>'
         )
     else:
@@ -289,7 +424,7 @@ async def public_card_page(token: str):
         tutorial_url = (
             settings.get("activation_tutorial_url") or DEFAULT_ACTIVATION_TUTORIAL_URL
         )
-        hint_md = settings.get("activation_page_markdown", "") or ""
+        hint_md = ACTIVATION_PAGE_CONTENT
         try:
             version = max(1, int(settings.get("activation_page_version") or 1))
         except (TypeError, ValueError):
@@ -313,9 +448,8 @@ async def public_card_page(token: str):
             status_code=404,
             headers=_security_headers(),
         )
-    # 读取设置 + 组装变量
-    settings_rows = await crud.get_settings()
-    hint_md = settings_rows.get("public_page_markdown", "") or ""
+    # 号码与初始邮箱来自客户记录；下方运营说明固定在代码中。
+    hint_md = ACTIVATED_PAGE_CONTENT
     vars_ = _build_substitution_vars(card)
     headers = _security_headers()
     headers["X-Cache-Version"] = str(card["public_version"])

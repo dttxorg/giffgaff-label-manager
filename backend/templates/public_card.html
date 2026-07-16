@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
-<title>您的联系方式</title>
+<title>giffgaff 已激活号码资料</title>
 <style>
   :root {
     color-scheme: light;
@@ -218,6 +218,31 @@
     box-shadow: 0 0 0 var(--ink);
   }
   .copy-btn.copied { background: var(--blue); }
+  .service-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 16px;
+  }
+  .service-pill {
+    min-width: 0;
+    padding: 13px 12px;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+  .service-pill:first-child { background: var(--coral); }
+  .service-pill:last-child { background: var(--lime); }
+  .service-pill small {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 750;
+    opacity: 0.72;
+  }
   .content-panel {
     margin: 32px 10px 0;
     padding: 26px 20px 22px;
@@ -346,6 +371,7 @@
     .panel { margin-inline: 5px; }
     .contact-row { grid-template-columns: minmax(0, 1fr) 68px; }
     .copy-btn { min-width: 68px; padding-inline: 10px; }
+    .service-strip { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: no-preference) {
     .hero, .panel, .content-panel {
@@ -365,12 +391,12 @@
     <header class="hero">
       <div class="hero-top">
         <span class="wordmark">giffgaff</span>
-        <span class="status-chip">READY TO COPY</span>
+        <span class="status-chip">SIM ACTIVATED</span>
       </div>
       <div class="hero-copy">
-        <p class="eyebrow">YOUR DETAILS / 01</p>
-        <h1>联系方式，<br><span>随手就能用。</span></h1>
-        <p class="hero-note">不用逐字输入。找到需要的资料，点击复制就可以继续。</p>
+        <p class="eyebrow">ACTIVATED SIM / 01</p>
+        <h1>号码资料，<br><span>复制就能用。</span></h1>
+        <p class="hero-note">这里保存的是已激活的 giffgaff 手机号码和初始注册邮箱。</p>
       </div>
       <div class="sim-object" aria-hidden="true">
         <span class="sim-kicker">SIM / READY</span>
@@ -378,23 +404,27 @@
       </div>
     </header>
 
-    <section class="panel" aria-labelledby="contact-title">
+    <section class="panel" aria-labelledby="account-title">
       <div class="section-head">
         <div>
           <p class="section-index">01 / COPY</p>
-          <h2 class="section-title" id="contact-title">先保存这两项</h2>
+          <h2 class="section-title" id="account-title">号码与初始邮箱</h2>
           <p class="section-caption">按钮只复制资料本身，不会带上其他文字。</p>
         </div>
       </div>
       <div class="contact-stack">
+        __PHONE_ROW__
         <div class="contact-row" id="email-row">
-          <span class="contact-label">Email address</span>
+          <span class="contact-label">初始注册邮箱</span>
           <!--email_off-->
           <code id="email" data-email="__EMAIL__" class="contact-val">__EMAIL_DISPLAY__</code>
           <!--/email_off-->
           <button class="copy-btn" type="button" onclick="copyFromEl('email', '已复制邮箱')" id="email-copy-btn">复制</button>
         </div>
-        __PHONE_ROW__
+      </div>
+      <div class="service-strip" aria-label="可联系客服办理的服务">
+        <div class="service-pill">💳 giffgaff 套餐代充值<small>续费套餐 · 充值余额</small></div>
+        <div class="service-pill">🤖 ChatGPT Plus / Pro<small>AI 订阅服务</small></div>
       </div>
     </section>
 
@@ -402,7 +432,7 @@
       <div class="section-head">
         <div>
           <p class="section-index">02 / READ</p>
-          <h2 class="section-title" id="guide-title">接下来怎么用</h2>
+          <h2 class="section-title" id="guide-title">使用说明与服务</h2>
         </div>
       </div>
       <div class="hint" id="hint">
@@ -411,7 +441,7 @@
         <!--/email_off-->
       </div>
     </section>
-    <p class="footer">PRIVATE CONTACT CARD · NO ACCOUNT DATA</p>
+    <p class="footer">GIFFGAFF ACTIVATED SIM · PRIVATE ACCOUNT DETAILS</p>
   </main>
 
 <script>

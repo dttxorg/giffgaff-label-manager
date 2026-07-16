@@ -84,7 +84,7 @@ for (const apiBase of [
       `https://gg.6667766.xyz/p/${TOKEN}`,
     ]);
     assert.ok(calls.every((url) => !new URL(url).pathname.startsWith("//")));
-    assert.equal(response.headers.get("X-Public-Card-Worker"), "3");
+    assert.equal(response.headers.get("X-Public-Card-Worker"), "4");
     assert.equal(response.headers.get("X-Origin-Stage"), "page");
     assert.equal(response.headers.get("X-Origin-Status"), "200");
   });
@@ -102,7 +102,7 @@ test("missing API_BASE returns an explicit configuration error", async () => {
   assert.equal(response.status, 500);
   assert.equal(await response.text(), "Worker configuration error");
   assert.equal(response.headers.get("X-Worker-Error"), "api-base");
-  assert.equal(response.headers.get("X-Public-Card-Worker"), "3");
+  assert.equal(response.headers.get("X-Public-Card-Worker"), "4");
   assert.equal(fetchCalled, false);
 });
 
@@ -181,8 +181,8 @@ test("first page request is MISS and the next request is HIT", async () => {
 
   assert.equal(first.headers.get("X-Cache"), "MISS");
   assert.equal(second.headers.get("X-Cache"), "HIT");
-  assert.equal(second.headers.get("X-Public-Card-Worker"), "3");
-  assert.ok([...cacheEntries.keys()][0].includes("&worker=3"));
+  assert.equal(second.headers.get("X-Public-Card-Worker"), "4");
+  assert.ok([...cacheEntries.keys()][0].includes("&worker=4"));
   assert.equal(versionCalls, 2);
   assert.equal(pageCalls, 1);
 });
@@ -194,4 +194,8 @@ test("frontend deployment snippet stays identical to worker source", () => {
   runInNewContext(setupSource, sandbox);
 
   assert.equal(sandbox.window.PUBLIC_WORKER_JS_CODE.trim(), canonical);
+  assert.match(
+    sandbox.window.PUBLIC_WORKER_WRANGLER_TOML,
+    /API_BASE = "__API_BASE__"/,
+  );
 });

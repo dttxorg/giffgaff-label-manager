@@ -1143,8 +1143,7 @@
               
               <button type="button" onclick="addLabelElement('text', '快递公司')">快递公司</button>
               <button type="button" onclick="addLabelElement('text', '快递单号')">快递单号</button>
-              <button type="button" onclick="addLabelElement('qr', '邮箱二维码')">邮箱二维码</button>
-              <button type="button" onclick="addLabelElement('qr', '联系方式二维码')">联系方式二维码</button>
+              <button type="button" onclick="addLabelElement('qr', '号码资料二维码')">号码资料二维码</button>
               <button type="button" onclick="addLabelElement('qr', 'Giffgaff下载二维码')">下载二维码</button>
               <button type="button" onclick="addLabelElement('text', '激活教程地址')">教程地址</button>
               <button type="button" onclick="addLabelElement('qr', '激活教程二维码')">教程二维码</button>
@@ -1331,9 +1330,9 @@ wrangler init --type javascript --no-git</pre>
         </ol>
 
         <h3 style="margin-top:32px;">③ 验证</h3>
-        <p>任意客户的「扫码公开页链接」卡片里点"在新标签打开"，应该：</p>
+        <p>任意客户的「已激活号码资料扫码页」卡片里点"在新标签打开"，应该：</p>
         <ul>
-          <li>页面正常显示邮箱和复制按钮（<code>card.example.com</code> 域名）</li>
+          <li>页面正常显示 giffgaff 手机号码、初始注册邮箱和复制按钮（<code>card.example.com</code> 域名）</li>
           <li>F12 → Network → 该请求响应头里有 <code>X-Cache: HIT</code>（第二次刷新后）</li>
           <li>点"重新生成公开链接"后，旧 URL 立即返回 404</li>
         </ul>
@@ -1375,62 +1374,10 @@ wrangler init --type javascript --no-git</pre>
           <div class="setting-item">
             <label>未激活卡教程地址</label>
             <input type="url" id="s-activation-tutorial-url" placeholder="https://gg.681218.xyz/activation.html">
-            <span class="setting-hint">客户扫码后会在独立页面中看到这个地址，并可一键复制。</span>
-          </div>
-          <div class="setting-item wide">
-            <label>未激活卡扫码页说明（独立）</label>
-            <div style="margin-bottom:7px;display:flex;flex-wrap:wrap;gap:5px;">
-              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::promo 推荐内容&#10;在这里填写你的介绍、优惠或宣传内容。&#10;:::&#10;">宣传卡片</button>
-              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::tip 激活提示&#10;在这里填写最重要的操作提示。&#10;:::&#10;">重点提示</button>
-              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::warning 使用前注意&#10;在这里填写风险、限制或注意事项。&#10;:::&#10;">注意事项</button>
-              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert="1. 复制上方教程地址&#10;2. 在浏览器中打开教程&#10;3. 按教程完成激活">三步流程</button>
-              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert="[查看详情](https://example.com)">行动按钮</button>
-            </div>
-            <textarea id="s-activation-page-markdown" rows="7" placeholder="例如：&#10;## giffgaff SIM 激活教程&#10;&#10;复制上方教程地址，在浏览器中打开。&#10;&#10;这里可以填写自己的介绍、宣传内容和注意事项。"></textarea>
-            <span class="setting-hint">只用于“未激活卡教程二维码”页面，不与下面的“扫码页底部说明”共用。支持标题、列表、链接按钮、引用和宣传/提示/警告卡片，也支持变量 <code>{activation_tutorial_url}</code>。</span>
+            <span class="setting-hint">客户扫码后会在独立页面中看到这个地址，并可一键复制。页面说明与运营内容固定在代码中。</span>
             <div class="button-row" style="margin-top:8px;">
               <button type="button" class="small ghost" onclick="openActivationGuidePage()">打开教程扫码页</button>
             </div>
-          </div>
-          <div class="setting-item wide">
-            <label>扫码页底部说明</label>
-            <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">
-              <button type="button" class="small ghost quick-insert" data-insert="📱 手机：{phone_number}">📱 手机</button>
-              <button type="button" class="small ghost quick-insert" data-insert="📧 邮箱：{email}">📧 邮箱</button>
-              <button type="button" class="small ghost quick-insert" data-insert="👤 姓名：{full_name}">👤 姓名</button>
-              <button type="button" class="small ghost quick-insert" data-insert="🏠 地址：{full_address}">🏠 地址</button>
-              <button type="button" class="small ghost quick-insert" data-insert="📅 开通：{activation_date}">📅 开通</button>
-              <button type="button" class="small ghost quick-insert" data-insert="💼 SIM：{sim_activation_code}">💼 SIM</button>
-              <button type="button" class="small ghost quick-insert" data-insert="✉️ 收件：{moemail_address}">✉️ 收件</button>
-              <button type="button" class="small ghost quick-insert" data-insert="🔗 分享：{share_link}">🔗 分享</button>
-              <button type="button" class="small ghost quick-insert" data-insert=":::tip 重点提示&#10;在这里填写需要客户优先看到的内容。&#10;:::&#10;">重点卡片</button>
-              <button type="button" class="small ghost quick-insert" data-insert=":::warning 注意事项&#10;在这里填写风险、限制或注意事项。&#10;:::&#10;">注意卡片</button>
-              <button type="button" class="small ghost quick-insert" data-insert="1. 第一步&#10;2. 第二步&#10;3. 第三步">步骤列表</button>
-              <button type="button" class="small ghost quick-insert" data-insert="[查看详情](https://example.com)">行动按钮</button>
-            </div>
-            <textarea id="s-public-page-markdown" rows="6" placeholder="例如：&#10;## 如何使用这个邮箱&#10;&#10;这是 Giffgaff 注册用的临时邮箱，请妥善保存。&#10;&#10;注册入口：<https://www.giffgaff.com>"></textarea>
-            <span class="setting-hint">客户扫码后展示在联系方式下方。支持标题、粗体、代码、列表、引用、链接按钮和四种内容卡片（tip / warning / promo / info）。HTML 标签会被自动转义。</span>
-            <details style="margin-top:6px;">
-              <summary style="cursor:pointer;font-size:12px;color:var(--muted);">支持的变量（点击展开）</summary>
-              <div class="code-block" style="margin-top:6px;font-size:12px;">
-                <code>{phone_number} {email} {first_name} {last_name} {full_name}<br>
-{address} {city} {postcode} {full_address}<br>
-{moemail_address} {sim_activation_code} {initial_password}<br>
-{activation_date} {phone_status} {shipping_address}<br>
-{share_link}</code>
-                <p style="margin:8px 0 0 0;">在 markdown 文本里写 <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;">{phone_number}</code>，会自动替换成该客户的手机号。未填写的字段替换为空字符串。</p>
-              </div>
-            </details>
-          </div>
-          <div class="setting-item wide">
-            <label>扫码页全局变量（JSON）</label>
-            <div style="margin-bottom:6px;display:flex;gap:6px;align-items:center;">
-              <input type="text" id="s-custom-var-name" placeholder="变量名（如 support_phone）" style="width:200px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
-              <input type="text" id="s-custom-var-value" placeholder="值（如 400-123-4567）" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
-              <button type="button" class="small blue" id="s-custom-var-add">＋ 添加</button>
-            </div>
-            <textarea id="s-custom-public-vars" rows="3" placeholder='例如：{"support_phone": "400-123-4567", "telegram": "@myname"}'></textarea>
-            <span class="setting-hint">在「扫码页底部说明」里可以用 <code>{support_phone}</code> 这种写法引用这些变量。变量名只允许字母数字下划线。优先级低于客户字段——同名变量客户值会覆盖这里的值。</span>
           </div>
 	          <div class="setting-item wide">
 	            <label>桌面客户端 Agent Token</label>
@@ -1519,12 +1466,12 @@ wrangler init --type javascript --no-git</pre>
         <button type="submit">保存</button>
       </form>
 
-      <!-- 扫码公开页链接 -->
+      <!-- 已激活号码资料扫码页 -->
       <div class="info-box" id="d-public-link-box" hidden>
         <div class="code-box-head">
-          <strong>扫码公开页链接</strong>
+          <strong>已激活号码资料扫码页</strong>
         </div>
-        <p class="code-meta">客户扫码后看到的页面：仅展示邮箱 + 复制按钮，不会暴露任何后台信息。</p>
+        <p class="code-meta">客户扫码后可复制 giffgaff 手机号码和初始注册邮箱，不会暴露客户管理后台。</p>
         <input type="text" id="d-public-link-input" readonly>
         <div class="button-row" style="margin-top:8px;">
           <button type="button" class="small blue" id="d-public-link-copy">复制链接</button>
@@ -1664,7 +1611,9 @@ const SIM_CODE_STATUS_LABELS = {
   '失败': '失败',
 };
 	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接', '激活教程地址'];
-const QR_SOURCES = ['邮箱二维码', '联系方式二维码', 'Giffgaff下载二维码', '激活教程二维码'];
+const PUBLIC_ACCOUNT_QR_SOURCE = '号码资料二维码';
+const LEGACY_PUBLIC_ACCOUNT_QR_SOURCES = new Set(['邮箱二维码', '联系方式二维码']);
+const QR_SOURCES = [PUBLIC_ACCOUNT_QR_SOURCE, 'Giffgaff下载二维码', '激活教程二维码'];
 const CAINIAO_SETTINGS = [];
 const SETTING_INPUT_IDS = {
 };
@@ -1695,6 +1644,10 @@ function toast(msg, type='') {
   t.textContent = msg;
   t.className = 'toast' + (type ? ' ' + type : '') + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function normalizeQrSource(source) {
+  return LEGACY_PUBLIC_ACCOUNT_QR_SOURCES.has(source) ? PUBLIC_ACCOUNT_QR_SOURCE : source;
 }
 
 function num(value) {
@@ -2422,61 +2375,6 @@ function copyElText(elementId, message) {
   copyText(value, message);
 }
 
-// 扫码页底部说明：在光标处插入文本（按钮 data-insert 属性提供片段）
-function bindQuickInsertButtons() {
-  document.querySelectorAll('.quick-insert').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const snippet = btn.dataset.insert;
-      const ta = $(btn.dataset.target || 's-public-page-markdown');
-      if (!ta || !snippet) return;
-      const start = ta.selectionStart ?? ta.value.length;
-      const end = ta.selectionEnd ?? ta.value.length;
-      const before = ta.value.slice(0, start);
-      const after = ta.value.slice(end);
-      // 智能加换行：如果前面没换行就加一个
-      const prefix = before.length && !before.endsWith('\n') ? '\n' : '';
-      ta.value = before + prefix + snippet + after;
-      const cursorPos = (before + prefix + snippet).length;
-      ta.focus();
-      ta.setSelectionRange(cursorPos, cursorPos);
-      toast(`已插入：${btn.textContent.trim()}`, '');
-    });
-  });
-}
-
-// 扫码页全局变量 JSON：解析 + 添加 + 序列化
-function bindCustomVarAdd() {
-  const btn = $('s-custom-var-add');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    const nameEl = $('s-custom-var-name');
-    const valueEl = $('s-custom-var-value');
-    const name = (nameEl.value || '').trim();
-    const value = valueEl.value || '';
-    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-      toast('变量名只能包含字母、数字、下划线', 'error');
-      nameEl.focus();
-      return;
-    }
-    const ta = $('s-custom-public-vars');
-    let parsed = {};
-    const raw = (ta.value || '').trim();
-    if (raw) {
-      try { parsed = JSON.parse(raw); }
-      catch (e) { toast('当前 JSON 格式错误，先修好再加', 'error'); ta.focus(); return; }
-      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
-        toast('JSON 必须是 object 形式', 'error'); ta.focus(); return;
-      }
-    }
-    parsed[name] = value;
-    ta.value = JSON.stringify(parsed, null, 2);
-    nameEl.value = '';
-    valueEl.value = '';
-    nameEl.focus();
-    toast(`已添加变量：${name}`, 'success');
-  });
-}
-
 function renderIdentityFields(c) {
   const setVal = (id, v) => {
     const el = $(id);
@@ -3042,11 +2940,8 @@ async function loadSettings() {
 	    // moemail settings are now configured per-provider on the 邮箱服务商 tab; legacy fields are intentionally ignored
 	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
 	    $('s-activation-tutorial-url').value = s.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;
-	    $('s-activation-page-markdown').value = s.activation_page_markdown || '';
 	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
 	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
-    $('s-public-page-markdown').value = s.public_page_markdown || '';
-    $('s-custom-public-vars').value = s.custom_public_vars || '';
     $('s-public-worker-domain').value = s.public_worker_domain || '';
 	    appSettings.public_worker_domain = s.public_worker_domain || null;
 	    updateWorkerStatus(s.public_worker_domain);
@@ -3066,10 +2961,7 @@ async function saveSettings() {
     // moemail_url/api_key are now configured per-provider; legacy fields intentionally removed
     giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
     activation_tutorial_url: $('s-activation-tutorial-url').value.trim() || DEFAULT_ACTIVATION_TUTORIAL_URL,
-    activation_page_markdown: $('s-activation-page-markdown').value,
     agent_api_token: $('s-agent-token').value.trim() || null,
-    public_page_markdown: $('s-public-page-markdown').value,
-    custom_public_vars: $('s-custom-public-vars').value,
     public_worker_domain: $('s-public-worker-domain').value.trim(),
   };
 	  for (const key of CAINIAO_SETTINGS) {
@@ -3398,6 +3290,11 @@ async function loadLabelConfig() {
     labelConfig.templates = fallbackTemplates();
   }
   labelConfig.templates = mergeDefaultTemplates(labelConfig.templates);
+  for (const template of labelConfig.templates) {
+    for (const element of template.elements || []) {
+      if (element.type === 'qr') element.source = normalizeQrSource(element.source);
+    }
+  }
   selectedTemplateId = labelConfig.templates[0].id;
   hydrateTemplateSelects();
   renderTemplateEditor();
@@ -3413,7 +3310,7 @@ function fallbackTemplates() {
       elements: [
         {id:'phone', type:'text', source:'手机号', text:'', x:3, y:3, w:30, h:6, fontSize:12, bold:true},
         {id:'email', type:'text', source:'邮箱', text:'', x:3, y:10, w:31, h:6, fontSize:6, bold:false},
-        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:36, y:3, w:11, h:11, fontSize:8, bold:false},
+        {id:'mailqr', type:'qr', source:PUBLIC_ACCOUNT_QR_SOURCE, text:'', x:36, y:3, w:11, h:11, fontSize:8, bold:false},
         {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:37, y:17, w:9, h:9, fontSize:8, bold:false},
       ],
     },
@@ -3426,7 +3323,7 @@ function fallbackTemplates() {
         {id:'phone', type:'text', source:'手机号', text:'', x:3, y:4, w:30, h:6, fontSize:11, bold:true},
         {id:'email', type:'text', source:'邮箱', text:'', x:3, y:12, w:31, h:7, fontSize:6, bold:false},
         {id:'date', type:'text', source:'开通日期', text:'', x:3, y:22, w:24, h:4, fontSize:6, bold:false},
-        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:35, y:3, w:12, h:12, fontSize:8, bold:false},
+        {id:'mailqr', type:'qr', source:PUBLIC_ACCOUNT_QR_SOURCE, text:'', x:35, y:3, w:12, h:12, fontSize:8, bold:false},
         {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:35, y:22, w:12, h:12, fontSize:8, bold:false},
       ],
     },
@@ -3436,7 +3333,7 @@ function fallbackTemplates() {
       width_mm: 50,
       height_mm: 40,
       elements: [
-        {id:'mailqr', type:'qr', source:'邮箱二维码', text:'', x:5, y:8, w:16, h:16, fontSize:8, bold:false},
+        {id:'mailqr', type:'qr', source:PUBLIC_ACCOUNT_QR_SOURCE, text:'', x:5, y:8, w:16, h:16, fontSize:8, bold:false},
         {id:'appqr', type:'qr', source:'Giffgaff下载二维码', text:'', x:29, y:8, w:16, h:16, fontSize:8, bold:false},
         {id:'phone', type:'text', source:'手机号', text:'', x:4, y:29, w:42, h:5, fontSize:9, bold:true},
       ],
@@ -3612,16 +3509,12 @@ function resolveTextValue(el, customer) {
 }
 
 function resolveQrValue(source, customer) {
+  source = normalizeQrSource(source);
   if (source === 'Giffgaff下载二维码') return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
   if (source === '激活教程二维码') {
     return `${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`;
   }
-  if (source === '邮箱二维码') {
-    if (!customer.public_token) return '';
-    return `${getPublicBaseUrl()}/p/${customer.public_token}`;
-  }
-  if (source === '联系方式二维码') {
-    // 和「邮箱二维码」指向同一个公开页面（页面里现在显示邮箱 + 手机号 + 复制按钮）
+  if (source === PUBLIC_ACCOUNT_QR_SOURCE) {
     if (!customer.public_token) return '';
     return `${getPublicBaseUrl()}/p/${customer.public_token}`;
   }
@@ -3771,7 +3664,7 @@ function closePrintPanel() {
 
 function templateNeedsPublicToken(tpl) {
   return !!tpl?.elements?.some(el =>
-    el.type === 'qr' && (el.source === '邮箱二维码' || el.source === '联系方式二维码')
+    el.type === 'qr' && normalizeQrSource(el.source) === PUBLIC_ACCOUNT_QR_SOURCE
   );
 }
 
@@ -3782,7 +3675,7 @@ async function ensurePrintCustomerPublicToken(tpl) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.public_token) {
-    throw new Error(data.detail || '无法生成联系方式二维码');
+    throw new Error(data.detail || '无法生成号码资料二维码');
   }
   printCustomer.public_token = data.public_token;
   printCustomer.public_version = data.public_version || 1;
@@ -3902,8 +3795,6 @@ async function initApp() {
   resetAddFormDefaults();
   bindCustomerSearch();
   bindDetailTabs();
-  bindQuickInsertButtons();
-  bindCustomVarAdd();
   await Promise.all([loadCustomers(), loadSimCodes(), loadSettings(), loadLabelConfig()]);
   renderWorkerSetup();
 }

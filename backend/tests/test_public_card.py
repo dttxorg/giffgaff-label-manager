@@ -4,7 +4,7 @@
 - 错误 token → 404，不泄露其他客户
 - 邮箱为空 → 404
 - 公开页绕过后台口令鉴权
-- Markdown 渲染：粗体、链接
+- 固定运营内容与安全富文本渲染
 - XSS 防护：script 与 javascript: 都被过滤
 """
 from __future__ import annotations
@@ -80,6 +80,15 @@ def test_public_page_renders_with_security_headers(client):
     body = r.text
     assert "alice@giffgaff.example" in body
     assert "复制邮箱" in body
+    assert "giffgaff 已激活号码资料" in body
+    assert "号码与初始邮箱" in body
+    assert "giffgaff 套餐充值服务" in body
+    assert "ChatGPT Plus" in body
+    assert "ChatGPT 5x Pro" in body
+    assert "ChatGPT 20x Pro" in body
+    assert "账号：您的 giffgaff 手机号码" in body
+    assert "请勿在京东咨询" in body
+    assert "号码保号提醒服务" in body
     # 安全头
     assert r.headers["X-Frame-Options"] == "DENY"
     assert r.headers["Cache-Control"] == "no-store, max-age=0"
@@ -133,12 +142,10 @@ def test_public_page_bypasses_app_password(client):
 
 
 def test_markdown_bold_and_link(client):
-    cid = _create("alice@giffgaff.example")
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    client.patch("/api/settings", json={
-        "public_page_markdown": "请在 **Giffgaff App** 中使用 [官网](https://www.giffgaff.com) 注册。"
-    })
-    body = client.get(f"/p/{token}").text
+    from public_routes import _markdown_to_safe_html
+    body = _markdown_to_safe_html(
+        "请在 **Giffgaff App** 中使用 [官网](https://www.giffgaff.com) 注册。"
+    )
     assert "<strong>Giffgaff App</strong>" in body
     assert 'href="https://www.giffgaff.com"' in body
     assert 'target="_blank"' in body
@@ -146,12 +153,10 @@ def test_markdown_bold_and_link(client):
 
 
 def test_xss_in_markdown_is_escaped(client):
-    cid = _create("alice@giffgaff.example")
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    client.patch("/api/settings", json={
-        "public_page_markdown": '<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n**safe**'
-    })
-    body = client.get(f"/p/{token}").text
+    from public_routes import _markdown_to_safe_html
+    body = _markdown_to_safe_html(
+        '<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n**safe**'
+    )
     # 关键安全保证：原始 <script> 标签不可执行
     assert "<script>alert(1)</script>" not in body
     assert "&lt;script&gt;" in body
@@ -163,31 +168,23 @@ def test_xss_in_markdown_is_escaped(client):
 
 
 def test_javascript_scheme_blocked(client):
-    cid = _create("alice@giffgaff.example")
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    client.patch("/api/settings", json={
-        "public_page_markdown": "[click me](javascript:alert(1))"
-    })
-    body = client.get(f"/p/{token}").text
+    from public_routes import _markdown_to_safe_html
+    body = _markdown_to_safe_html("[click me](javascript:alert(1))")
     assert "javascript:alert(1)" not in body
     # label 仍保留为纯文本
     assert "click me" in body
 
 
 def test_markdown_heading_renders(client):
-    cid = _create("alice@giffgaff.example")
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    client.patch("/api/settings", json={"public_page_markdown": "## 标题\n\n正文"})
-    body = client.get(f"/p/{token}").text
+    from public_routes import _markdown_to_safe_html
+    body = _markdown_to_safe_html("## 标题\n\n正文")
     assert "<h3>标题</h3>" in body
     assert "<p>正文</p>" in body
 
 
 def test_rich_markdown_components_render_safely(client):
-    cid = _create("rich@x.com")
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    client.patch("/api/settings", json={
-        "public_page_markdown": (
+    from public_routes import _markdown_to_safe_html
+    body = _markdown_to_safe_html(
             "## 快速开始\n\n"
             "1. 复制邮箱\n2. 打开应用\n3. 完成设置\n\n"
             "- 永久有效\n- 请妥善保存\n\n"
@@ -195,10 +192,7 @@ def test_rich_markdown_components_render_safely(client):
             ":::promo 推荐内容\n这是一个 **宣传卡片**。\n:::\n\n"
             ":::warning 注意事项\n不要把验证码发给陌生人。\n:::\n\n"
             "[查看教程](https://example.com/guide)"
-        ),
-    })
-
-    body = client.get(f"/p/{token}").text
+    )
 
     assert '<ol class="content-list content-steps">' in body
     assert '<ul class="content-list">' in body
@@ -678,58 +672,36 @@ def test_custom_public_vars_invalid_name_rejected(client):
     assert r.status_code == 400
 
 
-def test_public_page_substitutes_customer_vars(client):
-    """完整的端到端：客户字段被替换到 markdown 里。"""
-    import crud
-    from models import CustomerCreate
-    cid = asyncio.run(crud.create_customer(CustomerCreate(
-        email="a@x.com",
-        activation_date="2026-07-14",
-    )))
-    # 手工设字段（绕开 regenerate_identity 的随机）
-    asyncio.run(crud.update_customer(cid, type("U", (), {
-        "phone_number": None, "email": None, "shipping_address": None,
-        "phone_status": None, "courier_company": None, "tracking_number": None,
-        "courier_order_code": None, "courier_print_data": None,
-        "activation_date": None, "activation_status": None, "activation_error": None,
-        "first_name": "Emma", "last_name": "Smith", "address": "42 Baker Street",
-        "city": "London", "postcode": "NW1 6XE",
-    })()))
-
-    # 设置 markdown 模板
+def test_activated_page_ignores_legacy_custom_markdown(client):
+    """旧数据库里的自定义说明不再控制公开页，避免排版失控。"""
+    cid = _create("initial.email@example.com")
+    asyncio.run(crud.update_customer(cid, CustomerUpdate(phone_number="447400123456")))
     client.patch("/api/settings", json={
-        "public_page_markdown": "**Name**: {first_name} {last_name}\n\n**Address**: {full_address}\n\n**Phone**: {phone_number}"
+        "public_page_markdown": "LEGACY_CUSTOM_PAGE {first_name}",
     })
 
-    # 获取 token
     token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    r = client.get(f"/p/{token}")
-    assert r.status_code == 200
-    body = r.text
-    assert "<strong>Name</strong>: Emma Smith" in body or "**Name**: Emma Smith" in body
-    assert "42 Baker Street, London, NW1 6XE" in body
-    assert "447400123456" not in body  # phone_number 是 None，没设就不应出现
-    # 没填的字段应该替换为空
-    assert "{phone_number}" not in body
+    body = client.get(f"/p/{token}").text
+
+    assert "LEGACY_CUSTOM_PAGE" not in body
+    assert "initial.email@example.com" in body
+    assert "447400123456" in body
+    assert "giffgaff 已激活号码使用说明" in body
 
 
-def test_public_page_substitutes_custom_vars(client):
-    """全局自定义变量也被替换。"""
-    import crud
-    from models import CustomerCreate
-    cid = asyncio.run(crud.create_customer(CustomerCreate(
-        email="a@x.com", activation_date="2026-07-14",
-    )))
+def test_activated_page_ignores_legacy_custom_vars(client):
+    cid = _create("a@x.com")
     client.patch("/api/settings", json={
         "custom_public_vars": '{"support_phone": "400-123-4567", "telegram": "@myname"}',
-        "public_page_markdown": "**客服**: {support_phone}\n\n**TG**: {telegram}",
+        "public_page_markdown": "LEGACY_SUPPORT {support_phone} {telegram}",
     })
     token = client.get(f"/api/customers/{cid}").json()["public_token"]
-    r = client.get(f"/p/{token}")
-    assert r.status_code == 200
-    body = r.text
-    assert "400-123-4567" in body
-    assert "@myname" in body
+    body = client.get(f"/p/{token}").text
+
+    assert "LEGACY_SUPPORT" not in body
+    assert "400-123-4567" not in body
+    assert "@myname" not in body
+    assert "ChatGPT Plus" in body
 
 
 def test_public_page_shows_phone_when_set(client):
@@ -777,16 +749,12 @@ def test_public_page_email_still_shown(client):
 
 def test_public_page_disables_cloudflare_email_obfuscation(client):
     """主邮箱和 Markdown 邮箱都必须避开 Cloudflare Email Obfuscation。"""
-    cid = _create("real.customer@example.com")
-    client.patch("/api/settings", json={
-        "public_page_markdown": "联系支持：support@example.net",
-    })
-    token = client.get(f"/api/customers/{cid}").json()["public_token"]
-
-    response = client.get(f"/p/{token}")
-
-    assert response.status_code == 200
-    body = response.text
+    from public_routes import _render_card
+    body = _render_card(
+        "real.customer@example.com",
+        "联系支持：support@example.net",
+        {},
+    )
     main_email = re.search(
         r'<!--email_off-->\s*'
         r'<code id="email" data-email="real\.customer@example\.com"[^>]*>'
