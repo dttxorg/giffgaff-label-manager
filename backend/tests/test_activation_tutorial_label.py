@@ -177,23 +177,23 @@ def test_both_public_pages_ignore_legacy_markdown_settings(client):
 
 def test_activation_page_version_increments_to_invalidate_worker_cache(client):
     version_url = "/api/public/activation-guide-public-page/version"
-    assert client.get(version_url).json() == {"public_version": 1}
+    assert client.get(version_url).json() == {"public_version": 2_000_001}
 
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 2}
+    assert client.get(version_url).json() == {"public_version": 2_000_002}
 
     # 保存相同内容不应制造额外缓存版本。
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 2}
+    assert client.get(version_url).json() == {"public_version": 2_000_002}
 
     client.patch("/api/settings", json={
         "activation_tutorial_url": "https://example.com/new-guide",
     })
-    assert client.get(version_url).json() == {"public_version": 3}
+    assert client.get(version_url).json() == {"public_version": 2_000_003}
 
 
 @pytest.mark.parametrize("endpoint,payload", [

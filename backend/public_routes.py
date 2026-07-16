@@ -23,6 +23,10 @@ _ACTIVATION_ASSET_DIR = os.path.join(
     os.path.dirname(__file__), "assets", "public_activation"
 )
 ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
+# 代码内教程内容变化时递增。与数据库设置版本组合后，可防止 Worker
+# 比后端更早部署时把旧 HTML 缓存到新 Worker 版本下。
+ACTIVATION_GUIDE_CONTENT_VERSION = 2
+_ACTIVATION_VERSION_FACTOR = 1_000_000
 
 SIM_INSERT_WARNING_CONTENT = """:::warning 插卡前重要提醒
 如果准备把 giffgaff 作为手机主卡使用，请在插卡前关闭 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
@@ -202,6 +206,17 @@ def _load_template() -> str:
 def _load_activation_template() -> str:
     with open(_ACTIVATION_TEMPLATE_PATH, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def _activation_guide_public_version(settings: dict) -> int:
+    try:
+        settings_version = max(1, int(settings.get("activation_page_version") or 1))
+    except (TypeError, ValueError):
+        settings_version = 1
+    return (
+        ACTIVATION_GUIDE_CONTENT_VERSION * _ACTIVATION_VERSION_FACTOR
+        + settings_version
+    )
 
 
 def _security_headers() -> dict:
@@ -491,10 +506,7 @@ def _render_activation_card() -> str:
 async def public_card_page(token: str):
     if token == ACTIVATION_GUIDE_PUBLIC_TOKEN:
         settings = await crud.get_settings()
-        try:
-            version = max(1, int(settings.get("activation_page_version") or 1))
-        except (TypeError, ValueError):
-            version = 1
+        version = _activation_guide_public_version(settings)
         headers = _security_headers()
         headers["X-Cache-Version"] = str(version)
         return HTMLResponse(
@@ -528,10 +540,7 @@ async def public_token_version(token: str):
     旧 URL 的 HTML 仍被缓存命中。完全不返回 email 等敏感字段。"""
     if token == ACTIVATION_GUIDE_PUBLIC_TOKEN:
         settings = await crud.get_settings()
-        try:
-            version = max(1, int(settings.get("activation_page_version") or 1))
-        except (TypeError, ValueError):
-            version = 1
+        version = _activation_guide_public_version(settings)
     else:
         version = await crud.get_public_version(token)
     if version is None:
