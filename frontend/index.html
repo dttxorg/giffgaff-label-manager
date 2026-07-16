@@ -1581,6 +1581,7 @@ const API = '/api';
 const DEFAULT_GIFFGAFF_URL = 'https://www.giffgaff.com/mobile-app';
 const DEFAULT_ACTIVATION_TUTORIAL_URL = 'https://gg.681218.xyz/activation.html';
 const ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page';
+const PUBLIC_PAGE_VIEW_VERSION = '5';
 const COURIER_TEMPLATE_ID = 'courier-50x40';
 const DEMO_CUSTOMER = {
   id: 0,
@@ -2440,8 +2441,8 @@ function renderPublicLinkBox(c) {
     box.hidden = true;
     return;
   }
-  const base = (labelConfig && labelConfig.public_worker_domain) || location.origin;
-  const url = `${base}/p/${c.public_token}`;
+  const base = getPublicBaseUrl();
+  const url = getPublicPageUrl(c.public_token);
   input.value = url;
   box.hidden = false;
   const copyBtn = $('d-public-link-copy');
@@ -2451,7 +2452,7 @@ function renderPublicLinkBox(c) {
   copyBtn.onclick = () => copyText(url, '公开页链接已复制');
   openBtn.onclick = () => window.open(url, '_blank', 'noopener');
   regenBtn.onclick = () => regeneratePublicLink(c);
-  const usingWorker = (labelConfig && labelConfig.public_worker_domain) ? 'Worker' : '当前后台';
+  const usingWorker = (appSettings && appSettings.public_worker_domain) ? 'Worker' : '当前后台';
   meta.innerHTML = `当前使用域名：<code>${escapeHtml(base)}</code>（${usingWorker}）· 版本：<strong>v${c.public_version || 1}</strong>`;
 }
 
@@ -2475,8 +2476,12 @@ function getPublicBaseUrl() {
   return location.origin;
 }
 
+function getPublicPageUrl(token) {
+  return `${getPublicBaseUrl()}/p/${encodeURIComponent(token)}?view=${PUBLIC_PAGE_VIEW_VERSION}`;
+}
+
 function openActivationGuidePage() {
-  const url = `${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`;
+  const url = getPublicPageUrl(ACTIVATION_GUIDE_PUBLIC_TOKEN);
   window.open(url, '_blank', 'noopener');
 }
 
@@ -3512,11 +3517,11 @@ function resolveQrValue(source, customer) {
   source = normalizeQrSource(source);
   if (source === 'Giffgaff下载二维码') return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
   if (source === '激活教程二维码') {
-    return `${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`;
+    return getPublicPageUrl(ACTIVATION_GUIDE_PUBLIC_TOKEN);
   }
   if (source === PUBLIC_ACCOUNT_QR_SOURCE) {
     if (!customer.public_token) return '';
-    return `${getPublicBaseUrl()}/p/${customer.public_token}`;
+    return getPublicPageUrl(customer.public_token);
   }
   return '';
 }

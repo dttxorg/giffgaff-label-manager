@@ -2,7 +2,7 @@
 // 部署说明见 worker-src/README.md
 // 代码与 frontend/worker_setup.js 保持同步，并由测试强制校验。
 
-const WORKER_VERSION = "4";
+const WORKER_VERSION = "5";
 const PUBLIC_TOKEN_PATTERN = /^\/p\/([A-Za-z0-9_-]{20,128})$/;
 
 export function getApiBase(env) {
@@ -98,6 +98,9 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) {
       const headers = new Headers(cached.headers);
+      // Cache API 继续保留 30 天，但浏览器不得缓存固定二维码 URL，
+      // 否则页面改版后手机仍可能展示旧 HTML。
+      headers.set("Cache-Control", "no-store, max-age=0");
       headers.set("X-Cache", "HIT");
       headers.set("X-Public-Card-Worker", WORKER_VERSION);
       headers.set("X-Origin-Stage", "version");
@@ -141,8 +144,11 @@ export default {
     headers.set("X-Origin-Stage", "page");
     headers.set("X-Origin-Status", String(pageResponse.status));
 
-    const response = new Response(pageResponse.body, { status: 200, headers });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
+    const cacheResponse = new Response(pageResponse.body, { status: 200, headers });
+    ctx.waitUntil(cache.put(cacheKey, cacheResponse.clone()));
+
+    const clientHeaders = new Headers(cacheResponse.headers);
+    clientHeaders.set("Cache-Control", "no-store, max-age=0");
+    return new Response(cacheResponse.body, { status: 200, headers: clientHeaders });
   },
 };
