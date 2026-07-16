@@ -136,7 +136,13 @@ def test_shared_tutorial_qr_page_embeds_complete_guide_without_second_jump(clien
     assert "填写初始邮箱" in body
     assert "选择 Pay as you go" in body
     assert "不要重复点击 Place order" in body
-    assert "发送 <code>NUMBER</code> 到 <code>43430</code>" in body
+    assert "登录官网保存号码" in body
+    assert "在注册邮箱中查找 giffgaff 的激活完成或欢迎邮件" in body
+    assert "不建议通过发送短信查询号码" in body
+    assert "43430" not in body
+    assert "class=\"step-promo\"" in body
+    assert "没有可用的海外支付银行卡" in body
+    assert "可联系客服办理 giffgaff 代充值" in body
     assert "LEGACY_ACTIVATION_CONTENT" not in body
     assert "LEGACY_ACTIVATED_CONTENT" not in body
     assert "giffgaff 套餐充值服务" in body
@@ -177,23 +183,23 @@ def test_both_public_pages_ignore_legacy_markdown_settings(client):
 
 def test_activation_page_version_increments_to_invalidate_worker_cache(client):
     version_url = "/api/public/activation-guide-public-page/version"
-    assert client.get(version_url).json() == {"public_version": 2_000_001}
+    assert client.get(version_url).json() == {"public_version": 3_000_001}
 
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 2_000_002}
+    assert client.get(version_url).json() == {"public_version": 3_000_002}
 
     # 保存相同内容不应制造额外缓存版本。
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 2_000_002}
+    assert client.get(version_url).json() == {"public_version": 3_000_002}
 
     client.patch("/api/settings", json={
         "activation_tutorial_url": "https://example.com/new-guide",
     })
-    assert client.get(version_url).json() == {"public_version": 2_000_003}
+    assert client.get(version_url).json() == {"public_version": 3_000_003}
 
 
 @pytest.mark.parametrize("endpoint,payload", [

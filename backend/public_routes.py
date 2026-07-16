@@ -25,7 +25,7 @@ _ACTIVATION_ASSET_DIR = os.path.join(
 ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
 # 代码内教程内容变化时递增。与数据库设置版本组合后，可防止 Worker
 # 比后端更早部署时把旧 HTML 缓存到新 Worker 版本下。
-ACTIVATION_GUIDE_CONTENT_VERSION = 2
+ACTIVATION_GUIDE_CONTENT_VERSION = 3
 _ACTIVATION_VERSION_FACTOR = 1_000_000
 
 SIM_INSERT_WARNING_CONTENT = """:::warning 插卡前重要提醒
@@ -42,13 +42,20 @@ ACTIVATION_STEPS = (
     ("account", "设置登录密码", "为 giffgaff 账户设置密码，然后点击 **Register**。请单独保存好这个密码。", "step4.png"),
     ("account", "关闭促销订阅", "页面询问是否接收促销信息时，选择 **No, thanks**，再点击 **Continue**。", "step5.png"),
     ("payment", "选择 Pay as you go", "点击 **Pay as you go** 标签，向下滑到页面底部，再次选择 Pay as you go，点击 **Continue**。", "step6.png"),
-    ("payment", "选择 10 英镑", "选择 **£10** 充值金额，然后点击 **Pay now**。没有合适的海外支付方式时，可联系客服办理代充值。", "step7.jpeg"),
+    ("payment", "选择 10 英镑", "选择 **£10** 充值金额，然后点击 **Pay now**。", "step7.jpeg"),
     ("payment", "填写英国地址", "按页面要求填写英国地址，国家务必选择 **United Kingdom**，确认后点击 **Continue**。", "step8.png"),
     ("payment", "填写银行卡并付款", "使用带有 **VISA 或 MasterCard** 标志且可进行海外支付的银行卡，填写卡号、持卡人姓名、有效期和安全码；勾选 I understand and agree 后点击 **Place order**。", "step9.png"),
     ("payment", "等待激活完成", "付款成功后页面会提示 SIM 已激活并可能直接显示号码；也可能需要等待 30 分钟到 24 小时。等待期间 **不要重复点击 Place order**，避免重复扣款。", "step10.png"),
     ("finish", "核对账户资料", "返回 giffgaff 主页查看电话号码和余额。激活完成后，请第一时间修改密码，并绑定或核对账户邮箱。", None),
-    ("finish", "保存手机号码", "欢迎短信会附上分配的手机号码，请立即保存。以后忘记号码时，可发送 `NUMBER` 到 `43430` 免费查询。", None),
+    ("finish", "登录官网保存号码", "激活完成后，请登录 [giffgaff 官网](https://www.giffgaff.com) 在账户首页查看并保存手机号码；也可以在注册邮箱中查找 giffgaff 的激活完成或欢迎邮件。人在中国时不建议通过发送短信查询号码，以免产生国际漫游费用。", None),
 )
+
+ACTIVATION_STEP_PROMOS = {
+    9: (
+        "没有可用的海外支付银行卡？",
+        "如果没有支持海外支付的 VISA 或 MasterCard，可联系客服办理 giffgaff 代充值，避免反复尝试付款。",
+    ),
+}
 
 ACTIVATION_PHASES = {
     "account": ("PHASE 01", "创建账户", "激活码 · 邮箱 · 密码"),
@@ -409,6 +416,16 @@ def _render_activation_steps() -> str:
                 '</details>'
             )
 
+        promo = ""
+        if step_number in ACTIVATION_STEP_PROMOS:
+            promo_title, promo_body = ACTIVATION_STEP_PROMOS[step_number]
+            promo = (
+                '<aside class="step-promo">'
+                f'<strong>💳 {html.escape(promo_title)}</strong>'
+                f'<span>{html.escape(promo_body)}</span>'
+                '</aside>'
+            )
+
         out.append(
             '<article class="tutorial-step">'
             '<div class="step-number" aria-hidden="true">'
@@ -417,6 +434,7 @@ def _render_activation_steps() -> str:
             '<div class="step-body">'
             f'<h4>{html.escape(title)}</h4>'
             f'<p>{_markdown_inline(description)}</p>'
+            f'{promo}'
             f'{screenshot}'
             '</div>'
             '</article>'
