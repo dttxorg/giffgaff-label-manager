@@ -34,7 +34,7 @@ from crud import (
     get_all_customers, get_customer, search_customers,
     update_customer, delete_customer,
     update_customer_moemail,
-    regenerate_public_link, ensure_public_link,
+    regenerate_public_link, ensure_public_link, bump_all_public_versions,
     save_payment_check_result,
     regenerate_identity,
     get_public_email,
@@ -662,6 +662,7 @@ async def get_sys_settings():
 async def update_settings(data: SystemSettings):
     rows = await get_settings()
     activation_page_changed = False
+    contact_page_changed = False
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     if data.activation_tutorial_url is not None:
@@ -679,6 +680,7 @@ async def update_settings(data: SystemSettings):
     if data.agent_api_token not in (None, "***", ""):
         await set_setting("agent_api_token", data.agent_api_token.strip())
     if data.public_page_markdown is not None:
+        contact_page_changed = rows.get("public_page_markdown", "") != data.public_page_markdown
         await set_setting("public_page_markdown", data.public_page_markdown)
     if data.public_worker_domain is not None:
         v = data.public_worker_domain.strip()
@@ -707,6 +709,8 @@ async def update_settings(data: SystemSettings):
         await set_setting("custom_public_vars", raw)
     if activation_page_changed:
         await _bump_activation_page_version(rows)
+    if contact_page_changed:
+        await bump_all_public_versions()
     return {"ok": True}
 
 

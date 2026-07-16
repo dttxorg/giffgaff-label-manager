@@ -131,6 +131,8 @@ def test_shared_tutorial_qr_page_shows_copyable_url_and_independent_markdown(cli
     assert "这里可以放宣传、介绍和注意事项" in body
     assert "联系方式页面独有说明" not in body
     assert "<!--email_off-->" in body
+    assert 'class="route-strip"' in body
+    assert "三步开始用" in body
 
 
 def test_activation_page_markdown_is_independent_from_contact_page_markdown(client):
@@ -196,4 +198,6 @@ def test_frontend_has_selectable_tutorial_sources_and_template():
     assert "ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page'" in html
     assert "`${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`" in html
     assert 'id="s-activation-page-markdown"' in html
+    assert 'data-target="s-activation-page-markdown"' in html
+    assert ":::promo 推荐内容" in html
     assert "id: 'activation-guide-50x40'" in html

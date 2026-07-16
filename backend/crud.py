@@ -252,6 +252,18 @@ async def regenerate_public_link(customer_id: int) -> Optional[dict]:
         return {"public_token": new_token, "public_version": new_version}
 
 
+async def bump_all_public_versions() -> int:
+    """公开联系方式页面内容/设计改变时，仅提升缓存版本，不旋转二维码 token。"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """UPDATE customers
+               SET public_version = COALESCE(public_version, 1) + 1
+               WHERE public_token IS NOT NULL AND public_token != ''"""
+        )
+        await db.commit()
+        return cursor.rowcount
+
+
 async def ensure_public_link(customer_id: int) -> Optional[dict]:
     """按需为旧客户补一个公开链接，但绝不旋转已经存在的 token。
 

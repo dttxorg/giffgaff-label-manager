@@ -1379,8 +1379,15 @@ wrangler init --type javascript --no-git</pre>
           </div>
           <div class="setting-item wide">
             <label>未激活卡扫码页说明（独立）</label>
+            <div style="margin-bottom:7px;display:flex;flex-wrap:wrap;gap:5px;">
+              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::promo 推荐内容&#10;在这里填写你的介绍、优惠或宣传内容。&#10;:::&#10;">宣传卡片</button>
+              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::tip 激活提示&#10;在这里填写最重要的操作提示。&#10;:::&#10;">重点提示</button>
+              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert=":::warning 使用前注意&#10;在这里填写风险、限制或注意事项。&#10;:::&#10;">注意事项</button>
+              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert="1. 复制上方教程地址&#10;2. 在浏览器中打开教程&#10;3. 按教程完成激活">三步流程</button>
+              <button type="button" class="small ghost quick-insert" data-target="s-activation-page-markdown" data-insert="[查看详情](https://example.com)">行动按钮</button>
+            </div>
             <textarea id="s-activation-page-markdown" rows="7" placeholder="例如：&#10;## giffgaff SIM 激活教程&#10;&#10;复制上方教程地址，在浏览器中打开。&#10;&#10;这里可以填写自己的介绍、宣传内容和注意事项。"></textarea>
-            <span class="setting-hint">只用于“未激活卡教程二维码”页面，不与下面的“扫码页底部说明”共用。支持 Markdown 和变量 <code>{activation_tutorial_url}</code>。</span>
+            <span class="setting-hint">只用于“未激活卡教程二维码”页面，不与下面的“扫码页底部说明”共用。支持标题、列表、链接按钮、引用和宣传/提示/警告卡片，也支持变量 <code>{activation_tutorial_url}</code>。</span>
             <div class="button-row" style="margin-top:8px;">
               <button type="button" class="small ghost" onclick="openActivationGuidePage()">打开教程扫码页</button>
             </div>
@@ -1396,9 +1403,13 @@ wrangler init --type javascript --no-git</pre>
               <button type="button" class="small ghost quick-insert" data-insert="💼 SIM：{sim_activation_code}">💼 SIM</button>
               <button type="button" class="small ghost quick-insert" data-insert="✉️ 收件：{moemail_address}">✉️ 收件</button>
               <button type="button" class="small ghost quick-insert" data-insert="🔗 分享：{share_link}">🔗 分享</button>
+              <button type="button" class="small ghost quick-insert" data-insert=":::tip 重点提示&#10;在这里填写需要客户优先看到的内容。&#10;:::&#10;">重点卡片</button>
+              <button type="button" class="small ghost quick-insert" data-insert=":::warning 注意事项&#10;在这里填写风险、限制或注意事项。&#10;:::&#10;">注意卡片</button>
+              <button type="button" class="small ghost quick-insert" data-insert="1. 第一步&#10;2. 第二步&#10;3. 第三步">步骤列表</button>
+              <button type="button" class="small ghost quick-insert" data-insert="[查看详情](https://example.com)">行动按钮</button>
             </div>
             <textarea id="s-public-page-markdown" rows="6" placeholder="例如：&#10;## 如何使用这个邮箱&#10;&#10;这是 Giffgaff 注册用的临时邮箱，请妥善保存。&#10;&#10;注册入口：<https://www.giffgaff.com>"></textarea>
-            <span class="setting-hint">客户扫码后展示在邮箱下方的提示文字。支持 Markdown 语法（段落、**粗体**、`行内代码`、## 标题、[链接](https://...)）。HTML 标签会被自动转义。</span>
+            <span class="setting-hint">客户扫码后展示在联系方式下方。支持标题、粗体、代码、列表、引用、链接按钮和四种内容卡片（tip / warning / promo / info）。HTML 标签会被自动转义。</span>
             <details style="margin-top:6px;">
               <summary style="cursor:pointer;font-size:12px;color:var(--muted);">支持的变量（点击展开）</summary>
               <div class="code-block" style="margin-top:6px;font-size:12px;">
@@ -2416,7 +2427,7 @@ function bindQuickInsertButtons() {
   document.querySelectorAll('.quick-insert').forEach(btn => {
     btn.addEventListener('click', () => {
       const snippet = btn.dataset.insert;
-      const ta = $('s-public-page-markdown');
+      const ta = $(btn.dataset.target || 's-public-page-markdown');
       if (!ta || !snippet) return;
       const start = ta.selectionStart ?? ta.value.length;
       const end = ta.selectionEnd ?? ta.value.length;
@@ -2428,7 +2439,7 @@ function bindQuickInsertButtons() {
       const cursorPos = (before + prefix + snippet).length;
       ta.focus();
       ta.setSelectionRange(cursorPos, cursorPos);
-      toast(`已插入：${snippet}`, '');
+      toast(`已插入：${btn.textContent.trim()}`, '');
     });
   });
 }

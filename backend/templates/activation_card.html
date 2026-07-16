@@ -6,83 +6,411 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>giffgaff 激活教程</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light;
+    --ink: #171713;
+    --paper: #f2eee5;
+    --card: #fffdf8;
+    --coral: #ff5c3b;
+    --lime: #d6ff52;
+    --blue: #b8d7ff;
+    --muted: #6b6a63;
+    --line: rgba(23, 23, 19, 0.14);
+  }
   * { box-sizing: border-box; }
+  html { background: var(--paper); }
   body {
-    margin: 0; padding: 24px 16px; min-height: 100vh;
+    margin: 0;
+    min-height: 100vh;
+    padding: 18px 14px 34px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
       "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    background: #f6f7f9; color: #1a1a1a;
-    display: flex; flex-direction: column; align-items: center;
+    background: var(--paper);
+    color: var(--ink);
   }
-  .card {
-    width: 100%; max-width: 480px; background: #fff;
-    border-radius: 16px; padding: 28px 20px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  body::before {
+    content: "";
+    position: fixed;
+    z-index: 0;
+    inset: 0 0 auto;
+    height: 235px;
+    background: var(--lime);
+    pointer-events: none;
   }
-  .label {
-    font-size: 13px; color: #6b7280; margin: 0 0 12px;
-    letter-spacing: 0.02em; font-weight: 600;
+  .page {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 520px);
+    margin: 0 auto;
   }
+  .hero {
+    position: relative;
+    min-height: 360px;
+    overflow: hidden;
+    padding: 22px;
+    border: 2px solid var(--ink);
+    border-radius: 30px;
+    background: var(--coral);
+    box-shadow: 8px 8px 0 rgba(23, 23, 19, 0.18);
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: relative;
+    z-index: 2;
+  }
+  .wordmark { font-size: 21px; font-weight: 900; letter-spacing: -0.06em; }
+  .hero-tag {
+    padding: 7px 10px;
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    background: var(--card);
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.1em;
+  }
+  .hero-copy {
+    position: relative;
+    z-index: 2;
+    width: 78%;
+    margin-top: 50px;
+  }
+  .eyebrow, .section-index {
+    margin: 0 0 10px;
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    max-width: 370px;
+    font-size: clamp(39px, 11vw, 58px);
+    line-height: 0.92;
+    letter-spacing: -0.07em;
+    font-weight: 900;
+  }
+  h1 span {
+    display: inline-block;
+    margin-top: 5px;
+    padding: 4px 8px 7px;
+    background: var(--ink);
+    color: var(--lime);
+    transform: rotate(-1.5deg);
+  }
+  .hero-note {
+    max-width: 300px;
+    margin: 20px 0 0;
+    font-size: 14px;
+    line-height: 1.55;
+    font-weight: 650;
+  }
+  .step-orbit {
+    position: absolute;
+    right: -44px;
+    bottom: -48px;
+    width: 190px;
+    height: 190px;
+    border: 34px solid var(--lime);
+    border-radius: 50%;
+  }
+  .step-orbit::before {
+    content: "03";
+    position: absolute;
+    left: 24px;
+    top: 25px;
+    color: var(--ink);
+    font: 900 46px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: -0.1em;
+    transform: rotate(8deg);
+  }
+  .route-strip {
+    position: relative;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin: -28px 12px 0;
+    border: 2px solid var(--ink);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--ink);
+    color: #fff;
+    box-shadow: 5px 5px 0 rgba(23,23,19,0.2);
+  }
+  .route-step {
+    min-width: 0;
+    padding: 13px 10px;
+    border-right: 1px solid rgba(255,255,255,0.25);
+    text-align: center;
+  }
+  .route-step:last-child { border-right: 0; }
+  .route-step b {
+    display: block;
+    color: var(--lime);
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.12em;
+  }
+  .route-step span { display: block; margin-top: 5px; font-size: 12px; font-weight: 800; }
+  .link-panel {
+    margin: 28px 10px 0;
+    padding: 24px 18px 20px;
+    border: 2px solid var(--ink);
+    border-radius: 24px;
+    background: var(--card);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 17px;
+  }
+  .section-index { color: var(--coral); }
+  .section-title {
+    margin: 0;
+    font-size: 25px;
+    line-height: 1.04;
+    letter-spacing: -0.05em;
+    font-weight: 900;
+  }
+  .section-caption { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
   .tutorial-row {
-    display: flex; align-items: center; gap: 8px; padding: 10px 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px;
+    align-items: stretch;
+    padding: 10px;
+    border: 2px solid var(--ink);
+    border-radius: 18px;
+    background: var(--lime);
   }
   .tutorial-label {
-    flex: 0 0 56px; font-size: 14px; color: #6b7280; font-weight: 600;
+    grid-column: 1 / -1;
+    padding: 2px 4px 0;
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
   .tutorial-val {
-    flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 14px; background: #f3f4f6; padding: 10px 12px;
-    border-radius: 8px; word-break: break-all; user-select: all; color: #111827;
+    min-width: 0;
+    align-self: center;
+    overflow: hidden;
+    padding: 8px 4px;
+    color: var(--ink);
+    font: 700 13px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: all;
   }
   .copy-btn {
-    flex: 0 0 auto; height: 36px; border: 0; border-radius: 8px; cursor: pointer;
-    font-size: 13px; font-weight: 600; color: #fff; background: #2563eb;
-    padding: 0 14px; transition: background 0.15s;
+    min-width: 82px;
+    height: 48px;
+    padding: 0 16px;
+    border: 2px solid var(--ink);
+    border-radius: 13px;
+    background: var(--ink);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 900;
+    box-shadow: 3px 3px 0 rgba(23,23,19,0.3);
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .copy-btn:active { background: #1d4ed8; }
-  .copy-btn.copied { background: #16a34a; }
-  .divider { height: 1px; background: #e5e7eb; margin: 20px 0 14px; }
-  .hint { font-size: 14px; line-height: 1.7; color: #374151; }
-  .hint p { margin: 0 0 12px; }
-  .hint p:last-child { margin-bottom: 0; }
-  .hint h3, .hint h4 { margin: 18px 0 10px; line-height: 1.3; color: #111827; }
-  .hint h3 { font-size: 17px; }
-  .hint h4 { font-size: 15px; }
-  .hint code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
-  .hint a { color: #2563eb; }
-  .empty { color: #6b7280; font-style: italic; }
-  .footer { margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #111827; color: #e5e7eb; }
-    .card { background: #1f2937; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-    .label, .empty, .tutorial-label { color: #9ca3af; }
-    .tutorial-val { background: #111827; color: #f3f4f6; }
-    .divider { background: #374151; }
-    .hint { color: #d1d5db; }
-    .hint h3, .hint h4 { color: #f3f4f6; }
-    .hint code { background: #111827; color: #e5e7eb; }
+  .copy-btn:active { transform: translate(3px, 3px); box-shadow: none; }
+  .copy-btn.copied { background: #285dff; }
+  .content-panel {
+    margin: 34px 10px 0;
+    padding: 26px 20px 22px;
+    border-top: 2px solid var(--ink);
+  }
+  .hint { color: #302f2a; font-size: 15px; line-height: 1.72; }
+  .hint > *:first-child { margin-top: 0; }
+  .hint > *:last-child { margin-bottom: 0; }
+  .hint p { margin: 0 0 15px; }
+  .hint h2, .hint h3, .hint h4 {
+    margin: 30px 0 13px;
+    color: var(--ink);
+    line-height: 1.08;
+    letter-spacing: -0.045em;
+  }
+  .hint h2 { font-size: 30px; }
+  .hint h3 { font-size: 24px; }
+  .hint h4 { font-size: 19px; }
+  .hint code {
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .hint a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    margin: 4px 4px 4px 0;
+    padding: 9px 14px;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+  }
+  .content-list {
+    display: grid;
+    gap: 10px;
+    margin: 15px 0 22px;
+    padding-left: 24px;
+  }
+  .content-list li { padding-left: 4px; }
+  .content-list li::marker { color: var(--coral); font-weight: 900; }
+  .content-steps { list-style: none; counter-reset: steps; padding-left: 0; }
+  .content-steps li {
+    position: relative;
+    min-height: 46px;
+    padding: 11px 10px 11px 56px;
+    border-bottom: 1px solid var(--line);
+    counter-increment: steps;
+  }
+  .content-steps li::before {
+    content: counter(steps, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 40px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    background: var(--coral);
+    color: var(--ink);
+    font: 900 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .hint blockquote {
+    margin: 20px 0;
+    padding: 18px 20px;
+    border-left: 5px solid var(--coral);
+    background: rgba(255,255,255,0.6);
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .content-rule { height: 2px; margin: 28px 0; border: 0; background: var(--ink); }
+  .callout {
+    display: grid;
+    gap: 12px;
+    margin: 18px 0;
+    padding: 18px;
+    border: 2px solid var(--ink);
+    border-radius: 18px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .callout-tip { background: var(--lime); }
+  .callout-warning { background: #ffd2c8; }
+  .callout-info { background: var(--blue); }
+  .callout-promo { background: var(--ink); color: #fff; }
+  .callout-label {
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .callout-body { font-size: 15px; line-height: 1.62; }
+  .callout-promo a { border-color: #fff; background: var(--lime); color: var(--ink); }
+  .empty {
+    display: grid;
+    gap: 5px;
+    padding: 20px;
+    border: 1px dashed var(--muted);
+    border-radius: 16px;
+    color: var(--muted);
+  }
+  .empty strong { color: var(--ink); font-size: 17px; }
+  .footer {
+    margin: 28px 0 0;
+    color: var(--muted);
+    text-align: center;
+    font: 700 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.08em;
+  }
+  @media (max-width: 380px) {
+    body { padding-inline: 9px; }
+    .hero { min-height: 340px; padding-inline: 18px; }
+    .hero-copy { width: 86%; margin-top: 44px; }
+    .link-panel, .content-panel { margin-inline: 5px; }
+    .route-strip { margin-inline: 7px; }
+    .route-step { padding-inline: 5px; }
+    .tutorial-row { grid-template-columns: minmax(0, 1fr) 76px; }
+    .copy-btn { min-width: 76px; padding-inline: 10px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .hero, .route-strip, .link-panel, .content-panel {
+      animation: reveal 520ms cubic-bezier(.2,.75,.2,1) both;
+    }
+    .route-strip { animation-delay: 70ms; }
+    .link-panel { animation-delay: 130ms; }
+    .content-panel { animation-delay: 190ms; }
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   }
 </style>
 </head>
 <body>
-  <main class="card" role="main">
-    <p class="label">giffgaff 激活教程</p>
-    <div class="tutorial-row">
-      <span class="tutorial-label">🔗 教程</span>
-      <code id="tutorial-url" data-url="__TUTORIAL_URL__" class="tutorial-val">__TUTORIAL_URL_DISPLAY__</code>
-      <button class="copy-btn" type="button" onclick="copyTutorialUrl()" id="tutorial-copy-btn">复制</button>
+  <main class="page" role="main">
+    <header class="hero">
+      <div class="hero-top">
+        <span class="wordmark">giffgaff</span>
+        <span class="hero-tag">QUICK START</span>
+      </div>
+      <div class="hero-copy">
+        <p class="eyebrow">ACTIVATION GUIDE / 01</p>
+        <h1>准备好了？<br><span>三步开始用。</span></h1>
+        <p class="hero-note">先复制教程地址，再按页面提示完成激活。重要提醒和推荐内容都整理在下面。</p>
+      </div>
+      <div class="step-orbit" aria-hidden="true"></div>
+    </header>
+
+    <div class="route-strip" aria-label="激活流程">
+      <div class="route-step"><b>01</b><span>复制地址</span></div>
+      <div class="route-step"><b>02</b><span>打开教程</span></div>
+      <div class="route-step"><b>03</b><span>完成激活</span></div>
     </div>
 
-    <div class="divider"></div>
-    <div class="hint" id="hint">
-      <!--email_off-->
-      __HINT_HTML__
-      <!--/email_off-->
-    </div>
+    <section class="link-panel" aria-labelledby="tutorial-title">
+      <div class="section-head">
+        <div>
+          <p class="section-index">01 / COPY</p>
+          <h2 class="section-title" id="tutorial-title">先拿到教程地址</h2>
+          <p class="section-caption">按钮只复制网址，不会带上标题或说明。</p>
+        </div>
+      </div>
+      <div class="tutorial-row">
+        <span class="tutorial-label">Activation tutorial URL</span>
+        <code id="tutorial-url" data-url="__TUTORIAL_URL__" class="tutorial-val">__TUTORIAL_URL_DISPLAY__</code>
+        <button class="copy-btn" type="button" onclick="copyTutorialUrl()" id="tutorial-copy-btn">复制网址</button>
+      </div>
+    </section>
+
+    <section class="content-panel" aria-labelledby="notes-title">
+      <div class="section-head">
+        <div>
+          <p class="section-index">02 / DISCOVER</p>
+          <h2 class="section-title" id="notes-title">说明、推荐与注意事项</h2>
+        </div>
+      </div>
+      <div class="hint" id="hint">
+        <!--email_off-->
+        __HINT_HTML__
+        <!--/email_off-->
+      </div>
+    </section>
+    <p class="footer">GIFFGAFF QUICK START · KEEP THIS CARD</p>
   </main>
-  <p class="footer">请复制教程地址后在浏览器中打开。</p>
 
 <script>
 function copyTutorialUrl() {
@@ -115,7 +443,7 @@ function showCopied() {
   if (!btn) return;
   btn.classList.add('copied');
   btn.textContent = '已复制';
-  setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '复制'; }, 1400);
+  setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '复制网址'; }, 1400);
 }
 </script>
 </body>

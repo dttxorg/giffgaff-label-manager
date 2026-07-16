@@ -183,6 +183,33 @@ def test_markdown_heading_renders(client):
     assert "<p>正文</p>" in body
 
 
+def test_rich_markdown_components_render_safely(client):
+    cid = _create("rich@x.com")
+    token = client.get(f"/api/customers/{cid}").json()["public_token"]
+    client.patch("/api/settings", json={
+        "public_page_markdown": (
+            "## 快速开始\n\n"
+            "1. 复制邮箱\n2. 打开应用\n3. 完成设置\n\n"
+            "- 永久有效\n- 请妥善保存\n\n"
+            "> 建议先截图保存\n\n"
+            ":::promo 推荐内容\n这是一个 **宣传卡片**。\n:::\n\n"
+            ":::warning 注意事项\n不要把验证码发给陌生人。\n:::\n\n"
+            "[查看教程](https://example.com/guide)"
+        ),
+    })
+
+    body = client.get(f"/p/{token}").text
+
+    assert '<ol class="content-list content-steps">' in body
+    assert '<ul class="content-list">' in body
+    assert "<blockquote>建议先截图保存</blockquote>" in body
+    assert 'class="callout callout-promo"' in body
+    assert 'class="callout callout-warning"' in body
+    assert "<strong>宣传卡片</strong>" in body
+    assert 'href="https://example.com/guide"' in body
+    assert 'target="_blank"' in body
+
+
 def test_settings_endpoint_round_trip(client):
     md = "## 标题\n\n正文 [link](https://example.com)"
     r = client.patch("/api/settings", json={"public_page_markdown": md})
@@ -300,6 +327,26 @@ def test_p_page_returns_x_cache_version_header(client):
     new_token = client.get(f"/api/customers/{cid}").json()["public_token"]
     r = client.get(f"/p/{new_token}")
     assert r.headers.get("X-Cache-Version") == "2"
+
+
+def test_contact_markdown_change_bumps_all_cache_versions_without_rotating_tokens(client):
+    first_id = _create("first@x.com")
+    second_id = _create("second@x.com")
+    first = client.get(f"/api/customers/{first_id}").json()
+    second = client.get(f"/api/customers/{second_id}").json()
+
+    client.patch("/api/settings", json={"public_page_markdown": "新说明"})
+
+    first_after = client.get(f"/api/customers/{first_id}").json()
+    second_after = client.get(f"/api/customers/{second_id}").json()
+    assert first_after["public_token"] == first["public_token"]
+    assert second_after["public_token"] == second["public_token"]
+    assert first_after["public_version"] == first["public_version"] + 1
+    assert second_after["public_version"] == second["public_version"] + 1
+
+    # 相同内容再次保存不会继续制造缓存版本。
+    client.patch("/api/settings", json={"public_page_markdown": "新说明"})
+    assert client.get(f"/api/customers/{first_id}").json()["public_version"] == first_after["public_version"]
 
 
 def test_public_worker_domain_setting_round_trip(client):

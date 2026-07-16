@@ -68,52 +68,117 @@ def _substitute_variables(text: str, vars: dict) -> str:
     return re.sub(r"\{([a-zA-Z0-9_]+)\}", _repl, text)
 
 
+def _markdown_inline(text: str) -> str:
+    """安全渲染行内 Markdown；输入中的原始 HTML 永远先实体化。"""
+    line = html.escape(text)
+    line = re.sub(r"`([^`]+)`", r"<code>\1</code>", line)
+    line = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", line)
+
+    def _link_repl(match):
+        label = match.group(1)
+        url = html.unescape(match.group(2)).strip()
+        if re.match(r"^(https?://|mailto:)", url, re.I):
+            return (
+                f'<a href="{html.escape(url, quote=True)}" target="_blank" '
+                f'rel="noopener noreferrer">{label}</a>'
+            )
+        return label
+
+    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_repl, line)
+
+
 def _markdown_to_safe_html(text: str) -> str:
-    """极简 Markdown 渲染：段落 / 行内 code / **加粗** / ## 标题 / [text](url)。
-    全部 HTML 实体先转义，再做白名单替换，避免 XSS。"""
+    """安全的富文本子集：标题、列表、引用、分隔线、链接与四种内容卡片。
+
+    内容卡片语法：`:::tip 标题` / `:::warning` / `:::promo` / `:::info`，
+    以单独一行的 `:::` 结束。所有原始 HTML 都会被转义。
+    """
     if not text or not text.strip():
-        return '<p class="empty">（运营尚未填写提示内容）</p>'
-    out = []
-    for raw_line in text.replace("\r\n", "\n").split("\n"):
-        line = html.escape(raw_line)
-        # 标题：## xxx / ### xxx → h3 / h4
-        h_match = re.match(r"^(#{1,3})\s+(.+)$", raw_line)
-        if h_match:
-            level = min(len(h_match.group(1)) + 1, 6)
-            content = html.escape(h_match.group(2))
-            tag = f"h{level}"
-            out.append(f"<{tag}>{content}</{tag}>")
-            prev_empty = False
-            continue
-        line = re.sub(r"`([^`]+)`", r"<code>\1</code>", line)
-        line = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", line)
+        return '<div class="empty"><strong>内容正在整理</strong><span>请先保存上方资料，稍后再回来看看。</span></div>'
 
-        def _link_repl(m):
-            label = m.group(1)
-            url = m.group(2)
-            if re.match(r"^(https?://|mailto:)", url):
-                return (
-                    f'<a href="{html.escape(url)}" target="_blank" '
-                    f'rel="noopener noreferrer">{label}</a>'
-                )
-            return html.escape(label)
-
-        line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_repl, line)
-        if line.strip() == "":
-            out.append("")
-        else:
-            out.append(f"<p>{line}</p>")
-    # 合并连续空行
-    merged = []
-    prev_empty = False
-    for item in out:
-        is_empty = item == ""
-        if is_empty and prev_empty:
+    lines = text.replace("\r\n", "\n").split("\n")
+    out: list[str] = []
+    callout_labels = {
+        "tip": "重点",
+        "warning": "注意",
+        "promo": "推荐",
+        "info": "说明",
+    }
+    index = 0
+    while index < len(lines):
+        raw_line = lines[index]
+        stripped = raw_line.strip()
+        if not stripped:
+            index += 1
             continue
-        merged.append(item)
-        prev_empty = is_empty
-    body = "".join(p for p in merged if p)
-    return body or '<p class="empty">（运营尚未填写提示内容）</p>'
+
+        callout_match = re.match(r"^:::(tip|warning|promo|info)(?:\s+(.+))?$", stripped, re.I)
+        if callout_match:
+            kind = callout_match.group(1).lower()
+            title = callout_match.group(2) or callout_labels[kind]
+            index += 1
+            content_lines = []
+            while index < len(lines) and lines[index].strip() != ":::":
+                if lines[index].strip():
+                    content_lines.append(_markdown_inline(lines[index].strip()))
+                index += 1
+            if index < len(lines):
+                index += 1
+            content = "<br>".join(content_lines)
+            out.append(
+                f'<aside class="callout callout-{kind}">'
+                f'<span class="callout-label">{_markdown_inline(title)}</span>'
+                f'<div class="callout-body">{content}</div>'
+                f'</aside>'
+            )
+            continue
+
+        heading = re.match(r"^(#{1,3})\s+(.+)$", raw_line)
+        if heading:
+            level = min(len(heading.group(1)) + 1, 4)
+            out.append(f"<h{level}>{_markdown_inline(heading.group(2))}</h{level}>")
+            index += 1
+            continue
+
+        if re.fullmatch(r"\s*([-*_])(?:\s*\1){2,}\s*", raw_line):
+            out.append('<hr class="content-rule">')
+            index += 1
+            continue
+
+        quote = re.match(r"^>\s*(.+)$", raw_line)
+        if quote:
+            out.append(f"<blockquote>{_markdown_inline(quote.group(1))}</blockquote>")
+            index += 1
+            continue
+
+        unordered = re.match(r"^\s*[-*]\s+(.+)$", raw_line)
+        if unordered:
+            items = []
+            while index < len(lines):
+                item = re.match(r"^\s*[-*]\s+(.+)$", lines[index])
+                if not item:
+                    break
+                items.append(f"<li>{_markdown_inline(item.group(1))}</li>")
+                index += 1
+            out.append(f'<ul class="content-list">{"".join(items)}</ul>')
+            continue
+
+        ordered = re.match(r"^\s*\d+[.)]\s+(.+)$", raw_line)
+        if ordered:
+            items = []
+            while index < len(lines):
+                item = re.match(r"^\s*\d+[.)]\s+(.+)$", lines[index])
+                if not item:
+                    break
+                items.append(f"<li>{_markdown_inline(item.group(1))}</li>")
+                index += 1
+            out.append(f'<ol class="content-list content-steps">{"".join(items)}</ol>')
+            continue
+
+        out.append(f"<p>{_markdown_inline(raw_line)}</p>")
+        index += 1
+
+    return "".join(out)
 
 
 def _build_substitution_vars(customer_row: dict) -> dict:
@@ -185,7 +250,7 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     if phone:
         phone_row = (
             f'<div class="contact-row" id="phone-row">'
-            f'<span class="contact-label">📱 手机</span>'
+            f'<span class="contact-label">Phone number</span>'
             f'<code id="phone" data-phone="{html.escape(phone)}" class="contact-val">{html.escape(phone)}</code>'
             f'<button class="copy-btn" type="button" '
             f'onclick="copyFromEl(\'phone\', \'已复制手机号\')" id="phone-copy-btn">复制</button>'

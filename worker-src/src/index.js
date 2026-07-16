@@ -2,7 +2,7 @@
 // 部署说明见 worker-src/README.md
 // 代码与 frontend/worker_setup.js 保持同步，并由测试强制校验。
 
-const WORKER_VERSION = "2";
+const WORKER_VERSION = "3";
 const PUBLIC_TOKEN_PATTERN = /^\/p\/([A-Za-z0-9_-]{20,128})$/;
 
 export function getApiBase(env) {
@@ -89,9 +89,12 @@ export default {
     }
 
     const cache = caches.default;
-    const cacheKey = new Request(`${url.origin}${url.pathname}?v=${encodeURIComponent(String(version))}`, {
-      method: "GET",
-    });
+    const cacheKey = new Request(
+      `${url.origin}${url.pathname}?v=${encodeURIComponent(String(version))}&worker=${WORKER_VERSION}`,
+      {
+        method: "GET",
+      }
+    );
     const cached = await cache.match(cacheKey);
     if (cached) {
       const headers = new Headers(cached.headers);

@@ -116,9 +116,9 @@ class SystemSettings(BaseModel):
     activation_page_version: Optional[int] = None
     agent_api_token: Optional[str] = None
     agent_api_token_source: Optional[str] = None
-    public_page_markdown: str = ""
+    public_page_markdown: Optional[str] = None
     public_worker_domain: Optional[str] = None  # 留空则 QR 编码用当前域名
-    custom_public_vars: str = ""  # JSON: {"var_name": "value"}，可在 public_page_markdown 里用 {var_name} 引用
+    custom_public_vars: Optional[str] = None  # JSON: {"var_name": "value"}，可在 public_page_markdown 里用 {var_name} 引用
 
 
 class AuthLoginRequest(BaseModel):

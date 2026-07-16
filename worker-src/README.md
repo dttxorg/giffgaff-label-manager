@@ -50,7 +50,7 @@ wrangler deploy
 F12 → Network → 扫码访问 `/p/{token}`：
 
 - 正常响应应为 `200`
-- 应包含 `X-Public-Card-Worker: 2`
+- 应包含 `X-Public-Card-Worker: 3`
 - 第一次访问应为 `X-Cache: MISS`，再次访问应为 `X-Cache: HIT`
 - 如果看到 `X-Worker-Error: api-base`，检查 Production 运行时的 `API_BASE`
 - 如果看到 `X-Origin-Stage` / `X-Origin-Status`，按版本接口或页面接口的源站状态排查
