@@ -347,6 +347,97 @@
   }
   .callout-body { font-size: 15px; line-height: 1.62; }
   .callout-promo a { border-color: #fff; background: var(--lime); color: var(--ink); }
+  .voicemail-alert {
+    margin: 34px 10px 0;
+    padding: 22px 18px;
+    border: 2px solid var(--ink);
+    border-radius: 24px;
+    background: var(--pink, #ffd2c8);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .voicemail-kicker {
+    color: #9f220d;
+    font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.14em;
+  }
+  .voicemail-alert h2 { margin: 9px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -0.04em; }
+  .voicemail-risk { margin: 0; font-size: 14px; line-height: 1.65; font-weight: 750; }
+  .voicemail-steps { display: grid; gap: 0; margin: 17px 0; padding: 0; list-style: none; counter-reset: voicemail; }
+  .voicemail-steps li {
+    position: relative;
+    display: grid;
+    gap: 3px;
+    min-height: 50px;
+    padding: 10px 4px 10px 48px;
+    border-bottom: 1px solid rgba(23,23,19,0.18);
+    counter-increment: voicemail;
+  }
+  .voicemail-steps li::before {
+    content: counter(voicemail, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 10px;
+    display: grid;
+    width: 34px;
+    height: 30px;
+    place-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--lime);
+    font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .voicemail-steps strong { font-size: 13px; }
+  .voicemail-steps span { color: #4f4c45; font-size: 12px; line-height: 1.5; }
+  .voicemail-agent-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 50px;
+    padding: 11px 14px;
+    border: 2px solid var(--ink);
+    border-radius: 13px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+    text-decoration: none;
+  }
+  .voicemail-agent-link span { color: var(--lime); font-size: 18px; }
+  .voicemail-template-box { display: grid; gap: 10px; margin-top: 12px; padding: 13px; border: 1.5px solid var(--ink); border-radius: 13px; background: #fff; }
+  .voicemail-template-label { font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.1em; }
+  .voicemail-template-box code { color: #37352f; font: 600 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: normal; word-break: break-word; }
+  .voicemail-copy-btn { min-height: 42px; border: 2px solid var(--ink); border-radius: 11px; background: var(--lime); color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 900; box-shadow: 3px 3px 0 var(--ink); }
+  .wechat-card {
+    position: relative;
+    overflow: hidden;
+    margin: 34px 10px 0;
+    padding: 24px 20px 22px;
+    border: 2px solid var(--ink);
+    border-radius: 26px;
+    background: var(--ink);
+    color: #fff;
+    box-shadow: 7px 7px 0 var(--coral);
+  }
+  .wechat-card::after { content: ""; position: absolute; right: -54px; top: -54px; width: 145px; height: 145px; border: 26px solid var(--lime); border-radius: 50%; opacity: 0.14; pointer-events: none; }
+  .wechat-card-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .wechat-kicker { color: var(--lime); font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.14em; }
+  .wechat-online { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.72); font-size: 10px; font-weight: 800; }
+  .wechat-online i { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 4px rgba(214,255,82,0.13); }
+  .wechat-card h2 { position: relative; z-index: 1; margin: 17px 0 8px; font-size: 31px; line-height: 1; letter-spacing: -0.055em; }
+  .wechat-subtitle { position: relative; z-index: 1; max-width: 360px; margin: 0; color: rgba(255,255,255,0.7); font-size: 13px; line-height: 1.6; }
+  .wechat-qr-stage { position: relative; z-index: 1; width: min(100%, 330px); margin: 22px auto 16px; padding: 14px; border-radius: 22px; background: #fff; }
+  .wechat-qr-crop { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #fff; }
+  .wechat-qr-source { position: absolute; left: 0; top: 0; width: 130.588%; max-width: none; height: auto; transform: translate(-11.712%, -24.138%); user-select: none; -webkit-touch-callout: default; }
+  .wechat-corner { position: absolute; z-index: 2; width: 25px; height: 25px; border-color: var(--lime); border-style: solid; pointer-events: none; }
+  .corner-tl { left: 5px; top: 5px; border-width: 4px 0 0 4px; border-radius: 10px 0 0 0; }
+  .corner-tr { right: 5px; top: 5px; border-width: 4px 4px 0 0; border-radius: 0 10px 0 0; }
+  .corner-bl { left: 5px; bottom: 5px; border-width: 0 0 4px 4px; border-radius: 0 0 0 10px; }
+  .corner-br { right: 5px; bottom: 5px; border-width: 0 4px 4px 0; border-radius: 0 0 10px 0; }
+  .wechat-actions { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .wechat-actions span { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; color: #fff; font-size: 12px; font-weight: 900; }
+  .wechat-actions b { color: var(--lime); font-size: 17px; }
+  .wechat-note { position: relative; z-index: 1; margin: 12px 0 0; color: rgba(255,255,255,0.58); font-size: 11px; line-height: 1.5; text-align: center; }
   .empty {
     display: grid;
     gap: 5px;
@@ -369,6 +460,7 @@
     .hero-copy { width: 76%; margin-top: 48px; }
     .sim-object { right: -42px; transform: rotate(8deg) scale(0.88); }
     .panel { margin-inline: 5px; }
+    .voicemail-alert, .wechat-card { margin-inline: 5px; }
     .contact-row { grid-template-columns: minmax(0, 1fr) 68px; }
     .copy-btn { min-width: 68px; padding-inline: 10px; }
     .service-strip { grid-template-columns: 1fr; }
@@ -415,7 +507,7 @@
       <div class="contact-stack">
         __PHONE_ROW__
         <div class="contact-row" id="email-row">
-          <span class="contact-label">初始注册邮箱</span>
+          <span class="contact-label">初始注册邮箱（官网登录密码）</span>
           <!--email_off-->
           <code id="email" data-email="__EMAIL__" class="contact-val">__EMAIL_DISPLAY__</code>
           <!--/email_off-->
@@ -427,6 +519,10 @@
         <div class="service-pill">🤖 ChatGPT Plus / Pro<small>AI 订阅服务</small></div>
       </div>
     </section>
+
+    __VOICEMAIL_GUIDE_HTML__
+
+    __WECHAT_GUIDE_HTML__
 
     <section class="content-panel" aria-labelledby="guide-title">
       <div class="section-head">
@@ -479,6 +575,28 @@ function flashBtn(btnId, text) {
   btn.classList.add('copied');
   btn.textContent = text;
   setTimeout(() => { btn.classList.remove('copied'); btn.textContent = orig; }, 1400);
+}
+function copyVoicemailRequest(button) {
+  const el = document.getElementById('voicemail-request');
+  const value = el ? (el.dataset.copy || el.textContent.trim()) : '';
+  if (!value) return;
+  const done = () => {
+    const original = button.textContent;
+    button.textContent = '已复制，可粘贴给客服';
+    setTimeout(() => { button.textContent = original; }, 1600);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(value).then(done).catch(() => voicemailFallbackCopy(value, done));
+  } else {
+    voicemailFallbackCopy(value, done);
+  }
+}
+function voicemailFallbackCopy(value, done) {
+  const ta = document.createElement('textarea');
+  ta.value = value; ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  document.execCommand('copy'); document.body.removeChild(ta); done();
 }
 </script>
 </body>

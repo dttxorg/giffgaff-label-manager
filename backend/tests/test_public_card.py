@@ -74,6 +74,7 @@ def test_create_customer_auto_generates_token(client):
 
 def test_public_page_renders_with_security_headers(client):
     cid = _create("alice@giffgaff.example")
+    asyncio.run(crud.update_customer(cid, CustomerUpdate(phone_number="447400123456")))
     token = client.get(f"/api/customers/{cid}").json()["public_token"]
     r = client.get(f"/p/{token}")
     assert r.status_code == 200
@@ -86,7 +87,9 @@ def test_public_page_renders_with_security_headers(client):
     assert "ChatGPT Plus" in body
     assert "ChatGPT 5x Pro" in body
     assert "ChatGPT 20x Pro" in body
-    assert "账号：您的 giffgaff 手机号码" in body
+    assert "giffgaff 手机号码（官网账号）" in body
+    assert "初始注册邮箱（官网登录密码）" in body
+    assert "账号登录信息" not in body
     assert "请勿在京东咨询" in body
     assert "号码保号提醒服务" in body
     # 安全头
@@ -300,7 +303,7 @@ def test_public_token_version_endpoint(client):
     token = client.get(f"/api/customers/{cid}").json()["public_token"]
     r = client.get(f"/api/public/{token}/version")
     assert r.status_code == 200
-    assert r.json() == {"public_version": 1}
+    assert r.json() == {"public_version": 3_000_001}
 
 
 def test_public_token_version_after_regenerate(client):
@@ -315,12 +318,12 @@ def test_p_page_returns_x_cache_version_header(client):
     cid = _create("alice@x.com")
     token = client.get(f"/api/customers/{cid}").json()["public_token"]
     r = client.get(f"/p/{token}")
-    assert r.headers.get("X-Cache-Version") == "1"
+    assert r.headers.get("X-Cache-Version") == "3000001"
     # 重新生成后 v2
     client.post(f"/api/customers/{cid}/public-link/regenerate")
     new_token = client.get(f"/api/customers/{cid}").json()["public_token"]
     r = client.get(f"/p/{new_token}")
-    assert r.headers.get("X-Cache-Version") == "2"
+    assert r.headers.get("X-Cache-Version") == "3000002"
 
 
 def test_contact_markdown_change_bumps_all_cache_versions_without_rotating_tokens(client):

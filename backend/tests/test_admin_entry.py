@@ -150,7 +150,7 @@ def test_public_qr_routes_work_without_admin_entry_cookie(hidden_admin_client):
     page = hidden_admin_client.get(f"/p/{PUBLIC_TOKEN}")
 
     assert version.status_code == 200
-    assert version.json() == {"public_version": 1}
+    assert version.json() == {"public_version": 3_000_001}
     assert page.status_code == 200
     assert "public@example.com" in page.text
 

@@ -131,7 +131,7 @@ def test_shared_tutorial_qr_page_embeds_complete_guide_without_second_jump(clien
     assert "12 步完成激活" in body
     assert body.count('class="tutorial-step"') == 12
     assert body.count('class="step-shot"') == 10
-    assert body.count("data:image/") == 10
+    assert body.count("data:image/") == 11  # 10 张教程截图 + 1 张微信二维码
     assert "打开官方激活入口" in body
     assert "填写初始邮箱" in body
     assert "选择 Pay as you go" in body
@@ -166,6 +166,10 @@ def test_both_public_pages_ignore_legacy_markdown_settings(client):
         email="contact@example.com",
         activation_date="2026-07-16",
     )))
+    asyncio.run(crud.update_customer(
+        customer_id,
+        main.CustomerUpdate(phone_number="447400123456"),
+    ))
     customer_token = client.get(f"/api/customers/{customer_id}").json()["public_token"]
 
     tutorial_page = client.get("/p/activation-guide-public-page").text
@@ -177,29 +181,76 @@ def test_both_public_pages_ignore_legacy_markdown_settings(client):
     assert "LEGACY_ACTIVATED_TEXT" not in activated_page
     assert "插卡前重要提醒" in tutorial_page
     assert "插卡前重要提醒" in activated_page
-    assert "账号登录信息" in activated_page
-    assert "<li>充值套餐</li>" not in activated_page
+    assert "账号登录信息" not in activated_page
+    assert "giffgaff 手机号码（官网账号）" in activated_page
+    assert "初始注册邮箱（官网登录密码）" in activated_page
+
+
+def test_both_public_pages_embed_prominent_voicemail_shutdown_guide(client):
+    customer_id = asyncio.run(crud.create_customer(main.CustomerCreate(
+        email="voicemail@example.com",
+        activation_date="2026-07-16",
+    )))
+    customer_token = client.get(f"/api/customers/{customer_id}").json()["public_token"]
+
+    pages = [
+        client.get("/p/activation-guide-public-page").text,
+        client.get(f"/p/{customer_token}").text,
+    ]
+    for body in pages:
+        assert "激活后尽快关闭语音信箱" in body
+        assert "可能只能等待系统自动结束" in body
+        assert "国际漫游扣费风险" in body
+        assert "打开 giffgaff 客服表单" in body
+        assert "等待邮件确认" in body
+        assert "Please fully disable voicemail" in body
+        assert "copyVoicemailRequest(this)" in body
+        assert "https://gg.681218.xyz/voicemail.html" not in body
+
+
+def test_both_public_pages_show_cropped_wechat_support_qr(client):
+    customer_id = asyncio.run(crud.create_customer(main.CustomerCreate(
+        email="wechat@example.com",
+        activation_date="2026-07-16",
+    )))
+    customer_token = client.get(f"/api/customers/{customer_id}").json()["public_token"]
+
+    pages = [
+        client.get("/p/activation-guide-public-page").text,
+        client.get(f"/p/{customer_token}").text,
+    ]
+    for body in pages:
+        assert body.count('class="wechat-card"') == 1
+        assert 'alt="微信客服二维码"' in body
+        assert 'class="wechat-qr-crop"' in body
+        assert "width: 130.588%" in body
+        assert "translate(-11.712%, -24.138%)" in body
+        assert "长按识别" in body
+        assert "微信扫一扫" in body
+        assert "按住二维码约 2 秒" in body
+        assert "猫不肥" not in body
+        assert "阿富汗" not in body
 
 
 def test_activation_page_version_increments_to_invalidate_worker_cache(client):
     version_url = "/api/public/activation-guide-public-page/version"
-    assert client.get(version_url).json() == {"public_version": 3_000_001}
+    assert client.get(version_url).json() == {"public_version": 5_000_001}
 
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 3_000_002}
+    assert client.get(version_url).json() == {"public_version": 5_000_002}
 
     # 保存相同内容不应制造额外缓存版本。
     client.patch("/api/settings", json={
         "activation_page_markdown": "第一次修改",
     })
-    assert client.get(version_url).json() == {"public_version": 3_000_002}
+    assert client.get(version_url).json() == {"public_version": 5_000_002}
 
     client.patch("/api/settings", json={
         "activation_tutorial_url": "https://example.com/new-guide",
     })
-    assert client.get(version_url).json() == {"public_version": 3_000_003}
+    assert client.get(version_url).json() == {"public_version": 5_000_003}
 
 
 @pytest.mark.parametrize("endpoint,payload", [

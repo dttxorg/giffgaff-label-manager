@@ -22,11 +22,22 @@ _ACTIVATION_TEMPLATE_PATH = os.path.join(
 _ACTIVATION_ASSET_DIR = os.path.join(
     os.path.dirname(__file__), "assets", "public_activation"
 )
+_WECHAT_QR_PATH = os.path.join(
+    os.path.dirname(__file__), "assets", "public", "wechat-support.jpg"
+)
 ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
 # 代码内教程内容变化时递增。与数据库设置版本组合后，可防止 Worker
 # 比后端更早部署时把旧 HTML 缓存到新 Worker 版本下。
-ACTIVATION_GUIDE_CONTENT_VERSION = 3
+ACTIVATION_GUIDE_CONTENT_VERSION = 5
+ACTIVATED_CARD_CONTENT_VERSION = 3
 _ACTIVATION_VERSION_FACTOR = 1_000_000
+
+VOICEMAIL_SUPPORT_URL = "https://support2.giffgaff.com/app/ask/International-and-Roaming/Accessing-voicemail-while-abroad/form/"
+VOICEMAIL_REQUEST_TEMPLATE = (
+    "Hello, I am outside the UK. Please fully disable voicemail on my "
+    "giffgaff account to avoid roaming charges, as I cannot turn it off "
+    "myself from abroad. Thank you."
+)
 
 SIM_INSERT_WARNING_CONTENT = """:::warning 插卡前重要提醒
 如果准备把 giffgaff 作为手机主卡使用，请在插卡前关闭 **短信增强功能**，避免手机自动发送验证短信，导致异常扣费或影响号码使用。
@@ -144,17 +155,6 @@ ACTIVATED_PAGE_CONTENT = """# 📱 giffgaff 已激活号码使用说明
 请避免进入非官方网站，不要向陌生人提供验证码或账户密码。
 :::
 
-## 🔐 账号登录信息
-
-- **账号：您的 giffgaff 手机号码**
-- **密码：注册邮箱密码**
-
-登录官网后即可：
-
-- 查看余额
-- 修改邮箱绑定
-- 修改账户密码
-
 ## 💬 售后咨询
 
 如遇到激活、网络设置或账户使用问题，请联系卡片上的客服微信。
@@ -223,6 +223,13 @@ def _activation_guide_public_version(settings: dict) -> int:
     return (
         ACTIVATION_GUIDE_CONTENT_VERSION * _ACTIVATION_VERSION_FACTOR
         + settings_version
+    )
+
+
+def _activated_card_public_version(customer_version: int) -> int:
+    return (
+        ACTIVATED_CARD_CONTENT_VERSION * _ACTIVATION_VERSION_FACTOR
+        + max(1, int(customer_version or 1))
     )
 
 
@@ -444,6 +451,63 @@ def _render_activation_steps() -> str:
     return "".join(out)
 
 
+def _render_voicemail_guide() -> str:
+    safe_template = html.escape(VOICEMAIL_REQUEST_TEMPLATE)
+    safe_template_attr = html.escape(VOICEMAIL_REQUEST_TEMPLATE, quote=True)
+    return (
+        '<section class="voicemail-alert" aria-labelledby="voicemail-title">'
+        '<div class="voicemail-kicker">IMPORTANT / ROAMING</div>'
+        '<h2 id="voicemail-title">📵 激活后尽快关闭语音信箱</h2>'
+        '<p class="voicemail-risk">未关闭时，拒接或无人接听可能转入语音信箱。来电一旦进入语音信箱，'
+        '在中国使用时可能只能等待系统自动结束，并增加国际漫游扣费风险。</p>'
+        '<ol class="voicemail-steps">'
+        '<li><strong>打开客服表单</strong><span>登录 giffgaff 账户，进入国际漫游语音信箱表单。</span></li>'
+        '<li><strong>发送关闭请求</strong><span>复制下方英文模板并提交给客服。</span></li>'
+        '<li><strong>等待邮件确认</strong><span>通常会在 24 小时内收到处理结果，确认已完全关闭。</span></li>'
+        '</ol>'
+        f'<a class="voicemail-agent-link" href="{html.escape(VOICEMAIL_SUPPORT_URL, quote=True)}" '
+        'target="_blank" rel="noopener noreferrer">打开 giffgaff 客服表单 <span>↗</span></a>'
+        '<div class="voicemail-template-box">'
+        '<span class="voicemail-template-label">发给客服的英文模板</span>'
+        f'<code id="voicemail-request" data-copy="{safe_template_attr}">{safe_template}</code>'
+        '<button class="voicemail-copy-btn" type="button" onclick="copyVoicemailRequest(this)">复制英文模板</button>'
+        '</div>'
+        '</section>'
+    )
+
+
+@lru_cache(maxsize=1)
+def _wechat_qr_data_uri() -> str:
+    with open(_WECHAT_QR_PATH, "rb") as image_file:
+        encoded = base64.b64encode(image_file.read()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
+
+
+def _render_wechat_guide() -> str:
+    return (
+        '<section class="wechat-card" aria-labelledby="wechat-title">'
+        '<div class="wechat-card-top">'
+        '<span class="wechat-kicker">WECHAT / SUPPORT</span>'
+        '<span class="wechat-online"><i></i>客服通道</span>'
+        '</div>'
+        '<h2 id="wechat-title">售后，直接找我。</h2>'
+        '<p class="wechat-subtitle">套餐代充、AI 服务、激活与使用问题，都可以通过微信联系。</p>'
+        '<div class="wechat-qr-stage">'
+        '<span class="wechat-corner corner-tl"></span><span class="wechat-corner corner-tr"></span>'
+        '<span class="wechat-corner corner-bl"></span><span class="wechat-corner corner-br"></span>'
+        '<div class="wechat-qr-crop">'
+        f'<img class="wechat-qr-source" src="{_wechat_qr_data_uri()}" '
+        'alt="微信客服二维码" draggable="false">'
+        '</div>'
+        '</div>'
+        '<div class="wechat-actions" aria-label="添加微信方式">'
+        '<span><b>◎</b> 长按识别</span><span><b>⌁</b> 微信扫一扫</span>'
+        '</div>'
+        '<p class="wechat-note">按住二维码约 2 秒，或保存后打开微信扫一扫添加好友</p>'
+        '</section>'
+    )
+
+
 def _build_substitution_vars(customer_row: dict) -> dict:
     """从客户行组装公开页显示所需字段。"""
     return {
@@ -487,11 +551,13 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     hint_md = _substitute_variables(hint_markdown, vars_)
     # 2) markdown → html
     hint_html = _markdown_to_safe_html(hint_md)
+    voicemail_html = _render_voicemail_guide()
+    wechat_html = _render_wechat_guide()
     # 3) 手机号：有值才显示整行（替换时已经做了安全转义）
     if phone:
         phone_row = (
             f'<div class="contact-row" id="phone-row">'
-            f'<span class="contact-label">giffgaff 手机号码</span>'
+            f'<span class="contact-label">giffgaff 手机号码（官网账号）</span>'
             f'<code id="phone" data-phone="{html.escape(phone)}" class="contact-val">{html.escape(phone)}</code>'
             f'<button class="copy-btn" type="button" '
             f'onclick="copyFromEl(\'phone\', \'已复制手机号码\')" id="phone-copy-btn">复制</button>'
@@ -504,6 +570,8 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
         .replace("__EMAIL__", safe_email)
         .replace("__EMAIL_DISPLAY__", display)
         .replace("__PHONE_ROW__", phone_row)
+        .replace("__VOICEMAIL_GUIDE_HTML__", voicemail_html)
+        .replace("__WECHAT_GUIDE_HTML__", wechat_html)
         .replace("__HINT_HTML__", hint_html)
     )
 
@@ -512,10 +580,14 @@ def _render_activation_card() -> str:
     warning_html = _markdown_to_safe_html(SIM_INSERT_WARNING_CONTENT)
     steps_html = _render_activation_steps()
     hint_html = _markdown_to_safe_html(ACTIVATION_PAGE_CONTENT)
+    voicemail_html = _render_voicemail_guide()
+    wechat_html = _render_wechat_guide()
     return (
         _load_activation_template()
         .replace("__INSERT_WARNING_HTML__", warning_html)
         .replace("__TUTORIAL_STEPS_HTML__", steps_html)
+        .replace("__VOICEMAIL_GUIDE_HTML__", voicemail_html)
+        .replace("__WECHAT_GUIDE_HTML__", wechat_html)
         .replace("__HINT_HTML__", hint_html)
     )
 
@@ -548,7 +620,9 @@ async def public_card_page(token: str):
     hint_md = ACTIVATED_PAGE_CONTENT
     vars_ = _build_substitution_vars(card)
     headers = _security_headers()
-    headers["X-Cache-Version"] = str(card["public_version"])
+    headers["X-Cache-Version"] = str(
+        _activated_card_public_version(card["public_version"])
+    )
     return HTMLResponse(_render_card(card["email"], hint_md, vars_), headers=headers)
 
 
@@ -561,6 +635,8 @@ async def public_token_version(token: str):
         version = _activation_guide_public_version(settings)
     else:
         version = await crud.get_public_version(token)
+        if version is not None:
+            version = _activated_card_public_version(version)
     if version is None:
         return JSONResponse({"detail": "invalid"}, status_code=404)
     return JSONResponse(

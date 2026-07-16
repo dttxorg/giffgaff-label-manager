@@ -61,7 +61,7 @@ def test_api_public_version_whitelisted_no_auth(authed_client):
     r = authed_client.get(f"/api/public/{TOKEN}/version")
     assert r.status_code != 401, f"middleware 拦了 Worker callback: {r.text}"
     assert r.status_code == 200
-    assert r.json() == {"public_version": 1}
+    assert r.json() == {"public_version": 3_000_001}
 
 
 def test_api_public_version_404_for_invalid_token(authed_client):
