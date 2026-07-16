@@ -1,5 +1,7 @@
-"""UK 风格随机数据：人名 / 地址 / 城市 / 邮编。
-用于客户创建后自动填充占位信息。
+"""英国随机身份数据。
+
+姓名从常见姓名池生成；地址则只从已核验的英国公共机构地址池中整组抽取，
+绝不再随机拼接街道、城市和邮编。
 """
 import random
 from typing import Optional
@@ -36,55 +38,73 @@ LAST_NAMES = [
     "Gibson", "Gordon", "Graham", "Hamilton", "Hardy", "Harper", "Hayes", "Henderson",
 ]
 
-# 50 个常见 UK 街道名
-STREET_NAMES = [
-    "High Street", "Station Road", "Main Street", "Park Road", "Church Lane",
-    "Church Street", "Victoria Road", "Manor Road", "London Road", "Park Avenue",
-    "The Avenue", "Queens Road", "Kings Road", "New Road", "Mill Lane",
-    "School Lane", "Springfield Road", "Windsor Road", "Green Lane", "Manor Way",
-    "Heath Road", "Oak Drive", "Elm Close", "Cedar Avenue", "Maple Way",
-    "Willow Road", "Birch Avenue", "Cherry Tree Lane", "Holly Walk", "Ivy Close",
-    "Rose Hill", "Garden Street", "Orchard Way", "Meadow View", "Riverside Drive",
-    "Bridge Street", "Castle Road", "Castle Street", "Church Road", "Marlborough Road",
-    "Cambridge Road", "Oxford Road", "Regent Street", "Bond Street", "Baker Street",
-    "Piccadilly", "Downing Street", "Whitehall", "Fleet Street", "Strand",
-]
-
-# UK 邮编前缀（按城市区域）
-# UK 城市 → 邮编前缀的映射。生成 random_identity 时按这个表选邮编，
-# 保证 postcode 一定对应 city（giffgaff 等表单会校验）。
-CITY_POSTCODES: dict[str, list[str]] = {
-    "London": ["SW", "NW", "N", "E", "W", "SE", "EC", "WC"],
-    "Manchester": ["M", "OL", "BL"],
-    "Birmingham": ["B"],
-    "Leeds": ["LS", "WF"],
-    "Glasgow": ["G", "PA"],
-    "Liverpool": ["L", "CH"],
-    "Newcastle": ["NE", "DH"],
-    "Sheffield": ["S"],
-    "Bristol": ["BS", "BA"],
-    "Nottingham": ["NG"],
-    "Leicester": ["LE"],
-    "Edinburgh": ["EH", "FK"],
-    "Southampton": ["SO"],
-    "Portsmouth": ["PO"],
-    "Brighton": ["BN"],
-    "Oxford": ["OX"],
-    "Cambridge": ["CB"],
-    "Reading": ["RG"],
-    "York": ["YO"],
-    "Bath": ["BA"],
-    "Exeter": ["EX"],
-    "Cardiff": ["CF"],
-    "Belfast": ["BT"],
-    "Aberdeen": ["AB"],
-    "Dundee": ["DD"],
-    "Plymouth": ["PL"],
-    "Coventry": ["CV"],
-    "Wolverhampton": ["WV"],
-    "Stoke-on-Trent": ["ST"],
-    "Derby": ["DE"],
-}
+# 真实英国公共机构地址池。
+#
+# 地址、城市和邮编在 2026-07-16 依据 OpenStreetMap Nominatim 的公开地点数据整理，
+# 并用 Postcodes.io 批量确认邮编当前存在。只使用博物馆等公开机构，不使用私人住宅，
+# 避免把随机客户资料指向无关居民。三个字段必须始终作为不可拆分的一组使用。
+REAL_UK_ADDRESSES: tuple[dict[str, str], ...] = (
+    {"address": "British Museum, Great Russell Street", "city": "London", "postcode": "WC1B 3DG"},
+    {"address": "Natural History Museum, Cromwell Road", "city": "London", "postcode": "SW7 5BD"},
+    {"address": "Birmingham Museum & Art Gallery, Chamberlain Square", "city": "Birmingham", "postcode": "B3 3DH"},
+    {"address": "The Pen Museum, 60 Frederick Street", "city": "Birmingham", "postcode": "B1 3HS"},
+    {"address": "Science and Industry Museum, Liverpool Road", "city": "Manchester", "postcode": "M3 4FP"},
+    {"address": "The Manchester Museum, Oxford Road", "city": "Manchester", "postcode": "M13 9PL"},
+    {"address": "International Slavery Museum, Hartley's Quay", "city": "Liverpool", "postcode": "L3 4AQ"},
+    {"address": "Museum of Liverpool, Mann Island", "city": "Liverpool", "postcode": "L3 1AH"},
+    {"address": "Abbey House Museum, Abbey Walk", "city": "Leeds", "postcode": "LS5 3EH"},
+    {"address": "Leeds City Museum, Millennium Square", "city": "Leeds", "postcode": "LS2 8BH"},
+    {"address": "Kelham Island Museum, Alma Street", "city": "Sheffield", "postcode": "S3 8SA"},
+    {"address": "Weston Park Museum, Western Bank", "city": "Sheffield", "postcode": "S10 2TP"},
+    {"address": "Bristol Museum & Art Gallery, Queens Road", "city": "Bristol", "postcode": "BS8 1RL"},
+    {"address": "M Shed, Princes Wharf", "city": "Bristol", "postcode": "BS1 4RN"},
+    {"address": "National Justice Museum, High Pavement", "city": "Nottingham", "postcode": "NG1 1HN"},
+    {"address": "Nottingham Industrial Museum, Elizabethan Avenue", "city": "Nottingham", "postcode": "NG8 2AE"},
+    {"address": "Jewry Wall Museum, Welles Street", "city": "Leicester", "postcode": "LE1 4LR"},
+    {"address": "Leicester Museum and Art Gallery, 53 New Walk", "city": "Leicester", "postcode": "LE1 7EA"},
+    {"address": "National Museum of Scotland, Chambers Street", "city": "Edinburgh", "postcode": "EH1 1JF"},
+    {"address": "Writers' Museum, Lady Stair's Close", "city": "Edinburgh", "postcode": "EH1 2PA"},
+    {"address": "Hunterian Museum, North Front", "city": "Glasgow", "postcode": "G12 8LE"},
+    {"address": "Kelvingrove Art Gallery and Museum, Argyle Street", "city": "Glasgow", "postcode": "G3 8AG"},
+    {"address": "Firing Line Museum, Battlement Walk", "city": "Cardiff", "postcode": "CF10 3RB"},
+    {"address": "National Museum Cardiff, Museum Avenue", "city": "Cardiff", "postcode": "CF10 3NP"},
+    {"address": "Titanic Belfast, 1 Olympic Way, Queens Road", "city": "Belfast", "postcode": "BT3 9DP"},
+    {"address": "Ulster Museum, Stranmillis Road", "city": "Belfast", "postcode": "BT9 5AB"},
+    {"address": "Discovery Museum, Blandford Square", "city": "Newcastle upon Tyne", "postcode": "NE1 4JA"},
+    {"address": "Great North Museum: Hancock, Barras Bridge", "city": "Newcastle upon Tyne", "postcode": "NE2 4PT"},
+    {"address": "Ashmolean Museum, Beaumont Street", "city": "Oxford", "postcode": "OX1 2PH"},
+    {"address": "Oxford University Museum of Natural History, Parks Road", "city": "Oxford", "postcode": "OX1 3PW"},
+    {"address": "Fitzwilliam Museum, Fitzwilliam Street", "city": "Cambridge", "postcode": "CB2 1QH"},
+    {"address": "Museum of Archaeology and Anthropology, Downing Street", "city": "Cambridge", "postcode": "CB2 3DZ"},
+    {"address": "National Railway Museum, Leeman Road", "city": "York", "postcode": "YO26 4XJ"},
+    {"address": "Yorkshire Museum, Museum Street", "city": "York", "postcode": "YO1 7DR"},
+    {"address": "Assembly Rooms and Fashion Museum, Bennett Street", "city": "Bath", "postcode": "BA1 2QH"},
+    {"address": "Holburne Museum, Great Pulteney Street", "city": "Bath", "postcode": "BA2 4DB"},
+    {"address": "Royal Albert Memorial Museum, Queen Street", "city": "Exeter", "postcode": "EX4 3RX"},
+    {"address": "The Bill Douglas Cinema Museum, Prince of Wales Road", "city": "Exeter", "postcode": "EX4 4SB"},
+    {"address": "Mary Rose Museum, Main Road", "city": "Portsmouth", "postcode": "PO1 3PY"},
+    {"address": "Royal Naval Museum, Main Road", "city": "Portsmouth", "postcode": "PO1 3LU"},
+    {"address": "Brighton Museum & Art Gallery, Church Street", "city": "Brighton", "postcode": "BN1 1WN"},
+    {"address": "Brighton Toy and Model Museum, 52-55 Trafalgar Street", "city": "Brighton", "postcode": "BN1 4EB"},
+    {"address": "Aberdeen Maritime Museum, 52-56 Shiprow", "city": "Aberdeen", "postcode": "AB11 5BY"},
+    {"address": "King's Museum, High Street", "city": "Aberdeen", "postcode": "AB24 3EE"},
+    {"address": "D'Arcy Thompson Zoology Museum, Nethergate", "city": "Dundee", "postcode": "DD1 4HN"},
+    {"address": "Dundee Museum of Transport, Unit 10, Market Street", "city": "Dundee", "postcode": "DD1 3LA"},
+    {"address": "Mayflower Museum, 3-5 The Barbican", "city": "Plymouth", "postcode": "PL1 2LR"},
+    {"address": "The Box, Tavistock Place", "city": "Plymouth", "postcode": "PL4 8AX"},
+    {"address": "Coventry Transport Museum, Hales Street", "city": "Coventry", "postcode": "CV1 1JD"},
+    {"address": "Herbert Art Gallery & Museum, Jordan Well", "city": "Coventry", "postcode": "CV1 5QP"},
+    {"address": "Derby Museum and Art Gallery, The Strand", "city": "Derby", "postcode": "DE1 1BS"},
+    {"address": "Pickford's House Museum, 41 Friar Gate", "city": "Derby", "postcode": "DE1 1DA"},
+    {"address": "SeaCity Museum, Havelock Road", "city": "Southampton", "postcode": "SO14 7FY"},
+    {"address": "Tudor House Museum, Bugle Street", "city": "Southampton", "postcode": "SO14 2AL"},
+    {"address": "Museum of English Rural Life, Acacia Road", "city": "Reading", "postcode": "RG1 5EY"},
+    {"address": "Reading Museum, Valpy Street", "city": "Reading", "postcode": "RG1 1QH"},
+    {"address": "Tettenhall Transport Heritage Museum, Henwood Road", "city": "Wolverhampton", "postcode": "WV6 8NX"},
+    {"address": "Wolves Museum and Stadium Tours, Waterloo Road", "city": "Wolverhampton", "postcode": "WV1 4QR"},
+    {"address": "Gladstone Pottery Museum, Uttoxeter Road", "city": "Stoke-on-Trent", "postcode": "ST3 1PQ"},
+    {"address": "Potteries Museum and Art Gallery, Bethesda Street", "city": "Stoke-on-Trent", "postcode": "ST1 3DW"},
+)
 
 
 def generate_first_name() -> str:
@@ -96,44 +116,35 @@ def generate_last_name() -> str:
 
 
 def generate_address() -> str:
-    """返回 '42 Baker Street' 或 'Flat 3, 17 Station Road' 这种。"""
-    house_number = random.randint(1, 200)
-    street = random.choice(STREET_NAMES)
-    if random.random() < 0.3:
-        flat = f"Flat {random.randint(1, 30)}"
-        return f"{flat}, {house_number} {street}"
-    return f"{house_number} {street}"
+    """从核验地址池返回一个真实存在的完整地址行。"""
+    return random.choice(REAL_UK_ADDRESSES)["address"]
 
 
 def generate_postcode(prefix: Optional[str] = None) -> str:
-    """UK postcode 格式：字母 + 数字 + 空格 + 数字 + 字母 + 字母（如 SW1A 1AA）。
-    不传 prefix 时从所有 CITY_POSTCODES 里随机选一个区——这种用法不应出现在生产路径，
-    因为它可能产生不匹配 city 的 postcode。"""
-    if prefix is None:
-        all_prefixes = [p for ps in CITY_POSTCODES.values() for p in ps]
-        prefix = random.choice(all_prefixes)
-    digit1 = random.randint(1, 99)
-    letter1 = random.choice("ABCDEFGHJKLMNOPRSTUVWXYZ")
-    digit2 = random.randint(0, 9)
-    letter2 = random.choice("ABCDEFGHJKLMNOPRSTUVWXYZ")
-    letter3 = random.choice("ABCDEFGHJKLMNOPRSTUVWXYZ")
-    return f"{prefix}{digit1} {letter1}{digit2}{letter2}{letter3}"
+    """从核验地址池返回真实邮编，可按邮编开头筛选。
+
+    ``prefix`` 仅保留旧调用方式的兼容性，例如 ``SW`` 或 ``SW7``；找不到真实
+    邮编时明确报错，而不是伪造一个看似合法的邮编。
+    """
+    candidates = REAL_UK_ADDRESSES
+    if prefix is not None:
+        normalized = prefix.strip().upper()
+        candidates = tuple(
+            location for location in REAL_UK_ADDRESSES
+            if location["postcode"].startswith(normalized)
+        )
+        if not candidates:
+            raise ValueError(f"没有已核验的英国邮编匹配前缀 {prefix!r}")
+    return random.choice(candidates)["postcode"]
 
 
 def generate_random_identity() -> dict:
-    """一次性生成完整身份信息（5 个字段）。
-    直接从 CITY_POSTCODES 里抽 (city, prefix) 对子——这样 city 和 postcode 永远 1:1 对应，
-    不会落到「CITY_POSTCODES 里没这个城市」的边界 case。"""
-    first_name = generate_first_name()
-    last_name = generate_last_name()
-    address = generate_address()
-    city, prefix = random.choice(list(CITY_POSTCODES.items()))
-    prefix = random.choice(prefix)  # 一个城市可能对应多个邮编区
-    postcode = generate_postcode(prefix=prefix)
+    """生成姓名，并整组抽取真实地址、城市和邮编。"""
+    location = random.choice(REAL_UK_ADDRESSES)
     return {
-        "first_name": first_name,
-        "last_name": last_name,
-        "address": address,
-        "city": city,
-        "postcode": postcode,
+        "first_name": generate_first_name(),
+        "last_name": generate_last_name(),
+        "address": location["address"],
+        "city": location["city"],
+        "postcode": location["postcode"],
     }

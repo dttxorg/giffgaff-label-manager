@@ -472,19 +472,18 @@ def test_save_payment_check_result_nonexistent_returns_false(client):
 
 
 def test_uk_random_module_generates_valid_data():
-    """uk_random 模块的每个生成函数都返回非空字符串。"""
+    """单字段生成器也只能返回核验地址池里的真实值。"""
     from uk_random import (
         generate_first_name, generate_last_name, generate_address,
-        generate_postcode, generate_random_identity,
+        generate_postcode, generate_random_identity, REAL_UK_ADDRESSES,
     )
     assert isinstance(generate_first_name(), str) and len(generate_first_name()) > 0
     assert isinstance(generate_last_name(), str) and len(generate_last_name()) > 0
-    assert isinstance(generate_address(), str) and len(generate_address()) > 0
-    # UK postcode: 字母数字 + 空格 + 字母数字字母
+    assert generate_address() in {item["address"] for item in REAL_UK_ADDRESSES}
     pc = generate_postcode()
-    import re
-    assert re.match(r"^[A-Z]{1,2}\d{1,2} [A-Z]\d[A-Z]{2}$", pc), f"bad postcode: {pc!r}"
-    # 全套生成
+    assert pc in {item["postcode"] for item in REAL_UK_ADDRESSES}
+    # 正确 UK 邮编格式：空格后必须是“数字 + 两个字母”。
+    assert re.fullmatch(r"^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$", pc), f"bad postcode: {pc!r}"
     identity = generate_random_identity()
     assert set(identity.keys()) == {"first_name", "last_name", "address", "city", "postcode"}
 
@@ -563,25 +562,37 @@ def test_customer_create_response_includes_identity(client):
         assert data.get(field), f"create response should include {field}"
 
 
-def test_random_identity_postcode_matches_city():
-    """邮编前缀必须对应城市——跑 100 次验证一致。"""
-    from uk_random import generate_random_identity, CITY_POSTCODES
+def test_random_identity_uses_verified_location_as_an_indivisible_tuple():
+    """连续生成时，地址、城市和邮编必须完整命中同一条核验记录。"""
+    from uk_random import generate_random_identity, REAL_UK_ADDRESSES
 
-    for _ in range(100):
+    verified = {
+        (item["address"], item["city"], item["postcode"])
+        for item in REAL_UK_ADDRESSES
+    }
+    assert len(verified) >= 50
+    assert len(verified) == len(REAL_UK_ADDRESSES)
+
+    for _ in range(500):
         ident = generate_random_identity()
-        city = ident["city"]
-        postcode = ident["postcode"]
-        # 提取 postcode 前缀（第一个空格前的字母数字部分）
-        prefix = postcode.split(" ")[0]
-        # 提取真正的字母部分（去掉开头的数字）
-        prefix_letters = ""
-        for ch in prefix:
-            if ch.isalpha():
-                prefix_letters += ch
-            elif prefix_letters:
-                break
-        assert prefix_letters in CITY_POSTCODES[city], \
-            f"postcode {postcode!r} prefix {prefix_letters!r} 不在 {city!r} 的邮编区 {CITY_POSTCODES[city]}"
+        location = (ident["address"], ident["city"], ident["postcode"])
+        assert location in verified, f"生成了地址池外或错配的地址组合：{location!r}"
+
+
+def test_verified_postcode_pool_uses_real_uk_format_and_prefix_filter():
+    """地址池邮编格式正确；前缀筛选绝不能回退到随机伪造。"""
+    from uk_random import generate_postcode, REAL_UK_ADDRESSES
+
+    postcode_pattern = re.compile(r"^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$")
+    assert all(postcode_pattern.fullmatch(item["postcode"]) for item in REAL_UK_ADDRESSES)
+
+    sw7_postcodes = {
+        item["postcode"] for item in REAL_UK_ADDRESSES
+        if item["postcode"].startswith("SW7")
+    }
+    assert generate_postcode(" sw7 ") in sw7_postcodes
+    with pytest.raises(ValueError):
+        generate_postcode("ZZ99")
 
 
 # ── Markdown 变量替换 ──
