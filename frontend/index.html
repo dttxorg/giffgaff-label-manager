@@ -1375,7 +1375,15 @@ wrangler init --type javascript --no-git</pre>
           <div class="setting-item">
             <label>未激活卡教程地址</label>
             <input type="url" id="s-activation-tutorial-url" placeholder="https://gg.681218.xyz/activation.html">
-            <span class="setting-hint">用于“未激活卡教程”模板的标头和二维码。</span>
+            <span class="setting-hint">客户扫码后会在独立页面中看到这个地址，并可一键复制。</span>
+          </div>
+          <div class="setting-item wide">
+            <label>未激活卡扫码页说明（独立）</label>
+            <textarea id="s-activation-page-markdown" rows="7" placeholder="例如：&#10;## giffgaff SIM 激活教程&#10;&#10;复制上方教程地址，在浏览器中打开。&#10;&#10;这里可以填写自己的介绍、宣传内容和注意事项。"></textarea>
+            <span class="setting-hint">只用于“未激活卡教程二维码”页面，不与下面的“扫码页底部说明”共用。支持 Markdown 和变量 <code>{activation_tutorial_url}</code>。</span>
+            <div class="button-row" style="margin-top:8px;">
+              <button type="button" class="small ghost" onclick="openActivationGuidePage()">打开教程扫码页</button>
+            </div>
           </div>
           <div class="setting-item wide">
             <label>扫码页底部说明</label>
@@ -1614,6 +1622,7 @@ wrangler init --type javascript --no-git</pre>
 const API = '/api';
 const DEFAULT_GIFFGAFF_URL = 'https://www.giffgaff.com/mobile-app';
 const DEFAULT_ACTIVATION_TUTORIAL_URL = 'https://gg.681218.xyz/activation.html';
+const ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page';
 const COURIER_TEMPLATE_ID = 'courier-50x40';
 const DEMO_CUSTOMER = {
   id: 0,
@@ -2557,6 +2566,11 @@ function getPublicBaseUrl() {
   return location.origin;
 }
 
+function openActivationGuidePage() {
+  const url = `${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`;
+  window.open(url, '_blank', 'noopener');
+}
+
 // ── Worker 部署页 ──
 
 function renderWorkerSetup() {
@@ -3017,6 +3031,7 @@ async function loadSettings() {
 	    // moemail settings are now configured per-provider on the 邮箱服务商 tab; legacy fields are intentionally ignored
 	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
 	    $('s-activation-tutorial-url').value = s.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;
+	    $('s-activation-page-markdown').value = s.activation_page_markdown || '';
 	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
 	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
     $('s-public-page-markdown').value = s.public_page_markdown || '';
@@ -3040,6 +3055,7 @@ async function saveSettings() {
     // moemail_url/api_key are now configured per-provider; legacy fields intentionally removed
     giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
     activation_tutorial_url: $('s-activation-tutorial-url').value.trim() || DEFAULT_ACTIVATION_TUTORIAL_URL,
+    activation_page_markdown: $('s-activation-page-markdown').value,
     agent_api_token: $('s-agent-token').value.trim() || null,
     public_page_markdown: $('s-public-page-markdown').value,
     custom_public_vars: $('s-custom-public-vars').value,
@@ -3586,7 +3602,9 @@ function resolveTextValue(el, customer) {
 
 function resolveQrValue(source, customer) {
   if (source === 'Giffgaff下载二维码') return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-  if (source === '激活教程二维码') return labelConfig.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;
+  if (source === '激活教程二维码') {
+    return `${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`;
+  }
   if (source === '邮箱二维码') {
     if (!customer.public_token) return '';
     return `${getPublicBaseUrl()}/p/${customer.public_token}`;

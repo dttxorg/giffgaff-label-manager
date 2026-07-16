@@ -109,6 +109,69 @@ def test_system_settings_exposes_tutorial_url(client):
     assert settings["activation_tutorial_url"] == "https://example.com/tutorial.html"
 
 
+def test_shared_tutorial_qr_page_shows_copyable_url_and_independent_markdown(client):
+    client.patch("/api/settings", json={
+        "activation_tutorial_url": "https://gg.681218.xyz/activation.html",
+        "activation_page_markdown": (
+            "## 未激活卡专属说明\n\n"
+            "这里可以放宣传、介绍和注意事项。\n\n"
+            "教程：{activation_tutorial_url}"
+        ),
+        "public_page_markdown": "联系方式页面独有说明",
+    })
+
+    response = client.get("/p/activation-guide-public-page")
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'data-url="https://gg.681218.xyz/activation.html"' in body
+    assert "copyTutorialUrl()" in body
+    assert "navigator.clipboard.writeText(value)" in body
+    assert "未激活卡专属说明" in body
+    assert "这里可以放宣传、介绍和注意事项" in body
+    assert "联系方式页面独有说明" not in body
+    assert "<!--email_off-->" in body
+
+
+def test_activation_page_markdown_is_independent_from_contact_page_markdown(client):
+    asyncio.run(crud.set_setting("activation_page_markdown", "教程页面独立内容"))
+    asyncio.run(crud.set_setting("public_page_markdown", "联系方式页面内容"))
+    customer_id = asyncio.run(crud.create_customer(main.CustomerCreate(
+        email="contact@example.com",
+        activation_date="2026-07-16",
+    )))
+    customer_token = client.get(f"/api/customers/{customer_id}").json()["public_token"]
+
+    tutorial_page = client.get("/p/activation-guide-public-page").text
+    contact_page = client.get(f"/p/{customer_token}").text
+
+    assert "教程页面独立内容" in tutorial_page
+    assert "联系方式页面内容" not in tutorial_page
+    assert "联系方式页面内容" in contact_page
+    assert "教程页面独立内容" not in contact_page
+
+
+def test_activation_page_version_increments_to_invalidate_worker_cache(client):
+    version_url = "/api/public/activation-guide-public-page/version"
+    assert client.get(version_url).json() == {"public_version": 1}
+
+    client.patch("/api/settings", json={
+        "activation_page_markdown": "第一次修改",
+    })
+    assert client.get(version_url).json() == {"public_version": 2}
+
+    # 保存相同内容不应制造额外缓存版本。
+    client.patch("/api/settings", json={
+        "activation_page_markdown": "第一次修改",
+    })
+    assert client.get(version_url).json() == {"public_version": 2}
+
+    client.patch("/api/settings", json={
+        "activation_tutorial_url": "https://example.com/new-guide",
+    })
+    assert client.get(version_url).json() == {"public_version": 3}
+
+
 @pytest.mark.parametrize("endpoint,payload", [
     ("/api/settings", {"activation_tutorial_url": "javascript:alert(1)"}),
     ("/api/label-config", {
@@ -130,4 +193,7 @@ def test_frontend_has_selectable_tutorial_sources_and_template():
     assert "onclick=\"addLabelElement('qr', '激活教程二维码')\"" in html
     assert "case '激活教程地址':" in html
     assert "source === '激活教程二维码'" in html
+    assert "ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page'" in html
+    assert "`${getPublicBaseUrl()}/p/${ACTIVATION_GUIDE_PUBLIC_TOKEN}`" in html
+    assert 'id="s-activation-page-markdown"' in html
     assert "id: 'activation-guide-50x40'" in html

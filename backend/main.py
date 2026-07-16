@@ -68,6 +68,7 @@ _LOGIN_FAILURES: dict[str, deque[float]] = {}
 _LOGIN_FAILURES_LOCK = threading.Lock()
 DEFAULT_GIFFGAFF_DOWNLOAD_URL = "https://www.giffgaff.com/mobile-app"
 DEFAULT_ACTIVATION_TUTORIAL_URL = "https://gg.681218.xyz/activation.html"
+DEFAULT_ACTIVATION_PAGE_VERSION = 1
 DEFAULT_PHONE_STATUS = "激活"
 PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
 ACTIVATION_STATUSES = {
@@ -627,6 +628,18 @@ async def auth_logout():
 
 # ── 系统设置 ──
 
+def _activation_page_version(settings: dict) -> int:
+    try:
+        return max(1, int(settings.get("activation_page_version") or 1))
+    except (TypeError, ValueError):
+        return DEFAULT_ACTIVATION_PAGE_VERSION
+
+
+async def _bump_activation_page_version(settings: dict) -> int:
+    version = _activation_page_version(settings) + 1
+    await set_setting("activation_page_version", str(version))
+    return version
+
 @app.get("/api/settings", response_model=SystemSettings)
 async def get_sys_settings():
     rows = await get_settings()
@@ -635,6 +648,8 @@ async def get_sys_settings():
         activation_tutorial_url=rows.get(
             "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
         ),
+        activation_page_markdown=rows.get("activation_page_markdown", ""),
+        activation_page_version=_activation_page_version(rows),
         agent_api_token="***" if rows.get("agent_api_token") else "",
         agent_api_token_source=_agent_token_source(rows),
         public_page_markdown=rows.get("public_page_markdown", ""),
@@ -645,13 +660,22 @@ async def get_sys_settings():
 
 @app.patch("/api/settings")
 async def update_settings(data: SystemSettings):
+    rows = await get_settings()
+    activation_page_changed = False
     if data.giffgaff_download_url is not None:
         await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     if data.activation_tutorial_url is not None:
         tutorial_url = data.activation_tutorial_url.strip() or DEFAULT_ACTIVATION_TUTORIAL_URL
         if not tutorial_url.startswith(("http://", "https://")):
             raise HTTPException(status_code=400, detail="激活教程地址必须以 http:// 或 https:// 开头")
+        activation_page_changed = rows.get("activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL) != tutorial_url
         await set_setting("activation_tutorial_url", tutorial_url)
+    if data.activation_page_markdown is not None:
+        activation_page_changed = (
+            activation_page_changed
+            or rows.get("activation_page_markdown", "") != data.activation_page_markdown
+        )
+        await set_setting("activation_page_markdown", data.activation_page_markdown)
     if data.agent_api_token not in (None, "***", ""):
         await set_setting("agent_api_token", data.agent_api_token.strip())
     if data.public_page_markdown is not None:
@@ -681,6 +705,8 @@ async def update_settings(data: SystemSettings):
                         detail=f"变量名 {k!r} 非法：只允许字母数字下划线",
                     )
         await set_setting("custom_public_vars", raw)
+    if activation_page_changed:
+        await _bump_activation_page_version(rows)
     return {"ok": True}
 
 
@@ -2284,12 +2310,15 @@ async def get_label_config():
 
 @app.put("/api/label-config")
 async def update_label_config(data: LabelConfig):
+    rows = await get_settings()
     tutorial_url = data.activation_tutorial_url.strip() or DEFAULT_ACTIVATION_TUTORIAL_URL
     if not tutorial_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="激活教程地址必须以 http:// 或 https:// 开头")
     await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     await set_setting("activation_tutorial_url", tutorial_url)
     await set_setting("label_templates", json.dumps(data.templates, ensure_ascii=False))
+    if rows.get("activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL) != tutorial_url:
+        await _bump_activation_page_version(rows)
     return {"ok": True}
 
 
@@ -2316,6 +2345,8 @@ async def _export_backup_payload() -> dict:
             "activation_tutorial_url": rows.get(
                 "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
             ),
+            "activation_page_markdown": rows.get("activation_page_markdown", ""),
+            "activation_page_version": _activation_page_version(rows),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
         },
     }
@@ -2363,6 +2394,17 @@ async def _restore_backup_payload(data: dict) -> dict:
         tutorial_url = settings["activation_tutorial_url"].strip()
         if tutorial_url.startswith(("http://", "https://")):
             safe_settings["activation_tutorial_url"] = tutorial_url
+    if isinstance(settings.get("activation_page_markdown"), str):
+        safe_settings["activation_page_markdown"] = settings["activation_page_markdown"]
+    if any(key in settings for key in (
+        "activation_tutorial_url", "activation_page_markdown", "activation_page_version"
+    )):
+        try:
+            safe_settings["activation_page_version"] = str(
+                max(1, int(settings.get("activation_page_version") or 1)) + 1
+            )
+        except (TypeError, ValueError):
+            safe_settings["activation_page_version"] = "2"
     if "label_templates" in settings:
         label_templates = settings["label_templates"]
         if not isinstance(label_templates, list):

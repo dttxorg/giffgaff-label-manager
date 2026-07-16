@@ -16,12 +16,22 @@ from database import DATABASE_PATH
 router = APIRouter()
 
 _TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "public_card.html")
+_ACTIVATION_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(__file__), "templates", "activation_card.html"
+)
+ACTIVATION_GUIDE_PUBLIC_TOKEN = "activation-guide-public-page"
+DEFAULT_ACTIVATION_TUTORIAL_URL = "https://gg.681218.xyz/activation.html"
 
 
 def _load_template() -> str:
     # 不缓存：模板小（<10KB），且开发期间常改；测试也用同一个 main.app 实例，
     # 模块级缓存会一直返回第一次的版本。
     with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _load_activation_template() -> str:
+    with open(_ACTIVATION_TEMPLATE_PATH, "r", encoding="utf-8") as f:
         return f.read()
 
 
@@ -192,8 +202,39 @@ def _render_card(email: Optional[str], hint_markdown: str, vars_: dict) -> str:
     )
 
 
+def _render_activation_card(tutorial_url: str, hint_markdown: str) -> str:
+    safe_url = html.escape(tutorial_url)
+    hint_md = _substitute_variables(
+        hint_markdown,
+        {"activation_tutorial_url": tutorial_url},
+    )
+    hint_html = _markdown_to_safe_html(hint_md)
+    return (
+        _load_activation_template()
+        .replace("__TUTORIAL_URL__", safe_url)
+        .replace("__TUTORIAL_URL_DISPLAY__", safe_url)
+        .replace("__HINT_HTML__", hint_html)
+    )
+
+
 @router.get("/p/{token}", response_class=HTMLResponse)
 async def public_card_page(token: str):
+    if token == ACTIVATION_GUIDE_PUBLIC_TOKEN:
+        settings = await crud.get_settings()
+        tutorial_url = (
+            settings.get("activation_tutorial_url") or DEFAULT_ACTIVATION_TUTORIAL_URL
+        )
+        hint_md = settings.get("activation_page_markdown", "") or ""
+        try:
+            version = max(1, int(settings.get("activation_page_version") or 1))
+        except (TypeError, ValueError):
+            version = 1
+        headers = _security_headers()
+        headers["X-Cache-Version"] = str(version)
+        return HTMLResponse(
+            _render_activation_card(tutorial_url, hint_md),
+            headers=headers,
+        )
     if not token or len(token) > 128:
         return HTMLResponse(
             _render_card(None, "", {}),
@@ -220,7 +261,14 @@ async def public_card_page(token: str):
 async def public_token_version(token: str):
     """返回 {public_version} 或 404。供 Worker 做版本化缓存 key，避免重新生成后
     旧 URL 的 HTML 仍被缓存命中。完全不返回 email 等敏感字段。"""
-    version = await crud.get_public_version(token)
+    if token == ACTIVATION_GUIDE_PUBLIC_TOKEN:
+        settings = await crud.get_settings()
+        try:
+            version = max(1, int(settings.get("activation_page_version") or 1))
+        except (TypeError, ValueError):
+            version = 1
+    else:
+        version = await crud.get_public_version(token)
     if version is None:
         return JSONResponse({"detail": "invalid"}, status_code=404)
     return JSONResponse(

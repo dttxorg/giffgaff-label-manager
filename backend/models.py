@@ -112,6 +112,8 @@ class CustomerDetail(BaseModel):
 class SystemSettings(BaseModel):
     giffgaff_download_url: Optional[str] = None
     activation_tutorial_url: Optional[str] = None
+    activation_page_markdown: Optional[str] = None
+    activation_page_version: Optional[int] = None
     agent_api_token: Optional[str] = None
     agent_api_token_source: Optional[str] = None
     public_page_markdown: str = ""
