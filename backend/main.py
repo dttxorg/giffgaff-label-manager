@@ -142,7 +142,6 @@ DEFAULT_LABEL_TEMPLATES = [
             {"id": "courier-address", "type": "text", "source": "收货地址", "text": "", "x": 3, "y": 16, "w": 44, "h": 13, "fontSize": 7, "bold": True},
             {"id": "courier-phone-label", "type": "text", "source": "固定文字", "text": "SIM", "x": 3, "y": 30, "w": 7, "h": 4, "fontSize": 6, "bold": True},
             {"id": "courier-phone", "type": "text", "source": "手机号", "text": "", "x": 11, "y": 29, "w": 36, "h": 6, "fontSize": 9, "bold": True},
-            {"id": "courier-status", "type": "text", "source": "发货状态", "text": "", "x": 3, "y": 35, "w": 18, "h": 4, "fontSize": 5, "bold": False},
             {"id": "courier-date", "type": "text", "source": "开通日期", "text": "", "x": 23, "y": 35, "w": 24, "h": 4, "fontSize": 5, "bold": False},
         ],
     },
@@ -1690,6 +1689,18 @@ def _load_label_templates(raw: str):
         return deepcopy(DEFAULT_LABEL_TEMPLATES)
 
 
+def _default_label_template_id(rows: dict, templates: list[dict]) -> Optional[str]:
+    printable_ids = [
+        str(template.get("id"))
+        for template in templates
+        if isinstance(template, dict)
+        and template.get("id")
+        and template.get("id") != "courier-50x40"
+    ]
+    configured = (rows.get("default_label_template_id") or "").strip()
+    return configured if configured in printable_ids else (printable_ids[0] if printable_ids else None)
+
+
 def _build_provider_config_json(provider_type: str, config: dict) -> str:
     """Validate and serialize provider-specific config to JSON string."""
     if provider_type == "moemail":
@@ -1911,12 +1922,14 @@ async def delete_email_provider(provider_id: int):
 @app.get("/api/label-config", response_model=LabelConfig)
 async def get_label_config():
     rows = await get_settings()
+    templates = _load_label_templates(rows.get("label_templates", ""))
     return LabelConfig(
         giffgaff_download_url=rows.get("giffgaff_download_url", DEFAULT_GIFFGAFF_DOWNLOAD_URL),
         activation_tutorial_url=rows.get(
             "activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL
         ),
-        templates=_load_label_templates(rows.get("label_templates", "")),
+        default_template_id=_default_label_template_id(rows, templates),
+        templates=templates,
     )
 
 
@@ -1926,9 +1939,26 @@ async def update_label_config(data: LabelConfig):
     tutorial_url = data.activation_tutorial_url.strip() or DEFAULT_ACTIVATION_TUTORIAL_URL
     if not tutorial_url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="激活教程地址必须以 http:// 或 https:// 开头")
+    default_template_id = (data.default_template_id or "").strip()
+    printable_ids = {
+        str(template.get("id"))
+        for template in data.templates
+        if isinstance(template, dict)
+        and template.get("id")
+        and template.get("id") != "courier-50x40"
+    }
+    if default_template_id and default_template_id not in printable_ids:
+        raise HTTPException(status_code=400, detail="默认标签模板不存在，或选择了快递单模板")
+    if not default_template_id and printable_ids:
+        default_template_id = next(
+            str(template.get("id"))
+            for template in data.templates
+            if isinstance(template, dict) and template.get("id") in printable_ids
+        )
     await set_setting("giffgaff_download_url", data.giffgaff_download_url)
     await set_setting("activation_tutorial_url", tutorial_url)
     await set_setting("label_templates", json.dumps(data.templates, ensure_ascii=False))
+    await set_setting("default_label_template_id", default_template_id)
     if rows.get("activation_tutorial_url", DEFAULT_ACTIVATION_TUTORIAL_URL) != tutorial_url:
         await _bump_activation_page_version(rows)
     return {"ok": True}
@@ -1960,6 +1990,9 @@ async def _export_backup_payload() -> dict:
             "activation_page_markdown": rows.get("activation_page_markdown", ""),
             "activation_page_version": _activation_page_version(rows),
             "label_templates": _load_label_templates(rows.get("label_templates", "")),
+            "default_label_template_id": _default_label_template_id(
+                rows, _load_label_templates(rows.get("label_templates", ""))
+            ),
         },
     }
 
@@ -2022,6 +2055,22 @@ async def _restore_backup_payload(data: dict) -> dict:
         if not isinstance(label_templates, list):
             raise HTTPException(status_code=400, detail="标签模板数据格式错误")
         safe_settings["label_templates"] = json.dumps(label_templates, ensure_ascii=False)
+        printable_ids = {
+            str(template.get("id"))
+            for template in label_templates
+            if isinstance(template, dict)
+            and template.get("id")
+            and template.get("id") != "courier-50x40"
+        }
+        configured_default = settings.get("default_label_template_id")
+        if isinstance(configured_default, str) and configured_default in printable_ids:
+            safe_settings["default_label_template_id"] = configured_default
+        elif printable_ids:
+            safe_settings["default_label_template_id"] = next(
+                str(template.get("id"))
+                for template in label_templates
+                if isinstance(template, dict) and template.get("id") in printable_ids
+            )
 
     async with aiosqlite.connect(DATABASE_PATH) as db:
         try:

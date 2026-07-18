@@ -59,6 +59,7 @@ def test_default_label_config_includes_activation_tutorial_template(client):
 
     assert response.status_code == 200
     config = response.json()
+    assert config["default_template_id"] == "basic-50x30"
     assert config["activation_tutorial_url"] == "https://gg.681218.xyz/activation.html"
     template = _tutorial_template(config)
     assert template["name"] == "未激活卡教程 50x40"
@@ -100,6 +101,38 @@ def test_tutorial_url_can_be_saved_independently(client):
     reloaded = client.get("/api/label-config").json()
     assert reloaded["activation_tutorial_url"] == "https://example.com/new-activation-guide"
     assert reloaded["giffgaff_download_url"] == config["giffgaff_download_url"]
+
+
+def test_default_label_template_can_be_saved_but_courier_cannot_be_default(client):
+    config = client.get("/api/label-config").json()
+    config["default_template_id"] = "full-50x40"
+
+    saved = client.put("/api/label-config", json=config)
+
+    assert saved.status_code == 200
+    assert client.get("/api/label-config").json()["default_template_id"] == "full-50x40"
+
+    config["default_template_id"] = "courier-50x40"
+    rejected = client.put("/api/label-config", json=config)
+    assert rejected.status_code == 400
+
+
+def test_default_label_template_is_included_in_backup_and_restore(client):
+    config = client.get("/api/label-config").json()
+    config["default_template_id"] = "full-50x40"
+    assert client.put("/api/label-config", json=config).status_code == 200
+
+    backup = client.get("/api/export").json()
+    assert backup["settings"]["default_label_template_id"] == "full-50x40"
+
+    config["default_template_id"] = "basic-50x30"
+    assert client.put("/api/label-config", json=config).status_code == 200
+    restored = client.post(
+        "/api/import",
+        files={"file": ("backup.json", json.dumps(backup), "application/json")},
+    )
+    assert restored.status_code == 200
+    assert client.get("/api/label-config").json()["default_template_id"] == "full-50x40"
 
 
 def test_system_settings_exposes_tutorial_url(client):
@@ -283,6 +316,29 @@ def test_frontend_has_selectable_tutorial_sources_and_template():
     assert "const PUBLIC_ACCOUNT_QR_SOURCE = '号码资料二维码';" in html
     assert 'id="s-activation-page-markdown"' not in html
     assert 'id="s-public-page-markdown"' not in html
+
+
+def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
+    html = (ROOT_DIR / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    customer_start = html.index('id="tab-customers"')
+    sim_start = html.index('id="tab-sim-codes"')
+    detail_start = html.index('id="detail-panel"')
+    assert customer_start < detail_start < sim_start
+    assert "Customer Inbox" in html
+    assert 'class="customer-list-pane"' in html
+    assert 'class="detail-section detail-tool-section"' in html
+    assert "function toggleAddCustomer" in html
+    assert "function deleteActiveCustomer" in html
+    assert "function setDefaultTemplate" in html
+    assert "labelConfig.default_template_id" in html
+    assert "打印标签" in html
+    assert "打印快递单" in html
+    assert "templateId === COURIER_TEMPLATE_ID ? 'courier' : 'label'" in html
+    assert "body.detail-mobile-open" in html
+    assert "detailScroller.scrollTop = 0" in html
+    assert "viewButton.addEventListener('click', event => event.stopPropagation(), { capture: true })" not in html
+    assert "发件地址" not in html
     assert 'id="s-custom-public-vars"' not in html
     assert "bindQuickInsertButtons" not in html
     assert "bindCustomVarAdd" not in html

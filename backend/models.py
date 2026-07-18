@@ -189,6 +189,7 @@ class DomainInfo(BaseModel):
 class LabelConfig(BaseModel):
     giffgaff_download_url: str
     activation_tutorial_url: str = "https://gg.681218.xyz/activation.html"
+    default_template_id: Optional[str] = None
     templates: list[dict[str, Any]]
 
 
