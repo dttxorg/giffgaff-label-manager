@@ -1605,7 +1605,6 @@ def client():
         asyncio.run(database.init_db())
         # Disable auth requirement by default
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
         c = TestClient(main.app)
         yield c
@@ -2332,7 +2331,6 @@ def client_with_two_providers():
         import asyncio
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
         # Insert 2 mock MoEmail providers
         now = datetime.now(timezone.utc).isoformat()

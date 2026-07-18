@@ -85,5 +85,4 @@ class AddCustomerTests(unittest.IsolatedAsyncioTestCase):
         customer = await crud.get_customer(result["customer_id"])
         self.assertEqual(customer["email"], "auto@example.com")
         self.assertEqual(customer["sim_activation_code"], "SIM123456")
-        self.assertEqual(customer["activation_status"], "等待客户端领取")
-
+        self.assertEqual(customer["activation_status"], "已分配激活码")

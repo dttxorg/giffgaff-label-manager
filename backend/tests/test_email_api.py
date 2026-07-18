@@ -25,7 +25,6 @@ def client():
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         c = TestClient(main.app)
         yield c
         database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH = original

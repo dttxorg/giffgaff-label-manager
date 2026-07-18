@@ -1,8 +1,7 @@
 """回归测试：/api/public/* 必须绕过口令鉴权（Cloudflare Worker 回调用）。
 
 bug 背景：commit d1c77e3 把 /api/public/{token}/version 加进 public_routes，
-但 require_app_password 中间件只白名单了 /api/auth/* 和 /api/agent/*，
-没把 /api/public/* 加进去。Worker 从边缘节点回调时没带 admin cookie，
+但 require_app_password 中间件曾漏掉 /api/public/*。Worker 从边缘节点回调时没带 admin cookie，
 被 401 拦下，/p/{token} 整个链路断。
 """
 from __future__ import annotations
@@ -47,7 +46,6 @@ def authed_client():
         asyncio.run(_seed())
 
         main.APP_PASSWORD = "test-secret-123"  # 开启鉴权
-        main.AGENT_API_TOKEN = ""
         yield TestClient(main.app)
         main.APP_PASSWORD = ""
         database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH = original
@@ -76,11 +74,12 @@ def test_p_public_path_not_blocked_by_auth(authed_client):
     assert r.status_code != 401
 
 
-def test_api_agent_still_whitelisted(authed_client):
-    """回归保护：/api/agent/* 也仍然白名单。"""
-    r = authed_client.get("/api/agent/customers/1/activation-task")
-    # 没传 agent token，但说明没被全局 auth 拦
-    assert r.status_code in (401, 404, 422)  # 不是 403
+def test_retired_agent_api_has_no_registered_routes(authed_client):
+    """桌面自动化注册已下线，应用中不再注册 /api/agent/*。"""
+    assert not any(
+        getattr(route, "path", "").startswith("/api/agent")
+        for route in main.app.routes
+    )
 
 
 def test_protected_api_still_works(authed_client):

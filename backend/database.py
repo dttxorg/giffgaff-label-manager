@@ -119,6 +119,8 @@ async def init_db():
                 value TEXT NOT NULL
             )
         """)
+        # 桌面自动化注册功能已下线；启动时删除旧 Token，避免遗留凭证继续存在。
+        await db.execute("DELETE FROM settings WHERE key = 'agent_api_token'")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS email_providers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,13 +211,28 @@ async def _ensure_nullable_phone_number(db: aiosqlite.Connection):
 
 
 async def _ensure_activation_status_values(db: aiosqlite.Connection):
+    # 旧版「等待客户端领取」属于已下线的桌面自动化流程，统一迁移到人工状态。
+    await db.execute("""
+        UPDATE customers
+        SET activation_status = '已分配激活码',
+            automation_lock_owner = NULL,
+            automation_locked_at = NULL
+        WHERE activation_status = '等待客户端领取'
+    """)
+    await db.execute("""
+        UPDATE customers
+        SET automation_lock_owner = NULL,
+            automation_locked_at = NULL
+        WHERE automation_lock_owner IS NOT NULL
+           OR automation_locked_at IS NOT NULL
+    """)
     await db.execute("""
         UPDATE customers
         SET activation_status = '未开始'
         WHERE activation_status IS NULL
            OR activation_status = ''
            OR activation_status NOT IN (
-               '未开始', '已分配激活码', '等待客户端领取', '激活中',
+               '未开始', '已分配激活码', '激活中',
                '等待人工支付', '等待转 eSIM', '已完成', '失败'
            )
     """)

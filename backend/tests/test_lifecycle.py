@@ -44,7 +44,6 @@ def client_with_two_providers():
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
         # Seed 2 MoEmail providers — never-used
         now = "2026-07-04T00:00:00+00:00"
@@ -201,7 +200,6 @@ def test_503_when_pool_empty():
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
         c = TestClient(main.app)
         body = {"email": "", "activation_date": "2026-07-04", "use_sim_code": False}

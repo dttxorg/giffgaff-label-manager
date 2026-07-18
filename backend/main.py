@@ -24,8 +24,8 @@ from database import init_db, DATABASE_PATH
 from models import (
     CustomerCreate, CustomerUpdate, CustomerOut, CustomerDetail,
     SystemSettings, AuthLoginRequest, MoEmailCreateRequest,
-    SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationLogIn, ActivationStatusUpdate,
-    ActivationResultUpdate, ActivationTaskOut, VerificationCodeOut, PaymentInfoEmailOut,
+    SimCodeImport, SimCodeUpdate, SimCodeOut, ActivationStatusUpdate,
+    VerificationCodeOut, PaymentInfoEmailOut,
     DomainInfo, LabelConfig, EsimCodeUpdate,
     EmailProviderCreate, EmailProviderOut, EmailProviderUpdate,
     ResetCustomerRequest, EmailProviderDomainPick,
@@ -56,7 +56,6 @@ from email_providers.auth import (
 app = FastAPI(title="giffgaff-label-manager API")
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
-AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", "").strip()
 ADMIN_ENTRY_PATH = os.getenv("ADMIN_ENTRY_PATH", "").strip()
 AUTH_COOKIE_NAME = "__Host-giffgaff_label_auth"
 ADMIN_ENTRY_COOKIE_NAME = "__Host-giffgaff_admin_entry"
@@ -72,12 +71,11 @@ DEFAULT_ACTIVATION_PAGE_VERSION = 1
 DEFAULT_PHONE_STATUS = "激活"
 PHONE_STATUSES = {"激活", "封号", "投诉", "退款", "丢失", "作废"}
 ACTIVATION_STATUSES = {
-    "未开始", "已分配激活码", "等待客户端领取", "激活中",
+    "未开始", "已分配激活码", "激活中",
     "等待人工支付", "等待转 eSIM", "已完成", "失败",
 }
 SIM_CODE_STATUSES = {"未分配", "已分配", "激活中", "已使用", "失败", "作废"}
-DETACHABLE_ACTIVATION_STATUSES = {"未开始", "已分配激活码", "等待客户端领取", "失败"}
-SELECTABLE_AGENT_TASK_STATUSES = ("等待客户端领取", "激活中", "等待人工支付", "失败", "已分配激活码")
+DETACHABLE_ACTIVATION_STATUSES = {"未开始", "已分配激活码", "失败"}
 DEFAULT_LABEL_TEMPLATES = [
     {
         "id": "basic-50x30",
@@ -313,47 +311,6 @@ def _admin_config_error() -> Response:
     )
 
 
-async def _agent_api_tokens() -> list[str]:
-    """Return the set of valid Agent API bearer tokens.
-
-    Combines the AGENT_API_TOKEN env var with the optional "agent_api_token"
-    setting in the DB. Logs a warning if the DB read fails so an operator
-    notices degraded auth rather than silently restricting tokens to env-only.
-    """
-    import logging
-    log = logging.getLogger(__name__)
-    tokens: list[str] = []
-    if AGENT_API_TOKEN:
-        tokens.append(AGENT_API_TOKEN)
-    try:
-        setting_token = (await _get_setting("agent_api_token")).strip()
-    except Exception as exc:
-        log.warning("agent_api_token DB read failed; falling back to env-only tokens: %s", exc)
-        setting_token = ""
-    if setting_token and setting_token not in tokens:
-        tokens.append(setting_token)
-    return tokens
-
-
-async def _is_agent_authenticated(request: Request) -> bool:
-    tokens = await _agent_api_tokens()
-    if not tokens:
-        return False
-    auth_header = request.headers.get("authorization", "")
-    prefix = "Bearer "
-    if not auth_header.startswith(prefix):
-        return False
-    incoming = auth_header[len(prefix):].strip()
-    return any(hmac.compare_digest(incoming, token) for token in tokens)
-
-
-async def _require_agent_auth(request: Request):
-    if not await _agent_api_tokens():
-        raise HTTPException(status_code=503, detail="桌面客户端 API 未启用，请在系统设置生成桌面客户端 Token 或配置 AGENT_API_TOKEN")
-    if not await _is_agent_authenticated(request):
-        raise HTTPException(status_code=401, detail="桌面客户端 Token 无效")
-
-
 def _normalize_base_url(value: Optional[str]) -> str:
     return (value or "").strip().rstrip("/")
 
@@ -382,6 +339,8 @@ def _normalize_phone_status(value: Optional[str]) -> str:
 
 def _normalize_activation_status(value: Optional[str]) -> str:
     value = (value or "").strip()
+    if value == "等待客户端领取":
+        return "已分配激活码"
     return value if value in ACTIVATION_STATUSES else "未开始"
 
 
@@ -409,18 +368,6 @@ def _utc_now() -> str:
 
 def _masked_setting(rows: dict, key: str) -> str:
     return "***" if rows.get(key) else ""
-
-
-def _agent_token_source(rows: dict) -> str:
-    has_env = bool(AGENT_API_TOKEN)
-    has_setting = bool((rows.get("agent_api_token") or "").strip())
-    if has_env and has_setting:
-        return "环境变量 + 后台设置"
-    if has_env:
-        return "环境变量 AGENT_API_TOKEN"
-    if has_setting:
-        return "后台设置"
-    return "未配置"
 
 
 def _first_text(data: dict, *keys: str) -> str:
@@ -522,12 +469,10 @@ def _merge_default_label_templates(templates: list[dict]) -> list[dict]:
 async def require_app_password(request, call_next):
     path = request.url.path
 
-    # 二维码公开页与桌面客户端 API 不依赖隐藏管理入口。后者继续使用独立
-    # AGENT_API_TOKEN 鉴权，不属于浏览器管理界面。
+    # 二维码公开页不依赖隐藏管理入口，供 Cloudflare Worker 和扫码用户访问。
     entry_gate_exempt = (
         path.startswith("/p/")
         or path.startswith("/api/public/")
-        or path.startswith("/api/agent/")
     )
     if not entry_gate_exempt:
         try:
@@ -559,8 +504,6 @@ async def require_app_password(request, call_next):
 
     public_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/logout"}
     protected_prefixes = ("/api", "/docs", "/redoc", "/openapi.json")
-    if path.startswith("/api/agent"):
-        return await call_next(request)
     # /api/public/* 是 Cloudflare Worker 在边缘节点回调的，绕过后台口令鉴权
     if path.startswith("/api/public/"):
         return await call_next(request)
@@ -650,8 +593,6 @@ async def get_sys_settings():
         ),
         activation_page_markdown=rows.get("activation_page_markdown", ""),
         activation_page_version=_activation_page_version(rows),
-        agent_api_token="***" if rows.get("agent_api_token") else "",
-        agent_api_token_source=_agent_token_source(rows),
         public_page_markdown=rows.get("public_page_markdown", ""),
         public_worker_domain=rows.get("public_worker_domain"),
         custom_public_vars=rows.get("custom_public_vars", "") or "",
@@ -677,8 +618,6 @@ async def update_settings(data: SystemSettings):
             or rows.get("activation_page_markdown", "") != data.activation_page_markdown
         )
         await set_setting("activation_page_markdown", data.activation_page_markdown)
-    if data.agent_api_token not in (None, "***", ""):
-        await set_setting("agent_api_token", data.agent_api_token.strip())
     if data.public_page_markdown is not None:
         contact_page_changed = rows.get("public_page_markdown", "") != data.public_page_markdown
         await set_setting("public_page_markdown", data.public_page_markdown)
@@ -712,13 +651,6 @@ async def update_settings(data: SystemSettings):
     if contact_page_changed:
         await bump_all_public_versions()
     return {"ok": True}
-
-
-@app.post("/api/settings/agent-token", status_code=201)
-async def generate_agent_token():
-    token = "gg_agent_" + secrets.token_urlsafe(32)
-    await set_setting("agent_api_token", token)
-    return {"ok": True, "token": token}
 
 
 async def _get_setting(key: str) -> str:
@@ -885,7 +817,7 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
                     email_bundle.get("email_provider_id"),
                     email_bundle.get("email_account_id"),
                     email_bundle.get("email_provider_domain"),
-                    "等待客户端领取",
+                    "已分配激活码",
                 ),
             )
             customer_id = cursor.lastrowid
@@ -896,7 +828,7 @@ async def _create_customer_with_activation(data: CustomerCreate, email_bundle: d
             await db.execute(
                 """INSERT INTO activation_logs (customer_id, level, step, message)
                    VALUES (?, 'info', 'created', ?)""",
-                (customer_id, f"已分配 SIM 激活码 {sim['code']}，等待桌面客户端领取"),
+                (customer_id, f"已分配 SIM 激活码 {sim['code']}，等待人工激活"),
             )
             await db.commit()
             return customer_id, {"id": sim["id"], "code": sim["code"]}
@@ -1017,7 +949,7 @@ async def add_customer(data: CustomerCreate):
         if data.use_sim_code:
             initial_password = _generate_initial_password()
             customer_id, sim = await _create_customer_with_activation(data, email_bundle, initial_password)
-            message = "客户已录入，已分配激活码并创建激活任务"
+            message = "客户已录入并分配激活码"
             sim_activation_code = sim["code"]
         else:
             initial_password = None
@@ -1096,8 +1028,8 @@ async def reset_customer(customer_id: int, data: ResetCustomerRequest):
 
     Lets operators recover from:
     * accidental "已完成" (which locks the SIM into '已使用')
-    * old manual customers that still appear as 等待客户端领取
-    * customers left in '激活中' after a desktop crash
+    * 需要重新人工处理的旧客户
+    * 长时间停留在「激活中」的客户
 
     All three sub-flags default to True (full reset) but can be set
     independently to detach just the SIM, just the email, or just the
@@ -1694,21 +1626,11 @@ async def delete_sim_code(sim_code_id: int):
             raise
 
 
-# ── 桌面客户端 API ──
-
-@app.get("/api/agent/ping")
-async def agent_ping(request: Request):
-    await _require_agent_auth(request)
-    return {
-        "ok": True,
-        "server_time": _utc_now(),
-        "agent_api": "enabled",
-    }
-
+# ── 人工激活状态辅助 ──
 
 def _sim_status_for_activation(status: str) -> str:
     status = _normalize_activation_status(status)
-    if status in {"未开始", "已分配激活码", "等待客户端领取"}:
+    if status in {"未开始", "已分配激活码"}:
         return "已分配"
     if status in {"激活中", "等待人工支付"}:
         return "激活中"
@@ -1717,116 +1639,6 @@ def _sim_status_for_activation(status: str) -> str:
     if status == "失败":
         return "失败"
     return "已分配"
-
-
-def _activation_task_out(row, *, status_override: Optional[str] = None) -> ActivationTaskOut:
-    task = dict(row)
-    if status_override is not None:
-        task["activation_status"] = status_override
-    return ActivationTaskOut(
-        customer_id=task["id"],
-        phone_number=task.get("phone_number"),
-        email=task["email"],
-        initial_password=task["initial_password"],
-        sim_activation_code=task["sim_activation_code"],
-        activation_status=_normalize_activation_status(task.get("activation_status")),
-        activation_date=task["activation_date"],
-        moemail_id=task.get("moemail_id"),
-        moemail_address=task.get("moemail_address"),
-        share_link=_normalize_share_link(task.get("share_link")),
-        shipping_address=task.get("shipping_address"),
-    )
-
-
-async def _claim_activation_task_row(db: aiosqlite.Connection, row, agent_id: str, *, manual: bool = False) -> ActivationTaskOut:
-    customer_id = row["id"]
-    now = _utc_now()
-    await db.execute(
-        """UPDATE customers
-           SET activation_status = '激活中',
-               automation_lock_owner = ?,
-               automation_locked_at = ?
-           WHERE id = ?""",
-        (agent_id, now, customer_id),
-    )
-    await db.execute(
-        "UPDATE sim_codes SET status = '激活中', updated_at = datetime('now') WHERE customer_id = ?",
-        (customer_id,),
-    )
-    message = (
-        f"桌面客户端 {agent_id} 手动选择任务"
-        if manual
-        else f"桌面客户端 {agent_id} 已领取任务"
-    )
-    await db.execute(
-        """INSERT INTO activation_logs (customer_id, level, step, message)
-           VALUES (?, 'info', 'claimed', ?)""",
-        (customer_id, message),
-    )
-    return _activation_task_out(row, status_override="激活中")
-
-
-async def _create_and_claim_task_from_sim_code(sim_code_id: int, agent_id: str) -> ActivationTaskOut:
-    email_bundle = await _generate_email_account()
-    initial_password = _generate_initial_password()
-    activation_date = datetime.date.today().isoformat()
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        try:
-            await db.execute("BEGIN IMMEDIATE")
-            sim = await fetch_one(
-                db,
-                """SELECT id, code FROM sim_codes
-                   WHERE id = ?
-                     AND status = '未分配'
-                     AND customer_id IS NULL""",
-                (sim_code_id,),
-            )
-            if not sim:
-                raise HTTPException(status_code=409, detail="该 SIM 激活码当前不可分配，可能已被使用、作废或分配给其他客户")
-            cursor = await db.execute(
-                """INSERT INTO customers
-                   (phone_number, email, shipping_address, activation_date,
-                    moemail_id, moemail_address, share_link, is_moemail_auto,
-                    sim_code_id, sim_activation_code, initial_password,
-                    email_provider_id, email_account_id, email_provider_domain, activation_status)
-                   VALUES (NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    email_bundle.get("email", ""),
-                    activation_date,
-                    email_bundle.get("moemail_id"),
-                    email_bundle.get("moemail_address"),
-                    email_bundle.get("share_link"),
-                    1 if email_bundle.get("is_moemail_auto", True) else 0,
-                    sim["id"],
-                    sim["code"],
-                    initial_password,
-                    email_bundle.get("email_provider_id"),
-                    email_bundle.get("email_account_id"),
-                    email_bundle.get("email_provider_domain"),
-                    "等待客户端领取",
-                ),
-            )
-            customer_id = cursor.lastrowid
-            await db.execute(
-                "UPDATE sim_codes SET status = '已分配', customer_id = ?, updated_at = datetime('now') WHERE id = ?",
-                (customer_id, sim["id"]),
-            )
-            await db.execute(
-                """INSERT INTO activation_logs (customer_id, level, step, message)
-                   VALUES (?, 'info', 'created', ?)""",
-                (customer_id, f"桌面客户端从可用激活码 {sim['code']} 创建测试任务"),
-            )
-            row = await fetch_one(db, "SELECT * FROM customers WHERE id = ?", (customer_id,))
-            task_out = await _claim_activation_task_row(db, row, agent_id, manual=True)
-            await db.commit()
-            return task_out
-        except HTTPException:
-            await db.rollback()
-            raise
-        except Exception:
-            await db.rollback()
-            raise
 
 
 async def _insert_activation_log(customer_id: int, level: str, step: Optional[str], message: str):
@@ -1844,20 +1656,16 @@ async def _insert_activation_log(customer_id: int, level: str, step: Optional[st
 async def _apply_activation_status(customer_id: int, status: str, error: Optional[str] = None):
     status = _normalize_activation_status(status)
     sim_status = _sim_status_for_activation(status)
-    clear_lock = status != "激活中"
     activated_at_sql = ", activated_at = COALESCE(activated_at, ?)" if status in {"等待转 eSIM", "已完成"} else ""
     params = [status, normalize_optional_text(error)]
     if status in {"等待转 eSIM", "已完成"}:
         params.append(_utc_now())
-    if clear_lock:
-        lock_sql = ", automation_lock_owner = NULL, automation_locked_at = NULL"
-    else:
-        lock_sql = ""
     params.append(customer_id)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
             f"""UPDATE customers
-                SET activation_status = ?, activation_error = ?{activated_at_sql}{lock_sql}
+                SET activation_status = ?, activation_error = ?{activated_at_sql},
+                    automation_lock_owner = NULL, automation_locked_at = NULL
                 WHERE id = ?""",
             params,
         )
@@ -1868,206 +1676,6 @@ async def _apply_activation_status(customer_id: int, status: str, error: Optiona
             (sim_status, customer_id),
         )
         await db.commit()
-
-
-@app.get("/api/agent/sim-codes/available")
-async def list_agent_available_sim_codes(request: Request, limit: int = 200):
-    await _require_agent_auth(request)
-    limit = min(max(1, limit), 1000)
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        rows = await db.execute_fetchall(
-            """SELECT * FROM sim_codes
-               WHERE status = '未分配'
-                 AND customer_id IS NULL
-               ORDER BY id ASC
-               LIMIT ?""",
-            (limit,),
-        )
-    return {"sim_codes": [_sim_code_out(row).dict() for row in rows]}
-
-
-@app.post("/api/agent/sim-codes/{sim_code_id}/activation-task")
-async def create_agent_activation_task_from_sim_code(sim_code_id: int, request: Request, agent_id: str = "desktop"):
-    await _require_agent_auth(request)
-    try:
-        task_out = await _create_and_claim_task_from_sim_code(sim_code_id, agent_id)
-        return {"task": task_out.dict()}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"从 SIM 激活码创建任务失败：{exc}") from exc
-
-
-@app.get("/api/agent/activation-tasks")
-async def list_agent_activation_tasks(request: Request, limit: int = 200):
-    await _require_agent_auth(request)
-    limit = min(max(1, limit), 1000)
-    placeholders = ", ".join("?" for _ in SELECTABLE_AGENT_TASK_STATUSES)
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        rows = await db.execute_fetchall(
-            f"""SELECT * FROM customers
-                WHERE activation_status IN ({placeholders})
-                  AND sim_activation_code IS NOT NULL
-                  AND sim_activation_code != ''
-                  AND email != ''
-                  AND (phone_number IS NULL OR phone_number = '')
-                  AND initial_password IS NOT NULL
-                  AND initial_password != ''
-                  AND activated_at IS NULL
-                ORDER BY
-                  CASE activation_status
-                    WHEN '等待客户端领取' THEN 0
-                    WHEN '激活中' THEN 1
-                    WHEN '等待人工支付' THEN 2
-                    WHEN '失败' THEN 3
-                    WHEN '已分配激活码' THEN 4
-                    ELSE 9
-                  END,
-                  created_at ASC,
-                  id ASC
-                LIMIT ?""",
-            (*SELECTABLE_AGENT_TASK_STATUSES, limit),
-        )
-    return {"tasks": [_activation_task_out(row).dict() for row in rows]}
-
-
-@app.get("/api/agent/activation-tasks/next")
-async def get_next_activation_task(request: Request, agent_id: str = "desktop"):
-    await _require_agent_auth(request)
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        await db.execute("BEGIN IMMEDIATE")
-        row = await fetch_one(
-            db,
-            """SELECT * FROM customers
-               WHERE activation_status = '等待客户端领取'
-                 AND sim_activation_code IS NOT NULL
-                 AND sim_activation_code != ''
-                 AND email != ''
-                 AND (phone_number IS NULL OR phone_number = '')
-                 AND initial_password IS NOT NULL
-                 AND initial_password != ''
-                 AND activated_at IS NULL
-               ORDER BY created_at ASC, id ASC
-               LIMIT 1""",
-        )
-        if not row:
-            await db.commit()
-            return {"task": None}
-        task_out = await _claim_activation_task_row(db, row, agent_id)
-        await db.commit()
-    return {"task": task_out.dict()}
-
-
-@app.post("/api/agent/activation-tasks/{customer_id}/claim")
-async def claim_activation_task_by_id(customer_id: int, request: Request, agent_id: str = "desktop"):
-    await _require_agent_auth(request)
-    placeholders = ", ".join("?" for _ in SELECTABLE_AGENT_TASK_STATUSES)
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        try:
-            await db.execute("BEGIN IMMEDIATE")
-            row = await fetch_one(
-                db,
-                f"""SELECT * FROM customers
-                    WHERE id = ?
-                      AND activation_status IN ({placeholders})
-                      AND sim_activation_code IS NOT NULL
-                      AND sim_activation_code != ''
-                      AND email != ''
-                      AND (phone_number IS NULL OR phone_number = '')
-                      AND initial_password IS NOT NULL
-                      AND initial_password != ''
-                      AND activated_at IS NULL""",
-                (customer_id, *SELECTABLE_AGENT_TASK_STATUSES),
-            )
-            if not row:
-                existing = await fetch_one(
-                    db,
-                    "SELECT id, activation_status, phone_number, activated_at FROM customers WHERE id = ?",
-                    (customer_id,),
-                )
-                if not existing:
-                    raise HTTPException(status_code=404, detail="激活任务不存在")
-                raise HTTPException(status_code=409, detail="该客户当前状态不允许桌面客户端选择，可能已完成、已有手机号或没有激活码")
-            task_out = await _claim_activation_task_row(db, row, agent_id, manual=True)
-            await db.commit()
-            return {"task": task_out.dict()}
-        except HTTPException:
-            await db.rollback()
-            raise
-        except Exception:
-            await db.rollback()
-            raise
-
-
-@app.post("/api/agent/customers/{customer_id}/activation-log")
-async def add_agent_activation_log(customer_id: int, data: ActivationLogIn, request: Request):
-    await _require_agent_auth(request)
-    c = await get_customer(customer_id)
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
-    await _insert_activation_log(customer_id, data.level, data.step, data.message)
-    return {"ok": True}
-
-
-@app.patch("/api/agent/customers/{customer_id}/activation-status")
-async def update_agent_activation_status(customer_id: int, data: ActivationStatusUpdate, request: Request):
-    await _require_agent_auth(request)
-    c = await get_customer(customer_id)
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
-    await _apply_activation_status(customer_id, data.status, data.error)
-    if data.message:
-        await _insert_activation_log(customer_id, "info", data.step, data.message)
-    elif data.error:
-        await _insert_activation_log(customer_id, "error", data.step, data.error)
-    return {"ok": True}
-
-
-@app.patch("/api/agent/customers/{customer_id}/activation-result")
-async def update_agent_activation_result(customer_id: int, data: ActivationResultUpdate, request: Request):
-    await _require_agent_auth(request)
-    c = await get_customer(customer_id)
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
-    phone_number = normalize_optional_text(data.phone_number)
-    if phone_number:
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            db.row_factory = aiosqlite.Row
-            existing = await fetch_one(
-                db,
-                "SELECT id FROM customers WHERE phone_number = ? AND id != ?",
-                (phone_number, customer_id),
-            )
-            if existing:
-                raise HTTPException(status_code=409, detail="该手机号已录入")
-            await db.execute(
-                "UPDATE customers SET phone_number = ? WHERE id = ?",
-                (phone_number, customer_id),
-            )
-            await db.commit()
-    await _apply_activation_status(customer_id, data.status, data.error)
-    message = data.message or (f"桌面客户端回传手机号 {phone_number}" if phone_number else "")
-    if message:
-        await _insert_activation_log(customer_id, "info", data.step or "result", message)
-    if data.error:
-        await _insert_activation_log(customer_id, "error", data.step, data.error)
-    return {"ok": True}
-
-
-@app.get("/api/agent/customers/{customer_id}/verification-code", response_model=VerificationCodeOut)
-async def get_agent_customer_verification_code(customer_id: int, request: Request):
-    await _require_agent_auth(request)
-    return await get_customer_verification_code(customer_id)
-
-
-@app.get("/api/agent/customers/{customer_id}/payment-info-emails", response_model=PaymentInfoEmailOut)
-async def get_agent_customer_payment_info_emails(customer_id: int, request: Request, limit: int = 50):
-    await _require_agent_auth(request)
-    return await get_customer_payment_info_emails(customer_id, limit=limit)
 
 
 # ── 标签模板 ──

@@ -38,7 +38,6 @@ def client():
         crud.DATABASE_PATH = db_path
         main.DATABASE_PATH = db_path
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         asyncio.run(database.init_db())
         yield TestClient(main.app)
         database.DATABASE_PATH, crud.DATABASE_PATH, main.DATABASE_PATH = original

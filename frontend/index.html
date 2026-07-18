@@ -1377,15 +1377,6 @@ wrangler init --type javascript --no-git</pre>
               <button type="button" class="small ghost" onclick="openActivationGuidePage()">打开教程扫码页</button>
             </div>
           </div>
-	          <div class="setting-item wide">
-	            <label>桌面客户端 Agent Token</label>
-	            <input type="password" id="s-agent-token" placeholder="点击生成后复制到 Windows 客户端；留空保持原值">
-	            <span class="setting-hint" id="s-agent-token-source">未加载</span>
-	            <div class="button-row" style="margin-top:8px;">
-	              <button type="button" class="small blue" onclick="generateAgentToken()">生成/重置 Token</button>
-	              <button type="button" class="small ghost" onclick="copyAgentToken()">复制 Token</button>
-	            </div>
-	          </div>
 	          
         <div class="save-btn-wrap" style="margin-top:16px;">
           <button type="button" onclick="saveSettings()">保存设置</button>
@@ -1596,10 +1587,10 @@ const DEMO_CUSTOMER = {
 	  tracking_number: 'SF1234567890',
   sim_activation_code: '123456',
   initial_password: 'Gg-AB12cd34!',
-  activation_status: '等待客户端领取',
+  activation_status: '已分配激活码',
 	};
 	const PHONE_STATUSES = ['激活', '封号', '投诉', '退款', '丢失', '作废'];
-const ACTIVATION_STATUSES = ['未开始', '已分配激活码', '等待客户端领取', '激活中', '等待人工支付', '等待转 eSIM', '已完成', '失败'];
+const ACTIVATION_STATUSES = ['未开始', '已分配激活码', '激活中', '等待人工支付', '等待转 eSIM', '已完成', '失败'];
 const SIM_CODE_STATUSES = ['未分配', '作废', '已分配', '激活中', '已使用', '失败'];
 const SIM_CODE_STATUS_LABELS = {
   '未分配': '使用（可分配）',
@@ -2044,7 +2035,6 @@ function phoneStatusBadgeClass(status) {
 
 function activationBadgeClass(status) {
   switch (status) {
-    case '等待客户端领取':
     case '已分配激活码':
     case '已分配':
       return 'badge-activation-ready';
@@ -2942,8 +2932,6 @@ async function loadSettings() {
     const s = await res.json();
 	    // moemail settings are now configured per-provider on the 邮箱服务商 tab; legacy fields are intentionally ignored
 	    $('s-giffgaff-url').value = s.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
-	    $('s-agent-token').value = s.agent_api_token === '***' ? '' : (s.agent_api_token || '');
-	    $('s-agent-token-source').textContent = `当前来源：${s.agent_api_token_source || '未配置'}；已保存的 Token 不会明文回显，请生成后立即复制到客户端。`;
     $('s-public-worker-domain').value = s.public_worker_domain || '';
 	    appSettings.public_worker_domain = s.public_worker_domain || null;
 	    updateWorkerStatus(s.public_worker_domain);
@@ -2962,7 +2950,6 @@ async function saveSettings() {
   const payload = {
     // moemail_url/api_key are now configured per-provider; legacy fields intentionally removed
     giffgaff_download_url: $('s-giffgaff-url').value.trim() || DEFAULT_GIFFGAFF_URL,
-    agent_api_token: $('s-agent-token').value.trim() || null,
     public_worker_domain: $('s-public-worker-domain').value.trim(),
   };
 	  for (const key of CAINIAO_SETTINGS) {
@@ -2982,29 +2969,6 @@ async function saveSettings() {
   } catch(err) {
     toast(err.message, 'error');
   }
-}
-
-async function generateAgentToken() {
-  if (!confirm('生成新 Token 后，旧的后台设置 Token 会失效；如果客户端正在使用旧 Token，需要重新复制。继续吗？')) return;
-  try {
-    const res = await fetch(API + '/settings/agent-token', { method: 'POST' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || '生成 Token 失败');
-    $('s-agent-token').value = data.token || '';
-    $('s-agent-token-source').textContent = '已生成新 Token，请立即复制到 Windows 客户端。';
-    await copyText(data.token || '', 'Agent Token 已复制');
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-
-function copyAgentToken() {
-  const token = $('s-agent-token').value.trim();
-  if (!token) {
-    toast('当前页面没有可复制的 Token；请点击生成/重置 Token', 'error');
-    return;
-  }
-  copyText(token, 'Agent Token 已复制');
 }
 
 function openSettings() {

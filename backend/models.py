@@ -4,7 +4,7 @@ from typing import Any, Literal, Optional
 
 
 PhoneStatus = Literal["激活", "封号", "投诉", "退款", "丢失", "作废"]
-ActivationStatus = Literal["未开始", "已分配激活码", "等待客户端领取", "激活中", "等待人工支付", "等待转 eSIM", "已完成", "失败"]
+ActivationStatus = Literal["未开始", "已分配激活码", "激活中", "等待人工支付", "等待转 eSIM", "已完成", "失败"]
 SimCodeStatus = Literal["未分配", "已分配", "激活中", "已使用", "失败", "作废"]
 
 
@@ -114,8 +114,6 @@ class SystemSettings(BaseModel):
     activation_tutorial_url: Optional[str] = None
     activation_page_markdown: Optional[str] = None
     activation_page_version: Optional[int] = None
-    agent_api_token: Optional[str] = None
-    agent_api_token_source: Optional[str] = None
     public_page_markdown: Optional[str] = None
     public_worker_domain: Optional[str] = None  # 留空则 QR 编码用当前域名
     custom_public_vars: Optional[str] = None  # JSON: {"var_name": "value"}，可在 public_page_markdown 里用 {var_name} 引用
@@ -148,39 +146,11 @@ class SimCodeOut(BaseModel):
     updated_at: str
 
 
-class ActivationLogIn(BaseModel):
-    level: str = "info"
-    step: Optional[str] = None
-    message: str
-
-
 class ActivationStatusUpdate(BaseModel):
     status: ActivationStatus
     error: Optional[str] = None
     step: Optional[str] = None
     message: Optional[str] = None
-
-
-class ActivationResultUpdate(BaseModel):
-    phone_number: Optional[str] = None
-    status: ActivationStatus = "等待转 eSIM"
-    error: Optional[str] = None
-    step: Optional[str] = None
-    message: Optional[str] = None
-
-
-class ActivationTaskOut(BaseModel):
-    customer_id: int
-    phone_number: Optional[str] = None
-    email: str
-    initial_password: str
-    sim_activation_code: str
-    activation_status: ActivationStatus
-    activation_date: date
-    moemail_id: Optional[str] = None
-    moemail_address: Optional[str] = None
-    share_link: Optional[str] = None
-    shipping_address: Optional[str] = None
 
 
 class VerificationCodeOut(BaseModel):

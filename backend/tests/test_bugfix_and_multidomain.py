@@ -154,14 +154,12 @@ class TestCommitThenRecord:
         self.pid_a = _insert_provider(self.db_path, "a")
         self.pid_b = _insert_provider(self.db_path, "b")
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         self.client = TestClient(main.app)
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def test_round_robin_alternates_after_real_commit(self):
@@ -203,14 +201,12 @@ class TestResetCustomer:
             conn.execute("INSERT INTO sim_codes (code) VALUES ('SIM-RESET')")
             conn.commit()
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         self.client = TestClient(main.app)
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def test_reset_full_returns_sim_to_pool(self):
@@ -313,14 +309,12 @@ class TestMultiDomainMoemail:
             self.db_path, "m1", domains=["a.test", "b.test"], default_domain="a.test",
         )
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         self.client = TestClient(main.app)
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def test_list_email_providers_exposes_domains(self):
@@ -398,14 +392,12 @@ class TestProviderDomainUpdate:
         _init(self.db_path)
         self.pid = _insert_provider(self.db_path, "p1", domains=["x.test"], default_domain="x.test")
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         self.client = TestClient(main.app)
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def test_update_provider_domains_persists(self):
@@ -428,14 +420,12 @@ class TestEmptyPoolError:
         self.original = _bind_db(self.db_path)
         _init(self.db_path)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         self.client = TestClient(main.app)
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def test_add_customer_with_no_providers_mentions_email_providers_tab(self):
@@ -489,13 +479,11 @@ class TestProviderIsolation:
         self.original = _bind_db(self.db_path)
         _init(self.db_path)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
     def teardown_method(self):
         import shutil
         _restore(self.original)
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
         shutil.rmtree(self._td, ignore_errors=True)
 
     def _build_moemail(self):

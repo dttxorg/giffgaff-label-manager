@@ -37,7 +37,6 @@ def client_with_two_providers_and_customer():
         main.DATABASE_PATH = db_path
         asyncio.run(database.init_db())
         main.APP_PASSWORD = ""
-        main.AGENT_API_TOKEN = ""
 
         now = "2026-07-04T10:00:00+00:00"
         with sqlite3.connect(db_path) as conn:

@@ -35,14 +35,12 @@ def hidden_admin_client():
             "crud_path": crud.DATABASE_PATH,
             "main_path": main.DATABASE_PATH,
             "app_password": main.APP_PASSWORD,
-            "agent_token": main.AGENT_API_TOKEN,
             "admin_entry_path": main.ADMIN_ENTRY_PATH,
         }
         database.DATABASE_PATH = db_path
         crud.DATABASE_PATH = db_path
         main.DATABASE_PATH = db_path
         main.APP_PASSWORD = "test-password-that-remains-required"
-        main.AGENT_API_TOKEN = ""
         main.ADMIN_ENTRY_PATH = SECRET_PATH
         main._reset_login_failure_state()
         asyncio.run(database.init_db())
@@ -68,7 +66,6 @@ def hidden_admin_client():
             crud.DATABASE_PATH = original["crud_path"]
             main.DATABASE_PATH = original["main_path"]
             main.APP_PASSWORD = original["app_password"]
-            main.AGENT_API_TOKEN = original["agent_token"]
             main.ADMIN_ENTRY_PATH = original["admin_entry_path"]
 
 
@@ -77,6 +74,7 @@ def hidden_admin_client():
     "/index.html",
     "/worker_setup.js",
     "/api/customers",
+    "/api/agent/ping",
     "/api/auth/status",
 ])
 def test_management_surfaces_are_uniform_404_without_entry_cookie(hidden_admin_client, path):
@@ -143,6 +141,7 @@ def test_secret_entry_sets_secure_signed_cookie_then_shows_password_login(hidden
     assert "Path=/" in auth_set_cookie
     assert "Domain=" not in auth_set_cookie
     assert hidden_admin_client.get("/api/customers").status_code == 200
+    assert hidden_admin_client.get("/api/agent/ping").status_code == 404
 
 
 def test_public_qr_routes_work_without_admin_entry_cookie(hidden_admin_client):
