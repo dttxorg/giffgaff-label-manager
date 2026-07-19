@@ -97,6 +97,16 @@ def test_password_login_endpoint_is_also_hidden_without_entry_cookie(hidden_admi
     assert response.text == "Not found"
 
 
+def test_frontend_turns_expired_entry_plaintext_into_a_clear_reentry_prompt():
+    html = (BACKEND_DIR.parent / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="entry-expired-screen"' in html
+    assert "window.fetch = async function guardedFetch" in html
+    assert "rawBody.trim() !== 'Not found'" in html
+    assert "管理入口已过期，请重新访问隐藏管理入口" in html
+    assert "if (!res.ok)" in html[html.index("async function checkAuth"):]
+
+
 def test_secret_entry_sets_secure_signed_cookie_then_shows_password_login(hidden_admin_client):
     entry = hidden_admin_client.get(SECRET_PATH, follow_redirects=False)
 

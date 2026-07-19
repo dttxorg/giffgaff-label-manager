@@ -894,6 +894,8 @@
       margin-top: var(--space-4);
       height: var(--btn-h);
     }
+    #entry-expired-screen { z-index: 340; background: #f8f7fb; }
+    #entry-expired-screen .auth-card p:last-of-type { margin-bottom: 0; }
 
     /* ============================================================
        Responsive —— auto-fit 已经做了大部分自适应，
@@ -1458,6 +1460,14 @@
     <input type="password" id="auth-password" autocomplete="current-password" required>
     <button type="submit">进入</button>
   </form>
+</div>
+
+<div class="auth-screen" id="entry-expired-screen" role="alertdialog" aria-modal="true" aria-labelledby="entry-expired-title">
+  <div class="auth-card">
+    <h2 id="entry-expired-title">管理入口已过期</h2>
+    <p>隐藏管理入口凭证的有效期是 12 小时。请重新访问你保存的隐藏管理入口；如果已在另一个标签页重新进入，可以刷新本页继续操作。</p>
+    <button type="button" onclick="location.reload()">已重新进入，刷新本页</button>
+  </div>
 </div>
 
 <div class="container">
@@ -2060,6 +2070,43 @@ const DEFAULT_ACTIVATION_TUTORIAL_URL = 'https://gg.681218.xyz/activation.html';
 const ACTIVATION_GUIDE_PUBLIC_TOKEN = 'activation-guide-public-page';
 const PUBLIC_PAGE_VIEW_VERSION = '6';
 const COURIER_TEMPLATE_ID = 'courier-50x40';
+const nativeFetch = window.fetch.bind(window);
+let adminEntryExpired = false;
+
+function showAdminEntryExpired() {
+  adminEntryExpired = true;
+  $('auth-screen')?.classList.remove('open');
+  $('detail-panel')?.classList.remove('open');
+  $('print-panel')?.classList.remove('open');
+  $('entry-expired-screen')?.classList.add('open');
+  document.querySelector('header')?.setAttribute('inert', '');
+  document.querySelector('.container')?.setAttribute('inert', '');
+  document.body.classList.remove('detail-mobile-open');
+}
+
+window.fetch = async function guardedFetch(input, init) {
+  const response = await nativeFetch(input, init);
+  const rawUrl = typeof input === 'string' ? input : (input?.url || '');
+  let isManagementApi = false;
+  try {
+    isManagementApi = new URL(rawUrl, location.href).pathname.startsWith(API + '/');
+  } catch (_error) {
+    isManagementApi = false;
+  }
+  if (!isManagementApi || response.status !== 404) return response;
+
+  const rawBody = await response.clone().text().catch(() => '');
+  if (rawBody.trim() !== 'Not found') return response;
+
+  if (!adminEntryExpired) showAdminEntryExpired();
+  const headers = new Headers(response.headers);
+  headers.set('Content-Type', 'application/json; charset=utf-8');
+  return new Response(
+    JSON.stringify({detail: '管理入口已过期，请重新访问隐藏管理入口'}),
+    {status: 404, statusText: response.statusText, headers},
+  );
+};
+
 const DEMO_CUSTOMER = {
   id: 0,
   phone_number: '447400123456',
@@ -2201,7 +2248,11 @@ function bindDetailTabs() {
 
 async function checkAuth() {
   const res = await fetch(API + '/auth/status');
-  const status = await res.json();
+  const status = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (!adminEntryExpired) toast(status.detail || '检查登录状态失败', 'error');
+    return false;
+  }
   authRequired = !!status.auth_required;
   $('logout-btn').style.display = authRequired ? '' : 'none';
   if (authRequired && !status.authenticated) {
