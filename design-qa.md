@@ -1,79 +1,83 @@
-# Customer Inbox redesign — design QA
+# Dense customer ledger — design QA
 
 ## Evidence
 
-- Source visual truth: `/Users/zhuli/.codex/generated_images/019f50ad-93c7-7803-8ffb-0d1af4bc1497/exec-b843d3c4-6775-4951-b67d-15d1d72535b0.png`
-- Desktop implementation: `/tmp/giffgaff-ui-redesign-desktop-detail-final.png`
-- Mobile list implementation: `/tmp/giffgaff-ui-redesign-mobile-list-final.png`
-- Mobile detail implementation: `/tmp/giffgaff-ui-redesign-mobile-detail-final.png`
-- Full-view comparison: `/tmp/giffgaff-ui-final-side-by-side.png`
-- Focused detail comparison: `/tmp/giffgaff-ui-final-detail-side-by-side.png`
-- Desktop viewport: `1487 × 1058`, first customer selected, detail at top.
-- Mobile viewport: `390 × 844`, list and first-customer detail states.
+- Source visual truth: `/Users/zhuli/.codex/generated_images/019f50ad-93c7-7803-8ffb-0d1af4bc1497/exec-8359100e-be55-4b9d-8cf0-dc8e5df546dd.png`
+- Desktop default list: `/tmp/giffgaff-dense-ledger-final/01-desktop-list.png`
+- Desktop on-demand detail: `/tmp/giffgaff-dense-ledger-final/02-desktop-detail.png`
+- Mobile list: `/tmp/giffgaff-dense-ledger-final/03-mobile-list.png`
+- Mobile full-screen detail: `/tmp/giffgaff-dense-ledger-final/04-mobile-detail.png`
+- Full-view comparison: `/tmp/giffgaff-dense-ledger-final/desktop-list-comparison.png`
+- Focused table comparison: `/tmp/giffgaff-dense-ledger-final/desktop-table-comparison.png`
+- Desktop viewport and state: `1440 × 1024`, unfiltered default customer ledger.
+- Mobile viewport and state: `390 × 844`, default ledger and first-customer detail.
 
 ## Findings
 
 No actionable P0, P1, or P2 issue remains.
 
-- [P3] The implementation uses text-only main navigation while the visual target includes decorative navigation icons.
-  - Evidence: the three-column hierarchy, labels, active treatment, and spacing remain clear without icon assets.
-  - Impact: minor visual fidelity difference with no loss of navigation clarity.
-  - Follow-up: add a bundled icon-library set in a later visual-only pass if desired; no placeholder glyphs or handcrafted SVGs were added.
-- [P3] The customer list is slightly wider and the detail surface uses editable cards instead of the target's mostly read-only key/value rows.
-  - Evidence: source and implementation in `/tmp/giffgaff-ui-final-detail-side-by-side.png`.
-  - Impact: the detail pane is denser vertically, but editing, copy actions, and all existing operational fields remain directly available.
-  - Follow-up: optional compact read/edit modes could tighten density later without changing the current workflow.
+- [P3] The implementation keeps the product's existing text navigation and header instead of adopting the generated target's icon-heavy top navigation.
+  - Evidence: `/tmp/giffgaff-dense-ledger-final/desktop-list-comparison.png`.
+  - Impact: minor visual drift; existing navigation remains familiar and avoids introducing an external icon dependency.
+- [P3] The implementation shows 19 visible customer rows instead of the target's 15 and omits the target's decorative date-range control.
+  - Evidence: browser measurement reported 19 visible rows at `1440 × 1024`.
+  - Impact: information density is higher; search plus four working status filters cover the current operational need.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: both views use a compact system-sans hierarchy; headings, monospace values, metadata, badges, and controls remain legible without clipping. Mobile wrapping was checked at 390 px.
-- Spacing and layout rhythm: the selected master/detail direction is preserved with a fixed header, vertical navigation, compact customer list, and independently scrolling detail. Sections use consistent 8–22 px spacing and aligned two-column fields on desktop.
-- Colors and visual tokens: the purple header/selection system, white work surfaces, light dividers, and semantic status badges match the source direction with sufficient foreground contrast.
-- Image quality and asset fidelity: the target contains no required product photography or illustration. The implementation adds no placeholder image, CSS drawing, handcrafted SVG, or fake visual asset.
-- Copy and content: existing customer-management terminology and all operational fields are preserved. Label printing and courier printing are explicitly separated, and no sender-address UI is present.
-- Responsive behavior: desktop has no horizontal overflow. Mobile detail occupies the full `390 × 844` viewport, opens at scroll position 0, starts on “账号与身份”, and returns through the visible “返回客户列表” control. Mobile navigation remains a single horizontally scrollable row with its scrollbar hidden.
-- Accessibility and states: customer rows support keyboard activation, buttons retain accessible names, search and form controls have visible labels/placeholders, and the console reported zero errors or warnings in the final desktop and mobile checks.
+- Fonts and typography: compact system sans and monospace data values match the source's operations-console direction. Desktop body/data text remains readable at 12–14px; mobile labels and values wrap without clipping.
+- Spacing and layout rhythm: the customer area now uses the full available width. Rows are 44px high with aligned column headers and lightweight separators. The former permanent detail column and empty right-side state are gone.
+- Colors and visual tokens: existing purple navigation/header, white ledger surface, subtle dividers, and semantic green/orange/red/purple badges closely match the source palette and status hierarchy.
+- Image and asset fidelity: this admin screen requires no photography or illustration. No new placeholder image, handcrafted SVG, CSS drawing, gradient, or emoji asset was added; the old inline search SVG was removed.
+- Copy and content: every default row exposes 手机号、邮箱、号码状态、激活状态、SIM 激活码、解绑查询、快递公司、快递单号、开通日期和详情操作. Existing customer, QR, email, activation, payment, shipping and tool copy remains available in the opened detail.
+- Responsiveness: desktop has no document-level horizontal overflow. Mobile converts each ledger row into a two-column record card, renders all four filters in a visible 2 × 2 grid, and opens detail as a full `390 × 844` screen from scroll position 0.
+- Accessibility and states: rows remain keyboard-openable; phone numbers and detail actions are semantic buttons; filters have accessible names; mobile has a visible 返回客户列表 action; final browser console checks returned zero errors or warnings.
 
 ## Primary interactions tested
 
-- Expand and collapse “快速添加客户”.
-- Search by exact phone number and receive one matching customer.
-- Open a customer through the row “查看” button.
-- Use continuous-section navigation; “发货” scrolls to its section and receives the active state.
-- Open mobile detail from the list, verify top position, then return to the list.
-- Open “打印标签”: normal default template selector is visible and selects `basic-50x30` in the fixture.
-- Open “打印快递单”: title changes, template selector container is hidden, and `courier-50x40` is selected.
-- Confirm final browser console has zero errors and warnings.
+- Search field renders against the full-width ledger.
+- 号码状态筛选 set to 封号 returns four matching rows; reset restores 28 rows.
+- Clicking the phone number opens a temporary `1200 × 900` desktop detail modal.
+- Closing the detail restores the full-width customer ledger.
+- Mobile detail opens full-screen, starts at scroll position 0, and exposes the labeled return action.
+- Existing independent 打印标签 and 打印快递单 actions remain in the detail header.
+- JavaScript syntax, backend tests, Worker tests and diff checks pass.
 
 ## Comparison history
 
 ### Iteration 1
 
-- [P1] The “查看” button received focus but did not open the detail pane because a capture-phase propagation handler intercepted the button callback.
-  - Fix: removed the redundant capture listener; the button's own handler still stops row propagation after calling `viewCustomer`.
-  - Post-fix evidence: `/tmp/giffgaff-ui-redesign-desktop-detail-final.png` shows the selected customer and populated detail.
-- [P1] Mobile detail retained an earlier desktop section scroll and active navigation item.
-  - Fix: every `viewCustomer` call now resets the detail scroller to 0 and restores “账号与身份” as the active section.
-  - Post-fix evidence: `/tmp/giffgaff-ui-redesign-mobile-detail-final.png`; measured `scrollTop = 0`.
-- [P2] Mobile exposed a redundant close icon and visible horizontal navigation scrollbar.
-  - Fix: retained the labeled back action, hid the duplicate close button at the mobile breakpoint, and visually hid scrollbars while preserving touch scrolling.
-  - Post-fix evidence: `/tmp/giffgaff-ui-redesign-mobile-list-final.png` and `/tmp/giffgaff-ui-redesign-mobile-detail-final.png`.
+- [P1] The previous redesign permanently allocated the right side to customer detail, leaving a large empty region before selection and reducing the default list to about five visible customers.
+  - Fix: replaced the master/detail split with a full-width ledger and moved detail into an on-demand modal.
+  - Post-fix evidence: `/tmp/giffgaff-dense-ledger-final/01-desktop-list.png` shows 19 visible customer rows and no reserved detail region.
+- [P1] Customer cards hid core comparison fields and made cross-customer scanning slow.
+  - Fix: restored a true table with ten visible operational columns and compact 44px rows.
+  - Post-fix evidence: `/tmp/giffgaff-dense-ledger-final/desktop-table-comparison.png`.
 
 ### Iteration 2
 
-- Re-captured desktop and mobile at the required viewports.
-- Re-ran the full-view and focused comparisons.
-- No actionable P0/P1/P2 differences remain; only the two P3 follow-up items above remain.
+- [P2] The first implementation capture truncated common email addresses.
+  - Fix: redistributed column widths so a normal address such as `customer01@example-mail.uk` fits without clipping at the target desktop viewport.
+  - Post-fix browser measurement: email cell `clientWidth` and `scrollWidth` both equal 251px.
+- [P2] Mobile filters initially overflowed as one horizontal strip.
+  - Fix: changed mobile filters to a visible 2 × 2 grid with a full-width reset action.
+  - Post-fix evidence: `/tmp/giffgaff-dense-ledger-final/03-mobile-list.png`.
+
+### Final pass
+
+- Re-captured desktop and mobile after the fixes.
+- Re-ran full-view and focused source comparisons.
+- No actionable P0/P1/P2 difference remains.
 
 ## Implementation checklist
 
-- [x] Customer Inbox three-column desktop workspace.
-- [x] Continuous detail sections and sticky section navigation.
-- [x] Full-screen mobile detail with labeled return action.
-- [x] Separate label and courier print flows.
-- [x] Persistent default label template support.
-- [x] Existing customer, email, activation, QR, and shipping functions preserved.
+- [x] Full-width, high-density desktop customer ledger.
+- [x] Ten default data columns visible simultaneously.
+- [x] Working phone, activation, payment and shipping filters.
+- [x] Customer detail opens only after clicking a number, row or 详情.
+- [x] Desktop temporary modal and mobile full-screen detail.
+- [x] Existing customer-management functions preserved.
+- [x] Label and courier printing remain separate.
 - [x] Worker `API_BASE` and public QR implementation unchanged.
-- [x] Browser, backend, Worker, JavaScript syntax, and diff checks passed.
 
 final result: passed

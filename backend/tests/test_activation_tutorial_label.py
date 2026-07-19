@@ -327,6 +327,15 @@ def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
     assert customer_start < detail_start < sim_start
     assert "Customer Inbox" in html
     assert 'class="customer-list-pane"' in html
+    assert 'class="customer-ledger-table"' in html
+    assert 'id="customer-phone-filter"' in html
+    assert 'id="customer-activation-filter"' in html
+    assert 'id="customer-payment-filter"' in html
+    assert 'id="customer-shipping-filter"' in html
+    assert "function customerMatchesFilters" in html
+    assert "function bindCustomerFilters" in html
+    assert "grid-template-columns: var(--workspace-list)" not in html
+    assert "#detail-panel.open { display: flex; }" in html
     assert 'class="detail-section detail-tool-section"' in html
     assert "function toggleAddCustomer" in html
     assert "function deleteActiveCustomer" in html
