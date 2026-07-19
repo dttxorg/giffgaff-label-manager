@@ -332,8 +332,18 @@ def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
     assert 'id="customer-activation-filter"' in html
     assert 'id="customer-payment-filter"' in html
     assert 'id="customer-shipping-filter"' in html
+    assert 'id="customer-pagination"' in html
+    assert 'id="customer-page-prev"' in html
+    assert 'id="customer-page-buttons"' in html
+    assert 'id="customer-page-next"' in html
+    assert 'id="customer-page-size"' in html
     assert "function customerMatchesFilters" in html
     assert "function bindCustomerFilters" in html
+    assert "let customerPage = 1;" in html
+    assert "let customerPageSize = 20;" in html
+    assert "function renderCustomerPagination" in html
+    assert "function bindCustomerPagination" in html
+    assert "visibleCustomers.slice(pageStart, pageStart + customerPageSize)" in html
     assert "grid-template-columns: var(--workspace-list)" not in html
     assert "#detail-panel.open { display: flex; }" in html
     assert 'class="detail-section detail-tool-section"' in html
@@ -347,6 +357,20 @@ def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
     assert "body.detail-mobile-open" in html
     assert "detailScroller.scrollTop = 0" in html
     assert "viewButton.addEventListener('click', event => event.stopPropagation(), { capture: true })" not in html
+    assert 'id="d-registration-email"' in html
+    assert 'id="d-registration-sim-code"' in html
+    assert 'id="d-registration-password"' in html
+    assert 'id="d-code-box"' in html
+    assert "function renderRegistrationQuick" in html
+    assert "function toggleRegistrationPassword" in html
+    assert "function copyRegistrationPassword" in html
+    assert "$('d-identity-disclosure').open = false;" in html
+    assert '<details class="identity-disclosure" id="d-identity-disclosure">' in html
+    info_section = html.index('<section class="tab-content active detail-section" data-tab="info">')
+    activation_section = html.index('<section class="tab-content detail-section" data-tab="activation">')
+    verification_box = html.index('id="d-code-box"')
+    identity_disclosure = html.index('id="d-identity-disclosure"')
+    assert info_section < verification_box < identity_disclosure < activation_section
     assert "发件地址" not in html
     assert 'id="s-custom-public-vars"' not in html
     assert "bindQuickInsertButtons" not in html

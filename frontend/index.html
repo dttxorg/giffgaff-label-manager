@@ -1213,6 +1213,24 @@
       border-color: #cfc5df;
     }
     .customer-list-view:hover { background: #ebe5f5; color: #45326f; }
+    .customer-pagination {
+      min-height: 46px;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid var(--workspace-line);
+      background: #fff;
+      color: #706878;
+      font-size: 12px;
+    }
+    .customer-page-controls,
+    .customer-page-buttons { display: flex; align-items: center; gap: 6px; }
+    .customer-page-controls button,
+    .customer-page-buttons button { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+    .customer-page-buttons button.active { background: #5f4b8b; color: #fff; border-color: #5f4b8b; }
+    #customer-page-size { width: auto; height: 30px; padding: 4px 28px 4px 8px; font-size: 12px; }
 
     /* On-demand customer detail */
     #detail-panel {
@@ -1309,18 +1327,23 @@
     }
     #detail-panel .detail-section[data-tab="info"] > .detail-section-title,
     #detail-panel .detail-section[data-tab="info"] > .info-box,
+    #detail-panel .detail-section[data-tab="info"] > .registration-quick-box,
+    #detail-panel .detail-section[data-tab="info"] > .identity-disclosure,
     #detail-panel .detail-section[data-tab="info"] > #d-public-link-box {
       grid-column: 1 / -1;
     }
     #detail-panel .detail-section[data-tab="info"] > .inline-form { margin: 0; }
-    #detail-panel .detail-section[data-tab="info"] > .info-box:first-of-type {
+    #detail-panel .identity-info-box {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 0 12px;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
     }
-    #detail-panel .detail-section[data-tab="info"] > .info-box:first-of-type > .code-box-head,
-    #detail-panel .detail-section[data-tab="info"] > .info-box:first-of-type > .code-meta,
-    #detail-panel .detail-section[data-tab="info"] > .info-box:first-of-type > .copy-row:last-child {
+    #detail-panel .identity-info-box > .code-box-head,
+    #detail-panel .identity-info-box > .code-meta,
+    #detail-panel .identity-info-box > .copy-row:last-child {
       grid-column: 1 / -1;
     }
     #detail-panel .detail-section[data-tab="activation"] {
@@ -1329,8 +1352,7 @@
       gap: 12px;
     }
     #detail-panel .detail-section[data-tab="activation"] > .detail-section-title,
-    #detail-panel .detail-section[data-tab="activation"] > #d-esim-box,
-    #detail-panel .detail-section[data-tab="activation"] > #d-code-box {
+    #detail-panel .detail-section[data-tab="activation"] > #d-esim-box {
       grid-column: 1 / -1;
     }
     #detail-panel .detail-section:last-child { padding-bottom: 28px; }
@@ -1380,6 +1402,94 @@
       font-size: 11px;
       font-weight: 700;
     }
+    .registration-quick-box {
+      padding: 14px;
+      border: 1px solid #ddd6e8;
+      border-radius: 8px;
+      background: #fbfafc;
+    }
+    .registration-quick-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #3f2e6d;
+    }
+    .registration-quick-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, 1.1fr);
+      gap: 10px;
+    }
+    .registration-quick-item {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 10px;
+      border: 1px solid #ebe6f0;
+      border-radius: 7px;
+      background: #fff;
+    }
+    .registration-quick-item > span { color: #777080; font-size: 11px; font-weight: 650; }
+    .registration-quick-item code {
+      min-width: 0;
+      overflow: hidden;
+      color: #2f2937;
+      font-size: 12px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      user-select: all;
+    }
+    .registration-quick-item button { min-height: 28px; padding: 3px 8px; font-size: 11px; }
+    .registration-code-box {
+      margin-top: 10px;
+      padding: 10px 12px;
+      grid-template-columns: auto minmax(120px, 1fr) auto;
+      grid-template-areas:
+        "label value button"
+        "meta meta meta";
+      align-items: center;
+      background: #f7fbf7 !important;
+    }
+    .registration-code-label {
+      grid-area: label;
+      color: #4e3a70;
+      font-size: 13px;
+    }
+    .registration-code-box .code-value {
+      grid-area: value;
+      font-size: 18px;
+      letter-spacing: 2px;
+    }
+    .registration-code-box #d-code-refresh { grid-area: button; }
+    .registration-code-box .code-meta { grid-area: meta; }
+    .identity-disclosure {
+      border: 1px solid #e4dfea;
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .identity-disclosure summary {
+      min-height: 42px;
+      padding: 10px 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      color: #46365f;
+      font-size: 13px;
+      font-weight: 750;
+      list-style: none;
+      background: #faf9fc;
+    }
+    .identity-disclosure summary::-webkit-details-marker { display: none; }
+    .identity-disclosure summary::after { content: '展开'; color: #725a99; font-size: 11px; }
+    .identity-disclosure[open] summary::after { content: '收起'; }
+    .identity-disclosure[open] summary { border-bottom: 1px solid #e9e5ee; }
+    .identity-disclosure-hint { margin-left: auto; color: #8b8492; font-size: 11px; font-weight: 500; }
     body.detail-mobile-open { overflow: hidden; }
 
     @media (max-width: 1100px) {
@@ -1470,6 +1580,9 @@
       #tab-customers .customer-ledger-table .ledger-action { align-items: stretch; }
       #tab-customers .customer-ledger-table .customer-list-view { width: 100%; }
       #tab-customers .customer-ledger-table .empty-state::before { content: none; }
+      .customer-pagination { align-items: flex-start; flex-direction: column; }
+      .customer-page-controls { width: 100%; flex-wrap: wrap; }
+      #customer-page-size { margin-left: auto; }
       #detail-panel {
         display: none;
         position: fixed;
@@ -1510,9 +1623,20 @@
       #detail-panel .detail-tool-section { padding-inline: 16px; scroll-margin-top: 190px; }
       #detail-panel .detail-section[data-tab="info"],
       #detail-panel .detail-section[data-tab="activation"],
-      #detail-panel .detail-section[data-tab="info"] > .info-box:first-of-type { grid-template-columns: 1fr; }
+      #detail-panel .identity-info-box { grid-template-columns: 1fr; }
       #detail-panel .detail-section[data-tab="info"] > *,
       #detail-panel .detail-section[data-tab="activation"] > * { grid-column: auto !important; }
+      .registration-quick-grid { grid-template-columns: 1fr; }
+      .registration-quick-item { grid-template-columns: minmax(0, 1fr) auto auto; }
+      .registration-quick-item > span { grid-column: 1 / -1; }
+      .registration-code-box {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          "label button"
+          "value value"
+          "meta meta";
+      }
+      .identity-disclosure-hint { display: none; }
       #detail-panel .shipping-form,
       #detail-panel .inline-form { grid-template-columns: 1fr; }
       #detail-panel .shipping-form > div:first-child,
@@ -1682,6 +1806,19 @@
           <tbody id="customer-table"></tbody>
         </table>
       </div>
+      <div class="customer-pagination" id="customer-pagination">
+        <span id="customer-page-summary">0 条</span>
+        <div class="customer-page-controls">
+          <button type="button" class="small ghost" id="customer-page-prev">上一页</button>
+          <span id="customer-page-buttons" class="customer-page-buttons"></span>
+          <button type="button" class="small ghost" id="customer-page-next">下一页</button>
+          <select id="customer-page-size" aria-label="每页客户数量">
+            <option value="20" selected>20 条 / 页</option>
+            <option value="50">50 条 / 页</option>
+            <option value="100">100 条 / 页</option>
+          </select>
+        </div>
+      </div>
     </div>
     </div>
 <div class="modal detail-panel" id="detail-panel">
@@ -1709,9 +1846,46 @@
 
     <!-- Tab: 基本信息 -->
     <section class="tab-content active detail-section" data-tab="info">
-      <h3 class="detail-section-title">账号与身份</h3>
-      <!-- 随机身份信息 -->
-      <div class="info-box">
+      <h3 class="detail-section-title">账号与注册资料</h3>
+
+      <div class="registration-quick-box">
+        <div class="registration-quick-head">
+          <strong>注册快捷资料</strong>
+          <span id="d-registration-status" class="badge">未开始</span>
+        </div>
+        <div class="registration-quick-grid">
+          <div class="registration-quick-item">
+            <span>邮箱</span>
+            <code id="d-registration-email">—</code>
+            <button type="button" class="small blue" onclick="copyElText('d-registration-email', '已复制注册邮箱')">复制</button>
+          </div>
+          <div class="registration-quick-item">
+            <span>SIM 激活码</span>
+            <code id="d-registration-sim-code">—</code>
+            <button type="button" class="small blue" onclick="copyElText('d-registration-sim-code', '已复制 SIM 激活码')">复制</button>
+          </div>
+          <div class="registration-quick-item">
+            <span>初始密码</span>
+            <code id="d-registration-password" data-secret="">未生成</code>
+            <button type="button" class="small ghost" id="d-registration-password-toggle" onclick="toggleRegistrationPassword()">显示</button>
+            <button type="button" class="small blue" onclick="copyRegistrationPassword()">复制</button>
+          </div>
+        </div>
+        <div class="code-box registration-code-box" id="d-code-box">
+          <strong class="registration-code-label">邮箱验证码</strong>
+          <div class="code-value placeholder" id="d-code-value">点刷新按钮读取</div>
+          <button type="button" class="small blue" id="d-code-refresh" onclick="refreshVerificationCodeForActive()">刷新验证码</button>
+          <div class="code-meta" id="d-code-meta"></div>
+        </div>
+      </div>
+
+      <!-- 随机身份信息默认折叠，注册填写地址时再展开 -->
+      <details class="identity-disclosure" id="d-identity-disclosure">
+        <summary>
+          <span>随机身份与英国地址</span>
+          <span class="identity-disclosure-hint">展开复制姓名、地址、城市和邮编</span>
+        </summary>
+      <div class="info-box identity-info-box">
         <div class="code-box-head">
           <strong>随机身份（粘贴到 giffgaff 注册表单）</strong>
           <button type="button" class="small ghost" onclick="regenerateIdentityForActive()">重新随机</button>
@@ -1728,6 +1902,7 @@
           <button type="button" class="small blue" onclick="copyElText('d-full-address', '已复制完整地址')">复制</button>
         </div>
       </div>
+      </details>
 
       <!-- 邮箱 -->
       <div class="info-box">
@@ -1821,14 +1996,6 @@
           <img id="d-esim-qr-img" alt="eSIM QR" />
           <p class="code-meta">完整 LPA：<code id="d-esim-lpa-text"></code></p>
         </div>
-      </div>
-      <div class="code-box" id="d-code-box">
-        <div class="code-box-head">
-          <strong>验证码</strong>
-          <button type="button" class="small blue" id="d-code-refresh" onclick="refreshVerificationCodeForActive()">刷新</button>
-        </div>
-        <div class="code-value placeholder" id="d-code-value">点刷新按钮读取</div>
-        <div class="code-meta" id="d-code-meta"></div>
       </div>
     </section>
 
@@ -2280,6 +2447,8 @@ let printCustomer = null;
 let printMode = 'label';
 let currentSearch = '';
 let customerFilters = { phone: '', activation: '', payment: '', shipping: '' };
+let customerPage = 1;
+let customerPageSize = 20;
 let searchDebounceTimer = null;
 let totalCustomerCount = 0;
 let printTemplateId = '';
@@ -2452,6 +2621,7 @@ function bindCustomerSearch() {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
       currentSearch = input.value.trim();
+      customerPage = 1;
       loadCustomers();
     }, 220);
   };
@@ -2460,6 +2630,7 @@ function bindCustomerSearch() {
     if (e.key === 'Escape' && input.value) {
       input.value = '';
       currentSearch = '';
+      customerPage = 1;
       syncClearVisibility();
       clearTimeout(searchDebounceTimer);
       loadCustomers();
@@ -2468,6 +2639,7 @@ function bindCustomerSearch() {
   clear.addEventListener('click', () => {
     input.value = '';
     currentSearch = '';
+    customerPage = 1;
     syncClearVisibility();
     clearTimeout(searchDebounceTimer);
     loadCustomers();
@@ -2501,6 +2673,7 @@ function bindCustomerFilters() {
     input.dataset.bound = '1';
     input.addEventListener('change', () => {
       customerFilters[key] = input.value;
+      customerPage = 1;
       renderCustomers();
     });
   });
@@ -2509,7 +2682,64 @@ function bindCustomerFilters() {
     reset.dataset.bound = '1';
     reset.addEventListener('click', () => {
       customerFilters = { phone: '', activation: '', payment: '', shipping: '' };
+      customerPage = 1;
       bindings.forEach(([id]) => { if ($(id)) $(id).value = ''; });
+      renderCustomers();
+    });
+  }
+}
+
+function goToCustomerPage(page) {
+  customerPage = Math.max(1, Number(page) || 1);
+  renderCustomers();
+  $('customer-table')?.closest('.table-wrap')?.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderCustomerPagination(total) {
+  const totalPages = Math.max(1, Math.ceil(total / customerPageSize));
+  customerPage = Math.min(Math.max(1, customerPage), totalPages);
+  const start = total ? (customerPage - 1) * customerPageSize + 1 : 0;
+  const end = Math.min(total, customerPage * customerPageSize);
+  $('customer-page-summary').textContent = total
+    ? `显示 ${start}–${end}，共 ${total} 条`
+    : '0 条';
+  $('customer-page-prev').disabled = customerPage <= 1;
+  $('customer-page-next').disabled = customerPage >= totalPages;
+
+  const pageButtons = $('customer-page-buttons');
+  if (!total) {
+    pageButtons.replaceChildren();
+    return;
+  }
+  const pages = [];
+  const first = Math.max(1, Math.min(customerPage - 2, totalPages - 4));
+  const last = Math.min(totalPages, first + 4);
+  for (let page = first; page <= last; page += 1) {
+    const button = makeButton(String(page), () => goToCustomerPage(page), `small ghost${page === customerPage ? ' active' : ''}`);
+    button.setAttribute('aria-label', `第 ${page} 页`);
+    if (page === customerPage) button.setAttribute('aria-current', 'page');
+    pages.push(button);
+  }
+  pageButtons.replaceChildren(...pages);
+}
+
+function bindCustomerPagination() {
+  const prev = $('customer-page-prev');
+  const next = $('customer-page-next');
+  const size = $('customer-page-size');
+  if (prev && prev.dataset.bound !== '1') {
+    prev.dataset.bound = '1';
+    prev.addEventListener('click', () => goToCustomerPage(customerPage - 1));
+  }
+  if (next && next.dataset.bound !== '1') {
+    next.dataset.bound = '1';
+    next.addEventListener('click', () => goToCustomerPage(customerPage + 1));
+  }
+  if (size && size.dataset.bound !== '1') {
+    size.dataset.bound = '1';
+    size.addEventListener('change', () => {
+      customerPageSize = Number(size.value) || 20;
+      customerPage = 1;
       renderCustomers();
     });
   }
@@ -2530,6 +2760,10 @@ function renderCustomers() {
   const tbody = $('customer-table');
   const visibleCustomers = customers.filter(customerMatchesFilters);
   const filtersActive = Object.values(customerFilters).some(Boolean);
+  const totalPages = Math.max(1, Math.ceil(visibleCustomers.length / customerPageSize));
+  customerPage = Math.min(customerPage, totalPages);
+  const pageStart = (customerPage - 1) * customerPageSize;
+  const pageCustomers = visibleCustomers.slice(pageStart, pageStart + customerPageSize);
   $('total-count').textContent = totalCustomerCount ? `共 ${totalCustomerCount} 位客户` : '';
   const listCount = $('list-count');
   if (currentSearch || filtersActive) {
@@ -2539,6 +2773,7 @@ function renderCustomers() {
   } else {
     listCount.textContent = customers.length ? `共 ${customers.length} 条` : '';
   }
+  renderCustomerPagination(visibleCustomers.length);
   if (!visibleCustomers.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
@@ -2551,7 +2786,7 @@ function renderCustomers() {
     tbody.replaceChildren(row);
     return;
   }
-  tbody.replaceChildren(...visibleCustomers.map(buildCustomerRow));
+  tbody.replaceChildren(...pageCustomers.map((customer, index) => buildCustomerRow(customer, pageStart + index)));
 }
 
 function renderSimCodes() {
@@ -2667,6 +2902,7 @@ async function refreshAfterSimCodeChange(affectedCustomerId=null) {
   if (activeCustomer && detailCustomerId === activeCustomer.id) {
     try {
       activeCustomer = await getCustomer(activeCustomer.id);
+      renderRegistrationQuick(activeCustomer);
       renderActivationDetail(activeCustomer);
     } catch (_) {
       activeCustomer = null;
@@ -2923,6 +3159,7 @@ async function viewCustomer(id, focusTarget='') {
     activeCustomer = await getCustomer(id);
     $('d-phone-input').value = activeCustomer.phone_number || '';
     renderDetailHeader(activeCustomer);
+    renderRegistrationQuick(activeCustomer);
     renderIdentityFields(activeCustomer);
     renderPhoneStatusDetail(activeCustomer);
     renderShippingDetail(activeCustomer);
@@ -2933,6 +3170,7 @@ async function viewCustomer(id, focusTarget='') {
     renderVerificationCodeBox(activeCustomer);
     renderPaymentInfoBox(activeCustomer);
     const detailPanel = $('detail-panel');
+    $('d-identity-disclosure').open = false;
     detailPanel.classList.add('open');
     const detailTabs = [...detailPanel.querySelectorAll('#d-tabs-nav .tab')];
     detailTabs.forEach(tab => tab.classList.remove('active'));
@@ -2974,6 +3212,39 @@ function renderShippingDetail(customer) {
 function renderPhoneStatusDetail(customer) {
   const sel = $('d-phone-status-input');
   if (sel) sel.value = normalizePhoneStatus(customer.phone_status);
+}
+
+function renderRegistrationQuick(customer) {
+  const email = $('d-registration-email');
+  const simCode = $('d-registration-sim-code');
+  const password = $('d-registration-password');
+  const passwordToggle = $('d-registration-password-toggle');
+  const status = $('d-registration-status');
+
+  email.textContent = customer.email || '—';
+  simCode.textContent = customer.sim_activation_code || '—';
+  password.dataset.secret = customer.initial_password || '';
+  password.textContent = customer.initial_password ? '••••••••' : '未生成';
+  passwordToggle.textContent = '显示';
+  passwordToggle.disabled = !customer.initial_password;
+  status.className = `badge ${activationBadgeClass(customer.activation_status)}`;
+  status.textContent = customer.activation_status || '未开始';
+}
+
+function toggleRegistrationPassword() {
+  const password = $('d-registration-password');
+  const button = $('d-registration-password-toggle');
+  if (!password.dataset.secret) return;
+  togglePasswordValue(password, button);
+}
+
+function copyRegistrationPassword() {
+  const password = $('d-registration-password').dataset.secret || '';
+  if (!password) {
+    toast('初始密码尚未生成', 'error');
+    return;
+  }
+  copyText(password, '初始密码已复制');
 }
 
 function renderActivationDetail(customer) {
@@ -3037,6 +3308,7 @@ async function updateActivationStatusForActive(status) {
     toast('激活状态已更新', 'success');
     await loadCustomers();
     activeCustomer = await getCustomer(activeCustomer.id);
+    renderRegistrationQuick(activeCustomer);
     renderActivationDetail(activeCustomer);
   } catch (err) {
     toast(err.message, 'error');
@@ -3281,7 +3553,7 @@ function renderVerificationCodeBox(c) {
   const value = $('d-code-value');
   const meta = $('d-code-meta');
   button.disabled = !c.moemail_id;
-  button.textContent = '刷新';
+  button.textContent = '刷新验证码';
   value.className = 'code-value placeholder';
   if (!c.moemail_id) {
     value.textContent = '该客户没有 MoEmail 邮箱';
@@ -3405,7 +3677,7 @@ async function refreshVerificationCodeForActive() {
   const value = $('d-code-value');
   const meta = $('d-code-meta');
   button.disabled = true;
-  button.textContent = '刷新中...';
+  button.textContent = '读取中...';
   value.className = 'code-value placeholder';
   value.textContent = '正在读取最新邮件';
   meta.textContent = activeCustomer.email || '';
@@ -3421,7 +3693,7 @@ async function refreshVerificationCodeForActive() {
     toast(err.message, 'error');
   } finally {
     button.disabled = !activeCustomer?.moemail_id;
-    button.textContent = '刷新';
+    button.textContent = '刷新验证码';
   }
 }
 
@@ -3442,6 +3714,7 @@ async function generateMoemailForActive() {
   await generateMoemail(activeCustomer.id);
   activeCustomer = await getCustomer(activeCustomer.id);
   $('d-email-line').textContent = activeCustomer.email || '—';
+  renderRegistrationQuick(activeCustomer);
   renderMoemailBox(activeCustomer);
   renderVerificationCodeBox(activeCustomer);
 }
@@ -4525,6 +4798,7 @@ async function initApp() {
   resetAddFormDefaults();
   bindCustomerSearch();
   bindCustomerFilters();
+  bindCustomerPagination();
   bindDetailTabs();
   await Promise.all([loadCustomers(), loadSimCodes(), loadSettings(), loadLabelConfig()]);
   renderWorkerSetup();

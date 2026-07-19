@@ -7,6 +7,10 @@
 - Desktop on-demand detail: `/tmp/giffgaff-dense-ledger-final/02-desktop-detail.png`
 - Mobile list: `/tmp/giffgaff-dense-ledger-final/03-mobile-list.png`
 - Mobile full-screen detail: `/tmp/giffgaff-dense-ledger-final/04-mobile-detail.png`
+- Desktop paginated ledger: `/tmp/giffgaff-registration-pagination/01-desktop-pagination.png`
+- Desktop registration-first detail: `/tmp/giffgaff-registration-pagination/02-desktop-registration-detail.png`
+- Mobile paginated ledger: `/tmp/giffgaff-registration-pagination/03-mobile-pagination.png`
+- Mobile registration-first detail: `/tmp/giffgaff-registration-pagination/04-mobile-registration-detail.png`
 - Full-view comparison: `/tmp/giffgaff-dense-ledger-final/desktop-list-comparison.png`
 - Focused table comparison: `/tmp/giffgaff-dense-ledger-final/desktop-table-comparison.png`
 - Desktop viewport and state: `1440 × 1024`, unfiltered default customer ledger.
@@ -41,6 +45,10 @@ No actionable P0, P1, or P2 issue remains.
 - Closing the detail restores the full-width customer ledger.
 - Mobile detail opens full-screen, starts at scroll position 0, and exposes the labeled return action.
 - Existing independent 打印标签 and 打印快递单 actions remain in the detail header.
+- Customer pagination defaults to 20 rows: page 1 shows 1–20 of 28, page 2 shows the remaining 8, and changing the page size to 50 collapses the result to one page.
+- The detail first screen now exposes registration email, SIM activation code, initial password and email verification code without changing sections.
+- The random identity and UK address block opens only on demand and resets to its collapsed 44px state whenever detail opens.
+- At `390 × 844`, the registration fields stack into one readable column, the verification action stays beside its label, the verification value remains full width, and the detail starts at scroll position 0.
 - JavaScript syntax, backend tests, Worker tests and diff checks pass.
 
 ## Comparison history
@@ -79,5 +87,8 @@ No actionable P0, P1, or P2 issue remains.
 - [x] Existing customer-management functions preserved.
 - [x] Label and courier printing remain separate.
 - [x] Worker `API_BASE` and public QR implementation unchanged.
+- [x] Client-side pagination with 20/50/100 page-size choices.
+- [x] Registration email, SIM code, password and mailbox verification on the default detail screen.
+- [x] Random identity and UK address collapsed by default.
 
 final result: passed
