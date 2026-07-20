@@ -626,13 +626,6 @@
       word-break: break-word;
     }
     .info-box a { color: var(--blue); word-break: break-all; }
-    .info-box .secret-line {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      flex-wrap: wrap;
-    }
-    .info-box .secret-value { font-family: "SFMono-Regular", Menlo, monospace; font-weight: 700; }
     .code-box {
       padding: 14px 16px;
       border: 1.5px solid var(--green-border);
@@ -1135,7 +1128,7 @@
     #tab-customers .table-wrap { flex: 1; min-height: 0; overflow: auto; }
     #tab-customers .customer-ledger-table {
       width: 100%;
-      min-width: 1160px;
+      min-width: 1280px;
       table-layout: fixed;
       border-collapse: separate;
       border-spacing: 0;
@@ -1156,16 +1149,17 @@
       white-space: nowrap;
       text-align: left;
     }
-    #tab-customers .customer-ledger-table th:nth-child(1) { width: 128px; }
-    #tab-customers .customer-ledger-table th:nth-child(2) { width: 230px; }
-    #tab-customers .customer-ledger-table th:nth-child(3) { width: 88px; }
-    #tab-customers .customer-ledger-table th:nth-child(4) { width: 110px; }
-    #tab-customers .customer-ledger-table th:nth-child(5) { width: 110px; }
-    #tab-customers .customer-ledger-table th:nth-child(6) { width: 100px; }
-    #tab-customers .customer-ledger-table th:nth-child(7) { width: 90px; }
-    #tab-customers .customer-ledger-table th:nth-child(8) { width: 145px; }
-    #tab-customers .customer-ledger-table th:nth-child(9) { width: 96px; }
-    #tab-customers .customer-ledger-table th:nth-child(10) { width: 68px; text-align: center; }
+    #tab-customers .customer-ledger-table th:nth-child(1) { width: 118px; }
+    #tab-customers .customer-ledger-table th:nth-child(2) { width: 180px; }
+    #tab-customers .customer-ledger-table th:nth-child(3) { width: 250px; }
+    #tab-customers .customer-ledger-table th:nth-child(4) { width: 84px; }
+    #tab-customers .customer-ledger-table th:nth-child(5) { width: 100px; }
+    #tab-customers .customer-ledger-table th:nth-child(6) { width: 96px; }
+    #tab-customers .customer-ledger-table th:nth-child(7) { width: 88px; }
+    #tab-customers .customer-ledger-table th:nth-child(8) { width: 78px; }
+    #tab-customers .customer-ledger-table th:nth-child(9) { width: 120px; }
+    #tab-customers .customer-ledger-table th:nth-child(10) { width: 88px; }
+    #tab-customers .customer-ledger-table th:nth-child(11) { width: 60px; text-align: center; }
     #tab-customers tbody tr {
       background: #fff;
       cursor: pointer;
@@ -1189,6 +1183,7 @@
       white-space: nowrap;
       text-overflow: ellipsis;
     }
+    .ledger-address { color: #5f5968 !important; }
     .ledger-date { white-space: nowrap; color: #6f6878 !important; }
     .ledger-action { text-align: center; }
     .customer-phone-link {
@@ -1247,6 +1242,7 @@
       justify-content: center;
     }
     #detail-panel.open { display: flex; }
+    #print-panel { z-index: 260; }
     #detail-panel .modal-inner {
       display: block;
       width: min(1200px, calc(100vw - 48px));
@@ -1418,7 +1414,7 @@
     }
     .registration-quick-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, 1.1fr);
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, .7fr);
       gap: 10px;
     }
     .registration-quick-item {
@@ -1495,7 +1491,7 @@
     @media (max-width: 1100px) {
       :root { --workspace-nav: 142px; }
       .container > .tabs .tab { padding-inline: 10px; }
-      #tab-customers .customer-ledger-table { min-width: 1100px; }
+      #tab-customers .customer-ledger-table { min-width: 1280px; }
       #detail-panel .shipping-form { grid-template-columns: 1fr 1fr; }
       #detail-panel .shipping-form > div:first-child,
       #detail-panel .shipping-form > button { grid-column: 1 / -1; }
@@ -1575,8 +1571,13 @@
         font-weight: 650;
       }
       #tab-customers .customer-ledger-table .ledger-email,
+      #tab-customers .customer-ledger-table .ledger-address,
       #tab-customers .customer-ledger-table .ledger-action,
       #tab-customers .customer-ledger-table .empty-state { grid-column: 1 / -1; }
+      #tab-customers .customer-ledger-table .ledger-address {
+        white-space: normal;
+        line-height: 1.45;
+      }
       #tab-customers .customer-ledger-table .ledger-action { align-items: stretch; }
       #tab-customers .customer-ledger-table .customer-list-view { width: 100%; }
       #tab-customers .customer-ledger-table .empty-state::before { content: none; }
@@ -1793,6 +1794,7 @@
             <tr>
               <th>手机号</th>
               <th>邮箱</th>
+              <th>收货地址</th>
               <th>号码状态</th>
               <th>激活状态</th>
               <th>SIM 激活码</th>
@@ -1863,12 +1865,6 @@
             <span>SIM 激活码</span>
             <code id="d-registration-sim-code">—</code>
             <button type="button" class="small blue" onclick="copyElText('d-registration-sim-code', '已复制 SIM 激活码')">复制</button>
-          </div>
-          <div class="registration-quick-item">
-            <span>初始密码</span>
-            <code id="d-registration-password" data-secret="">未生成</code>
-            <button type="button" class="small ghost" id="d-registration-password-toggle" onclick="toggleRegistrationPassword()">显示</button>
-            <button type="button" class="small blue" onclick="copyRegistrationPassword()">复制</button>
           </div>
         </div>
         <div class="code-box registration-code-box" id="d-code-box">
@@ -2418,8 +2414,7 @@ const DEMO_CUSTOMER = {
 	  courier_company: '顺丰速运',
 	  tracking_number: 'SF1234567890',
   sim_activation_code: '123456',
-  initial_password: 'Gg-AB12cd34!',
-  activation_status: '已分配激活码',
+	  activation_status: '已分配激活码',
 	};
 	const PHONE_STATUSES = ['激活', '封号', '投诉', '退款', '丢失', '作废'];
 const ACTIVATION_STATUSES = ['未开始', '已分配激活码', '激活中', '等待人工支付', '等待转 eSIM', '已完成', '失败'];
@@ -2432,7 +2427,7 @@ const SIM_CODE_STATUS_LABELS = {
   '已使用': '已使用',
   '失败': '失败',
 };
-	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '初始密码', '激活状态', 'Giffgaff下载链接'];
+	const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '激活状态', 'Giffgaff下载链接'];
 const PUBLIC_ACCOUNT_QR_SOURCE = '号码资料二维码';
 const LEGACY_PUBLIC_ACCOUNT_QR_SOURCES = new Set(['邮箱二维码', '联系方式二维码']);
 const QR_SOURCES = [PUBLIC_ACCOUNT_QR_SOURCE, 'Giffgaff下载二维码', '激活教程二维码'];
@@ -2777,7 +2772,7 @@ function renderCustomers() {
   if (!visibleCustomers.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 10;
+    cell.colSpan = 11;
     cell.className = 'empty-state';
     cell.textContent = currentSearch || filtersActive
       ? `没有符合当前搜索或筛选条件的客户`
@@ -3098,6 +3093,11 @@ function buildCustomerRow(c, index) {
   emailCell.title = `${c.email || '邮箱待补充'} · ${c.is_moemail_auto ? 'MoEmail 自动生成' : '手填邮箱'}`;
   highlightInto(emailCell, c.email || '邮箱待补充', currentSearch);
 
+  const addressCell = addCell('收货地址', 'ledger-address ledger-ellipsis');
+  const shippingAddress = String(c.shipping_address || '').replace(/\s*\n\s*/g, ' ').trim();
+  addressCell.textContent = shippingAddress || '—';
+  addressCell.title = c.shipping_address || '未填写收货地址';
+
   const phoneStatusCell = addCell('号码状态', 'ledger-status');
   const phoneBadge = document.createElement('span');
   phoneBadge.className = `badge ${phoneStatusBadgeClass(c.phone_status)}`;
@@ -3217,34 +3217,12 @@ function renderPhoneStatusDetail(customer) {
 function renderRegistrationQuick(customer) {
   const email = $('d-registration-email');
   const simCode = $('d-registration-sim-code');
-  const password = $('d-registration-password');
-  const passwordToggle = $('d-registration-password-toggle');
   const status = $('d-registration-status');
 
   email.textContent = customer.email || '—';
   simCode.textContent = customer.sim_activation_code || '—';
-  password.dataset.secret = customer.initial_password || '';
-  password.textContent = customer.initial_password ? '••••••••' : '未生成';
-  passwordToggle.textContent = '显示';
-  passwordToggle.disabled = !customer.initial_password;
   status.className = `badge ${activationBadgeClass(customer.activation_status)}`;
   status.textContent = customer.activation_status || '未开始';
-}
-
-function toggleRegistrationPassword() {
-  const password = $('d-registration-password');
-  const button = $('d-registration-password-toggle');
-  if (!password.dataset.secret) return;
-  togglePasswordValue(password, button);
-}
-
-function copyRegistrationPassword() {
-  const password = $('d-registration-password').dataset.secret || '';
-  if (!password) {
-    toast('初始密码尚未生成', 'error');
-    return;
-  }
-  copyText(password, '初始密码已复制');
 }
 
 function renderActivationDetail(customer) {
@@ -3259,18 +3237,6 @@ function renderActivationDetail(customer) {
     p.textContent = line;
     box.appendChild(p);
   }
-  const passwordLine = document.createElement('p');
-  passwordLine.className = 'secret-line';
-  const label = document.createElement('span');
-  label.textContent = '初始密码：';
-  const value = document.createElement('span');
-  value.className = 'secret-value';
-  value.dataset.secret = customer.initial_password || '';
-  value.textContent = customer.initial_password ? '••••••••' : '未生成';
-  const showBtn = makeButton('显示', () => togglePasswordValue(value, showBtn), 'small ghost', !customer.initial_password);
-  const copyBtn = makeButton('复制', () => copyText(customer.initial_password || '', '初始密码已复制'), 'small ghost', !customer.initial_password);
-  passwordLine.append(label, value, showBtn, copyBtn);
-  box.appendChild(passwordLine);
   const statusControl = document.createElement('div');
   statusControl.className = 'button-row';
   statusControl.style.marginTop = '10px';
@@ -3313,12 +3279,6 @@ async function updateActivationStatusForActive(status) {
   } catch (err) {
     toast(err.message, 'error');
   }
-}
-
-function togglePasswordValue(valueEl, button) {
-  const shown = valueEl.textContent === valueEl.dataset.secret;
-  valueEl.textContent = shown ? '••••••••' : valueEl.dataset.secret;
-  button.textContent = shown ? '显示' : '隐藏';
 }
 
 function copyText(value, message) {
@@ -4261,6 +4221,9 @@ async function loadLabelConfig() {
   for (const template of labelConfig.templates) {
     for (const element of template.elements || []) {
       if (element.type === 'qr') element.source = normalizeQrSource(element.source);
+      if (element.type === 'text' && element.source === '初始密码') {
+        element.source = '邮箱';
+      }
       if (template.id === 'activation-guide-50x40' && element.source === '激活教程地址') {
         element.source = '固定文字';
         element.text = 'giffgaff 12 步激活教程';
@@ -4501,7 +4464,6 @@ function resolveTextValue(el, customer) {
     case '快递公司': return customer.courier_company || '';
     case '快递单号': return customer.tracking_number || '';
     case 'SIM激活码': return customer.sim_activation_code || '';
-    case '初始密码': return customer.initial_password || '';
     case '激活状态': return customer.activation_status || '未开始';
     case 'Giffgaff下载链接': return labelConfig.giffgaff_download_url || DEFAULT_GIFFGAFF_URL;
     case '激活教程地址': return labelConfig.activation_tutorial_url || DEFAULT_ACTIVATION_TUTORIAL_URL;

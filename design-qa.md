@@ -11,6 +11,9 @@
 - Desktop registration-first detail: `/tmp/giffgaff-registration-pagination/02-desktop-registration-detail.png`
 - Mobile paginated ledger: `/tmp/giffgaff-registration-pagination/03-mobile-pagination.png`
 - Mobile registration-first detail: `/tmp/giffgaff-registration-pagination/04-mobile-registration-detail.png`
+- Desktop ledger with shipping address: `/tmp/giffgaff-print-address/01-desktop-address.png`
+- Print panel above an open customer detail: `/tmp/giffgaff-print-address/02-print-over-detail.png`
+- Mobile customer card with wrapped shipping address: `/tmp/giffgaff-print-address/03-mobile-address.png`
 - Full-view comparison: `/tmp/giffgaff-dense-ledger-final/desktop-list-comparison.png`
 - Focused table comparison: `/tmp/giffgaff-dense-ledger-final/desktop-table-comparison.png`
 - Desktop viewport and state: `1440 × 1024`, unfiltered default customer ledger.
@@ -33,7 +36,7 @@ No actionable P0, P1, or P2 issue remains.
 - Spacing and layout rhythm: the customer area now uses the full available width. Rows are 44px high with aligned column headers and lightweight separators. The former permanent detail column and empty right-side state are gone.
 - Colors and visual tokens: existing purple navigation/header, white ledger surface, subtle dividers, and semantic green/orange/red/purple badges closely match the source palette and status hierarchy.
 - Image and asset fidelity: this admin screen requires no photography or illustration. No new placeholder image, handcrafted SVG, CSS drawing, gradient, or emoji asset was added; the old inline search SVG was removed.
-- Copy and content: every default row exposes 手机号、邮箱、号码状态、激活状态、SIM 激活码、解绑查询、快递公司、快递单号、开通日期和详情操作. Existing customer, QR, email, activation, payment, shipping and tool copy remains available in the opened detail.
+- Copy and content: every default row exposes 手机号、邮箱、收货地址、号码状态、激活状态、SIM 激活码、解绑查询、快递公司、快递单号、开通日期和详情操作. Existing customer, QR, email, activation, payment, shipping and tool copy remains available in the opened detail.
 - Responsiveness: desktop has no document-level horizontal overflow. Mobile converts each ledger row into a two-column record card, renders all four filters in a visible 2 × 2 grid, and opens detail as a full `390 × 844` screen from scroll position 0.
 - Accessibility and states: rows remain keyboard-openable; phone numbers and detail actions are semantic buttons; filters have accessible names; mobile has a visible 返回客户列表 action; final browser console checks returned zero errors or warnings.
 
@@ -44,9 +47,9 @@ No actionable P0, P1, or P2 issue remains.
 - Clicking the phone number opens a temporary `1200 × 900` desktop detail modal.
 - Closing the detail restores the full-width customer ledger.
 - Mobile detail opens full-screen, starts at scroll position 0, and exposes the labeled return action.
-- Existing independent 打印标签 and 打印快递单 actions remain in the detail header.
+- Existing independent 打印标签 and 打印快递单 actions remain in the detail header; their print panel is layered above the still-open customer detail.
 - Customer pagination defaults to 20 rows: page 1 shows 1–20 of 28, page 2 shows the remaining 8, and changing the page size to 50 collapses the result to one page.
-- The detail first screen now exposes registration email, SIM activation code, initial password and email verification code without changing sections.
+- The detail first screen exposes registration email, SIM activation code and email verification code without changing sections. The obsolete initial-password control is removed because the registration email is now used as the password.
 - The random identity and UK address block opens only on demand and resets to its collapsed 44px state whenever detail opens.
 - At `390 × 844`, the registration fields stack into one readable column, the verification action stays beside its label, the verification value remains full width, and the detail starts at scroll position 0.
 - JavaScript syntax, backend tests, Worker tests and diff checks pass.
@@ -80,7 +83,7 @@ No actionable P0, P1, or P2 issue remains.
 ## Implementation checklist
 
 - [x] Full-width, high-density desktop customer ledger.
-- [x] Ten default data columns visible simultaneously.
+- [x] Eleven default data columns, including the shipping address.
 - [x] Working phone, activation, payment and shipping filters.
 - [x] Customer detail opens only after clicking a number, row or 详情.
 - [x] Desktop temporary modal and mobile full-screen detail.
@@ -88,7 +91,8 @@ No actionable P0, P1, or P2 issue remains.
 - [x] Label and courier printing remain separate.
 - [x] Worker `API_BASE` and public QR implementation unchanged.
 - [x] Client-side pagination with 20/50/100 page-size choices.
-- [x] Registration email, SIM code, password and mailbox verification on the default detail screen.
+- [x] Registration email, SIM code and mailbox verification on the default detail screen.
+- [x] Print panels open above customer detail without forcing the detail to close.
 - [x] Random identity and UK address collapsed by default.
 
 final result: passed

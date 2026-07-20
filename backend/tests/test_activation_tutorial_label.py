@@ -346,6 +346,7 @@ def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
     assert "visibleCustomers.slice(pageStart, pageStart + customerPageSize)" in html
     assert "grid-template-columns: var(--workspace-list)" not in html
     assert "#detail-panel.open { display: flex; }" in html
+    assert "#print-panel { z-index: 260; }" in html
     assert 'class="detail-section detail-tool-section"' in html
     assert "function toggleAddCustomer" in html
     assert "function deleteActiveCustomer" in html
@@ -359,11 +360,16 @@ def test_frontend_uses_customer_inbox_workspace_and_independent_print_flows():
     assert "viewButton.addEventListener('click', event => event.stopPropagation(), { capture: true })" not in html
     assert 'id="d-registration-email"' in html
     assert 'id="d-registration-sim-code"' in html
-    assert 'id="d-registration-password"' in html
+    assert 'id="d-registration-password"' not in html
     assert 'id="d-code-box"' in html
     assert "function renderRegistrationQuick" in html
-    assert "function toggleRegistrationPassword" in html
-    assert "function copyRegistrationPassword" in html
+    assert "function toggleRegistrationPassword" not in html
+    assert "function copyRegistrationPassword" not in html
+    assert "const TEXT_SOURCES = ['固定文字', '手机号', '邮箱', '开通日期', '收货地址', '快递公司', '快递单号', 'SIM激活码', '激活状态', 'Giffgaff下载链接'];" in html
+    assert "element.type === 'text' && element.source === '初始密码'" in html
+    assert '<th>收货地址</th>' in html
+    assert "addCell('收货地址', 'ledger-address ledger-ellipsis')" in html
+    assert "cell.colSpan = 11;" in html
     assert "$('d-identity-disclosure').open = false;" in html
     assert '<details class="identity-disclosure" id="d-identity-disclosure">' in html
     info_section = html.index('<section class="tab-content active detail-section" data-tab="info">')
